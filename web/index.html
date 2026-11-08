@@ -5,9 +5,17 @@
 <title>PIA Server</title>
 <link rel="icon" type="image/svg+xml" href="/pia.svg">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/login.css">
 <h1 class="brand"><img src="/pia.svg" alt="" width="32" height="32"> <span>PIA <small>Server</small></span></h1>
 <p id="feedback" role="status"></p>
-<section id="login" hidden><a href="/auth/google">Entrar com Google</a></section>
+<main id="login" class="pia-login" hidden>
+  <section class="pia-login-card" aria-labelledby="login-title">
+    <img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64">
+    <h2 id="login-title">Entrar na PIA Server</h2>
+    <p>Acesse suas contas, gravações e computadores em um só lugar.</p>
+    <a href="/auth/google" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>
+  </section>
+</main>
 <main id="panel" hidden>
   <aside>
     <nav aria-label="Navegação">
@@ -18,9 +26,14 @@
       <a href="#admin" class="rail-icon" title="Administração" aria-label="Administração" id="admin-link" hidden><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-4 7-10V5l-7-3-7 3v7c0 6 7 10 7 10z"/><path d="m9 12 2 2 4-4"/></svg></a>
     </nav>
     <div class="rail-bottom">
-      <span id="account" class="account-avatar"><img id="account-picture" alt="" referrerpolicy="no-referrer" hidden><span id="account-initial"></span></span>
       <a href="#connectors" class="rail-icon" title="Conectores" aria-label="Conectores"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5m-3-9V3m6 5V3M7 8h10v4a5 5 0 0 1-10 0z"/></svg></a>
-      <button id="logout" type="button" class="rail-icon" title="Sair" aria-label="Sair"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5m5 5H3m9-9h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/></svg></button>
+      <details id="account-menu">
+        <summary id="account" class="account-avatar" aria-label="Minha conta" title="Minha conta"><img id="account-picture" alt="" referrerpolicy="no-referrer" hidden><span id="account-initial"></span></summary>
+        <div class="account-actions">
+          <span id="account-email"></span>
+          <button id="logout" type="button" class="account-logout"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5m5 5H3m9-9h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/></svg> Sair</button>
+        </div>
+      </details>
     </div>
   </aside>
   <div class="content">

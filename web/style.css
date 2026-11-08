@@ -57,3 +57,13 @@ nav .rail-icon { padding: 0; }
   aside { flex-direction: row; justify-content: space-between; flex-wrap: wrap; }
   nav, .rail-bottom { display: flex; align-items: center; flex-wrap: wrap; }
 }
+#login.pia-login { max-width: none; margin: 0; min-height: calc(100vh - 4rem); }
+#account-menu { position: relative; margin: 0; padding: 0; border: 0; }
+#account-menu summary { list-style: none; }
+#account-menu summary::-webkit-details-marker { display: none; }
+.account-actions { position: absolute; bottom: 0; left: calc(100% + .6rem); z-index: 3; min-width: 11rem; width: max-content; max-width: 18rem; padding: .75rem; border: 1px solid #514366; border-radius: .75rem; background: #1c192b; box-shadow: 0 .6rem 2rem #0b091a77; }
+#account-email { display: block; color: #c6bed8; overflow-wrap: anywhere; }
+.account-logout { display: flex; align-items: center; gap: .5rem; margin: .4rem 0 0; background: transparent; color: #ff9eae; }
+@media (max-width: 620px) {
+  .account-actions { top: calc(100% + .4rem); right: 0; bottom: auto; left: auto; }
+}

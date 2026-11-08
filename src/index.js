@@ -21,12 +21,26 @@ const publicFiles = new Map([
   ['/', ['text/html; charset=utf-8', readFileSync(new URL('../web/index.html', import.meta.url))]],
   ['/ui.js', ['text/javascript; charset=utf-8', readFileSync(new URL('../web/ui.js', import.meta.url))]],
   ['/pia.svg', ['image/svg+xml', readFileSync(new URL('../web/pia.svg', import.meta.url))]],
+  ['/login.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/login.css', import.meta.url))]],
+  ['/google-signin.png', ['image/png', readFileSync(new URL('../web/google-signin.png', import.meta.url))]],
   ['/style.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/style.css', import.meta.url))]],
 ]);
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
+}
+
+function googleSignIn(path) {
+  return '<a href="' + path + '" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>';
+}
+
+function authorizationPage(title, content) {
+  return '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<title>' + title + '</title><link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/style.css">' +
+    '<link rel="stylesheet" href="/login.css"><main class="pia-login"><section class="pia-login-card">' +
+    '<img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64"><h2>' + title + '</h2>' +
+    content + '</section></main></html>';
 }
 
 async function body(req, limit = 65536) {
@@ -122,16 +136,14 @@ async function route(req, res) {
       const email = account?.email.replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
       content = account ? '<p>Conta PIA: <strong>' + email + '</strong></p>' +
         '<form method="post" action="' + target + '"><button>Gerar código de confirmação</button></form>' + loginLink :
-        '<p>Entre com a conta PIA que receberá as gravações.</p>' + loginLink;
+        '<p>Entre com a conta PIA que receberá as gravações.</p>' + googleSignIn(target + '/login');
     } else if (req.method === 'POST' && !login && account && req.headers.origin === origin) {
       const code = await browserClaim(token, account.id);
       content = '<p>Volte ao Discord e confirme com a mesma conta Discord que pediu o vínculo.</p>' +
         '<p>Digite <code>/bless</code> e cole este valor no campo <code>code</code>:</p><pre>' + code + '</pre>';
     } else return json(res, 403, { error: 'Entre na sua conta PIA e abra o link enviado pelo Discord.' });
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Vincular Discord</title>' +
-      '<link rel="stylesheet" href="/style.css"><main class="content"><section><h2>Vincular Discord à PIA</h2>' +
-      content + '</section></main></html>');
+    return res.end(authorizationPage('Vincular Discord à PIA', content));
   }
   if (req.method === 'POST' && path === '/device/login/start') {
     const result = beginDeviceLogin(await body(req, 2048));
@@ -150,7 +162,7 @@ async function route(req, res) {
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
     let content;
     if (req.method === 'GET' && !login) {
-      const signIn = '<a href="' + target + '/login">Entrar com Google</a>';
+      const signIn = googleSignIn(target + '/login');
       content = '<p>Confira se o código <strong>' + attempt.code + '</strong> aparece em <strong>' +
         escape(attempt.name) + '</strong> antes de autorizar.</p>' + (account ?
         '<p>Conta: ' + escape(account.email) + '</p><form method="post" action="' + target +
@@ -160,9 +172,7 @@ async function route(req, res) {
       content = '<p>Computador autorizado. Você pode fechar esta aba e voltar à PIA.</p>';
     } else return json(res, 403, { error: 'Entre com Google antes de autorizar o computador.' });
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Entrar na PIA</title>' +
-      '<link rel="stylesheet" href="/style.css"><main class="content"><section><h2>Entrar na PIA</h2>' +
-      content + '</section></main></html>');
+    return res.end(authorizationPage('Entrar na PIA', content));
   }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
   const connectorCallback = path === '/auth/connectors/microsoft' ? 'microsoft' :

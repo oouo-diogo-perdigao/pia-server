@@ -29,7 +29,7 @@ async function refresh() {
   element('admin').hidden = !state.admin;
   element('admin-link').hidden = !state.admin;
   element('account').title = state.email;
-  element('account').setAttribute('aria-label', state.email);
+  element('account-email').textContent = state.email;
   element('account-initial').textContent = state.email[0]?.toUpperCase() || '';
   const picture = element('account-picture');
   if (state.picture) {
@@ -295,9 +295,20 @@ selectConnector('google');
 
 function navigate() {
   const links = Array.from(document.querySelectorAll('aside a.rail-icon:not([hidden])'));
-  const current = links.find((link) => link.hash === location.hash) || links[0];
+  const [section, connector] = location.hash.split('/');
+  const current = links.find((link) => link.hash === section) || links[0];
   const page = current.hash.slice(1);
   element('page-title').textContent = current.getAttribute('aria-label');
+const accountMenu = element('account-menu');
+document.addEventListener('click', (event) => {
+  if (!accountMenu.contains(event.target)) accountMenu.open = false;
+});
+accountMenu.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  accountMenu.open = false;
+  element('account').focus();
+});
+
   for (const link of links) {
     if (link === current) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -305,7 +316,13 @@ function navigate() {
   for (const section of document.querySelectorAll('[data-page]')) {
     section.classList.toggle('page-hidden', section.dataset.page !== page);
   }
-  if (page === 'connectors') refreshConnectors().catch((error) => say(error.message));
+  if (page === 'connectors') {
+    const id = connector === 'object_storage' ? 'storage' : connector;
+    if (id && Array.from(document.querySelectorAll('[data-connector]')).some((control) => control.dataset.connector === id)) {
+      selectConnector(id);
+    }
+    refreshConnectors().catch((error) => say(error.message));
+  }
   else {
     storageVersion++;
     revealedStorageKey = '';
