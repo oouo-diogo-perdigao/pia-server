@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createReadStream, statSync } from 'node:fs';
 import { unseal } from './db.js';
 
@@ -155,7 +156,8 @@ export async function uploadRecording(account, file, meta, persist) {
   const start = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,size&supportsAllDrives=true', {
     method: 'POST', headers: { ...headers, 'Content-Type': 'application/json',
       'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(length) },
-    body: JSON.stringify({ id: meta.driveId, name: meta.name, mimeType: mime, parents: [meta.folderId], createdTime: meta.startedAt }),
+    body: JSON.stringify({ id: meta.driveId, name: meta.name, mimeType: mime, parents: [meta.folderId], createdTime: meta.startedAt,
+      ...(meta.editUntil ? { appProperties: { piaMetadataEditableUntil: meta.editUntil } } : {}) }),
     redirect: 'error', signal: AbortSignal.timeout(20000),
   });
   if (!start.ok) await driveJSON(start);
@@ -168,4 +170,30 @@ export async function uploadRecording(account, file, meta, persist) {
     signal: AbortSignal.timeout(20 * 60 * 1000),
   }));
   if (result.id !== meta.driveId || Number(result.size) !== length) throw new Error('Upload não confirmado.');
+}
+
+
+export async function uploadRecordingSidecar(account, meta, name, payload, saveId) {
+  const headers = await recordingAccess(account, meta.driveAccount);
+  let id = meta.sidecarId;
+  if (!id) {
+    const result = await driveJSON(await fetch(FILES + '/generateIds?count=1&space=drive',
+      { headers, signal: AbortSignal.timeout(15000) }));
+    id = result.ids[0];
+    saveId(id);
+  }
+  const endpoint = 'https://www.googleapis.com/upload/drive/v3/files';
+  const update = await fetch(endpoint + '/' + encodeURIComponent(id) + '?uploadType=media&supportsAllDrives=true', {
+    method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: payload, signal: AbortSignal.timeout(15000),
+  });
+  if (update.status !== 404) return driveJSON(update);
+  const boundary = 'pia-' + randomUUID();
+  const metadata = JSON.stringify({ id, name, mimeType: 'application/json', parents: [meta.folderId] });
+  const body = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + metadata +
+    '\r\n--' + boundary + '\r\nContent-Type: application/json\r\n\r\n' + payload + '\r\n--' + boundary + '--\r\n';
+  return driveJSON(await fetch(endpoint + '?uploadType=multipart&supportsAllDrives=true', {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body, signal: AbortSignal.timeout(15000),
+  }));
 }

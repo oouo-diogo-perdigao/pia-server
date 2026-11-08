@@ -1,3 +1,4 @@
+import { saveRecordingEdits } from './queue.js';
 import { editWindowMs, RecordingPanels } from './recording_panel.js';
 import { recordingFolder, recordingName } from './recording_format.js';
 import { guildAccount } from './discord_guild_links.js';
@@ -12,8 +13,14 @@ import OpusScript from 'opusscript';
 import { root, save, snowflake } from './state.js';
 
 const RATE = 48000;
-const MAX_MS = 6 * 3600 * 1000;
-const NOTICE = '🔴 A PIA vai gravar este canal de voz em faixas separadas e guardar a sessão no Google Drive. Avise a organização se não concordar e saia do canal antes do início.';
+const SILENCE_MS = 5 * 60 * 1000;
+const NOTICE = '🔴 A PIA vai gravar este canal de voz em faixas separadas e guardar a sessão no Google Drive. Saia do canal se não quiser participar.';
+
+export function silenceAction(elapsed) {
+  if (elapsed >= 2 * SILENCE_MS) return 'stop';
+  if (elapsed >= SILENCE_MS) return 'warn';
+  return 'wait';
+}
 
 export function positionForFrame(samplesWritten, elapsedMs, frameSamples) {
   const expected = Math.max(0, Math.floor(elapsedMs * RATE / 1000) - frameSamples);
@@ -47,7 +54,8 @@ class Recording {
     this.panelTimer = setInterval(() => this.panels.update(this.meta, connection.ping), 15000);
     this.panelTimer.unref();
     connection.receiver.speaking.on('start', (userId) => this.listen(userId));
-    this.limit = setTimeout(() => this.finish('Limite de duração atingido.'), MAX_MS);
+    this.lastSound = this.started;
+    this.silenceTimer = setTimeout(() => this.checkSilence(), SILENCE_MS);
   }
 
   persist() { save(join(this.folder, 'recording.json'), this.meta); }
@@ -72,6 +80,24 @@ class Recording {
     return changed;
   }
 
+  checkSilence() {
+    if (this.closed) return;
+    const elapsed = performance.now() - this.lastSound;
+    const action = silenceAction(elapsed);
+    if (action === 'stop') {
+      this.finish('Dez minutos sem áudio captado.', { label: this.meta.requester ? 'Sistema' : 'Autorecord' });
+      return;
+    }
+    if (action === 'warn') {
+      void this.panels.client.rest.post('/channels/' + this.meta.noticeChannelId + '/messages', { body: {
+        content: '⚠️ A gravação está há cinco minutos sem captar áudio. Será encerrada após mais cinco minutos de silêncio.',
+        allowed_mentions: { parse: [] },
+      } }).catch((error) => console.error('Discord: falha ao avisar sobre silêncio, código ' + (error.code || 'request')));
+    }
+    const next = (action === 'warn' ? 2 : 1) * SILENCE_MS - elapsed;
+    this.silenceTimer = setTimeout(() => this.checkSilence(), Math.max(1, Math.ceil(next)));
+  }
+
   listen(userId) {
     const user = this.channel.members.get(userId)?.user;
     if (this.closed || !snowflake.test(userId) || !user || user.bot || this.tracks.has(userId)) return;
@@ -94,6 +120,7 @@ class Recording {
           const bytes = writeSync(fd, frame, 0, frame.length, offset * 2);
           if (bytes !== frame.length) throw new Error('short write');
           track.samples = offset + bytes / 2;
+          if (frame.some((byte) => byte !== 0)) this.lastSound = performance.now();
         } catch { this.finish('Falha ao gravar áudio no disco.'); }
       });
       stream.on('error', () => this.finish('Recepção de áudio interrompida.'));
@@ -110,8 +137,7 @@ class Recording {
   finish(reason = '', stoppedBy = { label: 'Sistema' }) {
     if (this.closed) return;
     this.closed = true;
-    clearTimeout(this.limit);
-    clearTimeout(this.emptyTimer);
+    clearTimeout(this.silenceTimer);
     clearInterval(this.panelTimer);
     const samples = Math.floor((performance.now() - this.started) * RATE / 1000);
     this.meta.tracks = [];
@@ -134,7 +160,7 @@ class Recording {
     this.meta.note = reason;
     try {
       this.persist();
-      this.panels.finish(this.meta, () => this.persist());
+      this.panels.finish(this.meta, () => saveRecordingEdits(this.folder, this.meta));
     }
     finally {
       if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) this.connection.destroy();
@@ -211,13 +237,6 @@ export class DiscordRecorder {
         recording.persist();
         this.panels.update(recording.meta, recording.connection.ping);
       }
-      const channel = this.client.channels.cache.get(channelId);
-      const humans = channel?.members?.some((member) => !member.user.bot);
-      if (humans) { clearTimeout(recording.emptyTimer); recording.emptyTimer = undefined; }
-      else if (!recording.emptyTimer) {
-        recording.emptyTimer = setTimeout(() => recording.finish('O canal ficou vazio.',
-          { label: recording.meta.requester ? 'Sistema' : 'Autorecord' }), rule.emptySeconds * 1000);
-      }
     }
     for (const rule of rules.values()) {
       const account = this.destinations.get(rule.guildId);
@@ -241,7 +260,7 @@ export class DiscordRecorder {
       [...this.sessions.values()].some((item) => !item.closed && item.meta.guildId === guildId);
   }
 
-  async startManual(account, channel, requester) {
+  async startManual(account, channel, requester, controlChannel) {
     if (this.guildBusy(channel.guildId)) throw new Error('Já há uma gravação ou teste neste servidor.');
     if (!account.drive_refresh || !recordingFolder(account))
       throw new Error('Configure a pasta de gravações no Google Drive no painel da PIA Server.');
@@ -251,8 +270,9 @@ export class DiscordRecorder {
       const rule = { guildId: channel.guildId, channelId: channel.id,
         noticeChannelId: channel.isSendable() ? channel.id : configured?.noticeChannelId,
         minPeople: 1, emptySeconds: 30 };
-      if (!await this.start(account, rule, channel, requester))
-        throw new Error('A gravação não começou. Confira se ainda há participantes no canal.');
+      const session = await this.start(account, rule, channel, requester, controlChannel);
+      if (!session) throw new Error('A gravação não começou. Confira se ainda há participantes no canal.');
+      return session.meta;
     } finally { this.pending.delete(channel.guildId); }
   }
 
@@ -262,11 +282,10 @@ export class DiscordRecorder {
       selfMute: true, selfDeaf: false });
   }
 
-  async start(account, rule, channel, requester) {
+  async start(account, rule, channel, requester, controlChannel) {
     const notice = rule.noticeChannelId && await this.client.channels.fetch(rule.noticeChannelId);
     if (!notice?.isSendable() || notice.guildId !== rule.guildId) throw new Error('A PIA precisa enviar o aviso no chat do canal antes de gravar.');
     const announcement = await notice.send({ content: NOTICE, allowedMentions: { parse: [] } });
-    await new Promise((resolve) => setTimeout(resolve, 8000));
     const destination = async () => {
       if (this.closed) return;
       const current = await guildAccount(this.account.id, rule.guildId);
@@ -282,13 +301,20 @@ export class DiscordRecorder {
         connection.destroy();
         return;
       }
-      const session = new Recording(current, connection, rule, channel, requester, announcement, this);
+      let panelMessage = announcement;
+      if (controlChannel?.isSendable() && controlChannel.guildId === rule.guildId && controlChannel.id !== notice.id) {
+        try {
+          panelMessage = await controlChannel.send({ content: '🔴 Painel da gravação em <#' + channel.id + '>',
+            allowedMentions: { parse: [] } });
+        } catch (error) { console.error('Discord: painel mantido no canal de aviso, código ' + (error.code || 'request')); }
+      }
+      const session = new Recording(current, connection, rule, channel, requester, panelMessage, this);
       this.sessions.set(channel.id, session);
       this.blocked.add(channel.id);
       connection.on(VoiceConnectionStatus.Disconnected, () => session.finish('Conexão de voz interrompida.'));
       connection.on('error', () => session.finish('Falha na conexão de voz.'));
       this.error = '';
-      return true;
+      return session;
     } catch (error) {
       if (connection.state.status !== VoiceConnectionStatus.Destroyed) connection.destroy();
       throw error;

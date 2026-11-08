@@ -4,8 +4,8 @@ import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, w
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { read, root, save, snowflake } from './state.js';
-import { uploadRecording } from './drive.js';
+import { hash, read, root, save, snowflake } from './state.js';
+import { uploadRecording, uploadRecordingSidecar } from './drive.js';
 
 const run = promisify(execFile);
 const UUID = /^[0-9a-f-]{36}$/;
@@ -36,8 +36,41 @@ export function recover(account) {
   }
 }
 
+export function patchRecording(dir, fields) {
+  const path = join(dir, 'recording.json');
+  const current = read(path, {});
+  save(path, { ...current, ...fields });
+}
+
+export function saveRecordingEdits(dir, meta) {
+  patchRecording(dir, { sessionTitle: meta.sessionTitle, seasonEnd: meta.seasonEnd, metadataEdited: true });
+}
+
+function sidecarContent(meta) {
+  return JSON.stringify({ version: 1, source: 'pia-server-discord', id: meta.id,
+    guildId: meta.guildId, channelId: meta.channelId, startedAt: meta.startedAt,
+    sessionTitle: meta.sessionTitle || '', seasonEnd: Boolean(meta.seasonEnd) }) + '\n';
+}
+
+export function needsSidecar(meta, now = Date.now()) {
+  return meta.state === 'uploaded' && (meta.metadataEdited || meta.sessionTitle || meta.seasonEnd) &&
+    meta.sidecarHash !== hash(sidecarContent(meta)) && (meta.sidecarRetryAt || 0) <= now;
+}
+
+export async function processRecordingSidecar(account, { dir, meta }) {
+  const content = sidecarContent(meta);
+  try {
+    await uploadRecordingSidecar(account, meta, meta.name.replace(/\.zip$/i, '.json'), content,
+      (sidecarId) => patchRecording(dir, { sidecarId }));
+    patchRecording(dir, { sidecarHash: hash(content), sidecarRetryAt: null });
+  } catch {
+    patchRecording(dir, { sidecarRetryAt: Date.now() + 30000 });
+    console.error('Falha ao enviar metadados da gravação; nova tentativa agendada.');
+  }
+}
+
 export async function processRecording(account, { dir, meta }) {
-  const persist = () => save(join(dir, 'recording.json'), meta);
+  const persist = () => patchRecording(dir, { driveId: meta.driveId });
   const archive = join(dir, meta.name);
   const tracks = join(dir, 'pia_data');
   const project = join(dir, 'pia.aup');
@@ -60,8 +93,8 @@ export async function processRecording(account, { dir, meta }) {
         version: 1, source: 'pia-server-discord', id: meta.id, startedAt: meta.startedAt,
         endedAt: meta.endedAt, channelId: meta.channelId, participants: meta.tracks, tracks: entries,
         durationMs: meta.durationMs, requester: meta.requester, stoppedBy: meta.stoppedBy,
-        notes: meta.notes || [], sessionTitle: meta.sessionTitle, seasonEnd: Boolean(meta.seasonEnd),
-        startsSeason: Boolean(previous?.seasonEnd),
+        notes: meta.notes || [], metadataEditableUntil: meta.editUntil,
+        previousRecordingName: previous?.name, startsSeason: Boolean(previous?.seasonEnd),
       }) + '\n', { mode: 0o600 });
       const temp = archive + '.partial.zip';
       if (existsSync(temp)) unlinkSync(temp);
@@ -70,9 +103,7 @@ export async function processRecording(account, { dir, meta }) {
     }
     await uploadRecording(account, archive, meta, persist);
     meta.state = 'uploaded';
-    delete meta.retryAt;
-    delete meta.lastError;
-    persist();
+    patchRecording(dir, { state: 'uploaded', retryAt: null, lastError: null });
     const files = [archive, project, ...entries.flatMap(({ id, filename }) => [join(dir, id + '.pcm'), join(tracks, filename)])];
     for (const file of files) {
       try { unlinkSync(file); } catch { /* Keep the confirmed upload state. */ }
@@ -82,6 +113,6 @@ export async function processRecording(account, { dir, meta }) {
     meta.attempts = (meta.attempts || 0) + 1;
     meta.lastError = 'Falha ao preparar ou enviar ao Drive. Os arquivos locais foram preservados.';
     meta.retryAt = Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(meta.attempts - 1, 7));
-    persist();
+    patchRecording(dir, { attempts: meta.attempts, lastError: meta.lastError, retryAt: meta.retryAt });
   }
 }

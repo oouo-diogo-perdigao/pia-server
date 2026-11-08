@@ -65,7 +65,7 @@ destino no Drive pelo painel.
 
 | Comando | Uso |
 | --- | --- |
-| `/join [channel]` | Grava o canal informado ou o canal de voz atual. Envia o aviso antes de começar. |
+| `/join [channel]` | Grava o canal informado ou o canal de voz atual. Envia o aviso e entra na sala assim que a conexão estiver pronta. |
 | `/stop` | Encerra a sessão. Disponível para quem iniciou ou para administradores. |
 | `/recordings` | Lista sessões recentes do servidor. Participantes veem suas sessões e administradores veem todas. Links respeitam as permissões do Drive. |
 | `/voice-test` | Entrega uma amostra de cinco segundos do próprio microfone em resposta privada, sem criar sessão nem enviar ao Drive. |
@@ -115,6 +115,16 @@ podem adicionar notas, que são guardadas no ZIP e no projeto Audacity.
 
 Ao encerrar, o painel mostra a duração e quem iniciou e encerrou a gravação.
 O organizador ou um administrador tem 30 minutos para definir o nome e marcar
-o fim da temporada. O envio ao Drive aguarda esse prazo para incorporar as
-mudanças. O Podcast Automation usa o nome definido e inicia a próxima temporada
-na sessão seguinte gravada no mesmo canal.
+o fim da temporada. O ZIP vai imediatamente para a fila de envio. As alterações
+são gravadas em um arquivo `*.aup.json` ao lado do ZIP. O Podcast Automation usa
+o nome definido e inicia a próxima temporada na sessão seguinte do mesmo canal.
+
+Use `/server-settings access-role add` e `remove` para autorizar cargos a iniciar
+e parar gravações. Administradores também podem iniciar e parar. Quem iniciou
+pode parar a própria gravação. O painel de uma gravação manual aparece no canal
+do comando, com fallback para o canal de aviso. O Autorecord usa o canal de
+aviso configurado.
+
+A gravação avisa após cinco minutos sem áudio e termina após dez minutos de
+silêncio. A captação de som reinicia a contagem. O campo legado `emptySeconds`
+continua aceito nas regras, e o encerramento segue o tempo de silêncio.

@@ -43,6 +43,7 @@ export async function migrate() {
       account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       linked_by text NOT NULL
     );
+    ALTER TABLE pia_server.discord_guild_links ADD COLUMN IF NOT EXISTS access_roles text[] NOT NULL DEFAULT ARRAY[]::text[];
     CREATE TABLE IF NOT EXISTS pia_server.discord_link_requests (
       digest text PRIMARY KEY, guild_id text NOT NULL, discord_user text NOT NULL,
       bot_account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,

@@ -4,13 +4,12 @@ import { issueMcpToken } from './mcp_tokens.js';
 import { confirmGuildLink, guildLinkRequest } from './discord_guild_links.js';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { accountProfile, begin, cookie, finish, oauthReady, origin } from './auth.js';
 import { identify, migrate, pool, seal, unseal } from './db.js';
 import { DiscordRecorder } from './recorder.js';
 import { createFolder, recordingDestination, recordingFolderPath, recordingFolders } from './drive.js';
-import { processRecording, recordings, recover } from './queue.js';
-import { hash, save, validateRules } from './state.js';
+import { needsSidecar, processRecording, processRecordingSidecar, recordings, recover, saveRecordingEdits } from './queue.js';
+import { hash, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
 import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
 import { receiveMedia } from './media.js';
@@ -383,15 +382,15 @@ async function reconcile() {
     for (const { dir, meta } of items) {
       if (meta.state === 'recording' || !meta.editUntil) continue;
       const runtime = runtimes.get(meta.botAccountId)?.runtime;
-      if (runtime?.client.isReady()) runtime.panels.finish(meta, () => save(join(dir, 'recording.json'), meta));
+      if (runtime?.client.isReady()) runtime.panels.finish(meta, () => saveRecordingEdits(dir, meta));
     }
     if (uploads.has(account.id) || !account.drive_refresh) continue;
     const now = Date.now();
-    const next = items.find(({ meta }) => meta.state === 'queued' &&
-      (!meta.editUntil || Date.parse(meta.editUntil) <= now) && (meta.retryAt || 0) <= now);
-    if (next) {
+    const sidecar = items.find(({ meta }) => needsSidecar(meta, now));
+    const next = sidecar ? null : items.find(({ meta }) => meta.state === 'queued' && (meta.retryAt || 0) <= now);
+    if (next || sidecar) {
       uploads.add(account.id);
-      processRecording(account, next).catch(() => console.error('Falha na fila de gravação.'))
+      (next ? processRecording(account, next) : processRecordingSidecar(account, sidecar)).catch(() => console.error('Falha na fila de gravação.'))
         .finally(() => uploads.delete(account.id));
     }
   }

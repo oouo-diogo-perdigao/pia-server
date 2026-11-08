@@ -1,3 +1,4 @@
+import { guildAccount, hasRecordingRole } from './discord_guild_links.js';
 import { ActionRowBuilder, ButtonStyle, ComponentType, ModalBuilder, PermissionFlagsBits, Routes,
   TextInputBuilder, TextInputStyle, escapeMarkdown } from 'discord.js';
 
@@ -70,7 +71,12 @@ export class RecordingPanels {
   update(meta, ping) {
     const previous = this.updates.get(meta.id) || Promise.resolve();
     const current = previous.then(() => this.client.rest.patch(Routes.channelMessage(meta.noticeChannelId, meta.panelMessageId),
-      { body: recordingPanel(meta, ping) })).catch(() => {});
+      { body: recordingPanel(meta, ping) })).catch((error) => {
+      if (meta.panelError !== error.code) {
+        meta.panelError = error.code || 'request';
+        console.error('Discord: falha ao atualizar painel de gravação, código ' + meta.panelError);
+      }
+    });
     this.updates.set(meta.id, current);
     void current.finally(() => { if (this.updates.get(meta.id) === current) this.updates.delete(meta.id); });
   }
@@ -111,7 +117,9 @@ export class RecordingPanels {
       const { meta } = item;
       const user = interaction.user.id;
       const manager = meta.requester === user || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
-      if (!manager && !(action === 'note' && live?.channel.members.has(user)))
+      const roleAllowed = action === 'stop' && !manager &&
+        hasRecordingRole(interaction, (await guildAccount(runtime.account.id, meta.guildId))?.access_roles);
+      if (!manager && !roleAllowed && !(action === 'note' && live?.channel.members.has(user)))
         throw new Error('Você não tem permissão para esta ação.');
       if ((action === 'stop' || action === 'note') ? !live : !editableRecording(meta))
         throw new Error('O prazo para esta ação terminou.');

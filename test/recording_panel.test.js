@@ -2,6 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { editableRecording, recordingPanel } from '../src/recording_panel.js';
 
+import { silenceAction } from '../src/recorder.js';
+import { hasRecordingRole } from '../src/discord_guild_links.js';
+
+test('silence warns at five minutes and stops at ten minutes', () => {
+  assert.equal(silenceAction(299999), 'wait');
+  assert.equal(silenceAction(300000), 'warn');
+  assert.equal(silenceAction(599999), 'warn');
+  assert.equal(silenceAction(600000), 'stop');
+});
+
+test('recording roles support both gateway member representations', () => {
+  assert.equal(hasRecordingRole({ member: { roles: ['role'] } }, ['role']), true);
+  assert.equal(hasRecordingRole({ member: { roles: { cache: new Set(['role']) } } }, ['role']), true);
+  assert.equal(hasRecordingRole({ member: { roles: ['unrelated'] } }, ['role']), false);
+});
+
 const startedAt = '2026-11-08T22:00:00.000Z';
 const editUntil = '2026-11-08T23:30:00.000Z';
 const meta = {

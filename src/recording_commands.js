@@ -1,4 +1,4 @@
-import { guildAccount, requestGuildLink, unlinkGuild } from './discord_guild_links.js';
+import { guildAccount, hasRecordingRole, requestGuildLink, setRecordingRole, unlinkGuild } from './discord_guild_links.js';
 import { origin } from './auth.js';
 import { ButtonStyle, ComponentType, ChannelType, PermissionFlagsBits, SlashCommandBuilder, Routes } from 'discord.js';
 import { EndBehaviorType, entersState, VoiceConnectionStatus } from '@discordjs/voice';
@@ -19,13 +19,18 @@ export const recordingCommands = [
   guildOnly('info', 'Mostra o estado e as estatísticas do gravador'),
   adminOnly('bless', 'Vincula este servidor Discord a uma conta PIA'),
   adminOnly('unbless', 'Desvincula este servidor da conta PIA'),
+  adminOnly('server-settings', 'Configura as permissões de gravação da PIA')
+    .addSubcommandGroup((group) => group.setName('access-role').setDescription('Gerencia os cargos com acesso')
+      .addSubcommand((sub) => sub.setName('add').setDescription('Autoriza um cargo a iniciar e parar gravações')
+        .addRoleOption((option) => option.setName('role').setDescription('Cargo autorizado').setRequired(true)))
+      .addSubcommand((sub) => sub.setName('remove').setDescription('Remove o acesso de um cargo')
+        .addRoleOption((option) => option.setName('role').setDescription('Cargo a remover').setRequired(true)))),
   adminOnly('autorecord', 'Gerencia as regras de gravação automática')
     .addSubcommand((sub) => sub.setName('on').setDescription('Configura a gravação automática no canal')
       .addChannelOption((option) => voice(option).setRequired(true))
       .addChannelOption((option) => option.setName('notice').setDescription('Canal de aviso')
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildVoice).setRequired(true))
       .addIntegerOption((option) => option.setName('minimum').setDescription('Mínimo de pessoas').setMinValue(1).setMaxValue(99))
-      .addIntegerOption((option) => option.setName('empty-seconds').setDescription('Segundos para encerrar um canal vazio').setMinValue(5).setMaxValue(1800))
       .addUserOption((option) => option.setName('trigger').setDescription('Membro cuja entrada dispara a gravação')))
     .addSubcommand((sub) => sub.setName('off').setDescription('Desativa a regra de um canal')
       .addChannelOption((option) => voice(option).setRequired(true)))
@@ -77,7 +82,7 @@ async function changeRules(runtime, account, interaction) {
     const { rows: [account] } = await pool.query('SELECT rules FROM pia_server.accounts WHERE id=$1', [id]);
     return lines(guildRules(account.rules, guildId).map((rule) =>
       '<#' + rule.channelId + '> · aviso <#' + rule.noticeChannelId + '> · mín. ' + rule.minPeople +
-      ' · espera ' + rule.emptySeconds + ' s' + (rule.triggerUsers.length ? ' · gatilhos ' +
+      (rule.triggerUsers.length ? ' · gatilhos ' +
         rule.triggerUsers.map((user) => '<@' + user + '>').join(', ') : '')), 'Nenhuma regra neste servidor.');
   }
   const knownChannels = action === 'prune' ? await interaction.guild.channels.fetch() : null;
@@ -92,7 +97,7 @@ async function changeRules(runtime, account, interaction) {
       const trigger = interaction.options.getUser('trigger');
       rules.push({ guildId, channelId: channel.id, noticeChannelId: notice.id,
         minPeople: interaction.options.getInteger('minimum') ?? 2, triggerUsers: trigger ? [trigger.id] : [],
-        emptySeconds: interaction.options.getInteger('empty-seconds') ?? 30 });
+        emptySeconds: 30 });
     }
     await client.query('UPDATE pia_server.accounts SET rules=$2 WHERE id=$1', [id, JSON.stringify(validateRules(rules))]);
     await client.query('COMMIT');
@@ -192,7 +197,7 @@ async function run(runtime, interaction) {
   const admin = isAdmin(interaction);
   const command = interaction.commandName;
   if (!interaction.inGuild()) throw new Error('Use este comando em um servidor.');
-  if (['bless', 'unbless', 'autorecord', 'bot-profile'].includes(command) && !admin)
+  if (['bless', 'unbless', 'autorecord', 'bot-profile', 'server-settings'].includes(command) && !admin)
     throw new Error('Este comando exige permissão de administrador.');
   if (command === 'bless') {
     const token = await requestGuildLink(runtime.account.id, guildId, userId, interaction.guild.name, () =>
@@ -209,19 +214,34 @@ async function run(runtime, interaction) {
     if (!await unlinkGuild(runtime.account.id, guildId)) return 'Este servidor não tinha vínculo ativo.';
     return 'Vínculo removido. As gravações existentes continuam na conta original.';
   }
+  if (command === 'server-settings') {
+    const role = interaction.options.getRole('role', true);
+    if (role.id === guildId) throw new Error('Escolha um cargo específico do servidor.');
+    const add = interaction.options.getSubcommand() === 'add';
+    await setRecordingRole(runtime.account.id, guildId, role.id, add);
+    return add ? 'Cargo <@&' + role.id + '> autorizado a iniciar e parar gravações.' :
+      'Acesso removido do cargo <@&' + role.id + '>.';
+  }
   if (command === 'join') {
     const account = await guildAccount(runtime.account.id, guildId);
     if (!account) throw new Error('Um administrador precisa vincular este servidor com /bless primeiro.');
+    if (!admin && !hasRecordingRole(interaction, account.access_roles))
+      throw new Error('Você precisa de um cargo de gravação autorizado.');
     const channel = interaction.options.getChannel('channel') || ownChannel(interaction);
     if (!channel?.isVoiceBased() || channel.guildId !== guildId || (!admin && ownChannel(interaction)?.id !== channel.id))
       throw new Error('Entre no canal de voz que você quer gravar.');
-    await runtime.startManual(account, channel, userId);
-    return 'Gravando <#' + channel.id + '> em faixas separadas. Use /stop para encerrar.';
+    const meta = await runtime.startManual(account, channel, userId, interaction.channel);
+    return 'Gravando <#' + channel.id + '> em faixas separadas. [Abrir painel](https://discord.com/channels/' +
+      guildId + '/' + meta.noticeChannelId + '/' + meta.panelMessageId + ').';
   }
   if (command === 'stop') {
     const session = [...runtime.sessions.values()].find((item) => !item.closed && item.meta.guildId === guildId);
     if (!session) throw new Error('Nenhuma gravação em andamento neste servidor.');
-    if (!admin && session.meta.requester !== userId) throw new Error('Peça a quem iniciou a gravação ou a um administrador.');
+    if (!admin && session.meta.requester !== userId) {
+      const account = await guildAccount(runtime.account.id, guildId);
+      if (!hasRecordingRole(interaction, account?.access_roles))
+        throw new Error('Peça a quem iniciou, a um administrador ou a alguém com cargo autorizado.');
+    }
     runtime.stop(session.meta.channelId, undefined, { user: userId });
     return 'Gravação encerrada. Se houve fala, o arquivo será preparado e enviado ao Drive.';
   }

@@ -7,7 +7,7 @@ test('registers recording commands without replacing commands like /link', async
   await registerRecordingCommands({ application: { id: '100000000000000001' },
     rest: { post: async (route, { body }) => requests.push({ route, body }) } });
   assert.deepEqual(requests.map(({ body }) => body.name),
-    ['join', 'stop', 'recordings', 'voice-test', 'info', 'bless', 'unbless', 'autorecord', 'bot-profile']);
+    ['join', 'stop', 'recordings', 'voice-test', 'info', 'bless', 'unbless', 'server-settings', 'autorecord', 'bot-profile']);
   assert.ok(requests.every(({ route }) => route === '/applications/100000000000000001/commands'));
   assert.deepEqual(recordingCommands.find(({ name }) => name === 'autorecord').options.map(({ name }) => name),
     ['on', 'off', 'view', 'prune']);

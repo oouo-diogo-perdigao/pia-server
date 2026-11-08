@@ -71,7 +71,20 @@ export async function unlinkGuild(botAccount, guild) {
 }
 
 export async function guildAccount(botAccount, guild) {
-  const { rows } = await pool.query(`SELECT a.* FROM pia_server.discord_guild_links l
+  const { rows } = await pool.query(`SELECT a.*,l.access_roles FROM pia_server.discord_guild_links l
     JOIN pia_server.accounts a ON a.id=l.account_id WHERE l.bot_account_id=$1 AND l.guild_id=$2`, [botAccount, guild]);
   return rows[0];
+}
+
+
+export function hasRecordingRole(interaction, roles = []) {
+  const memberRoles = interaction.member?.roles;
+  return roles.some((id) => Array.isArray(memberRoles) ? memberRoles.includes(id) : memberRoles?.cache?.has(id));
+}
+
+export async function setRecordingRole(botAccount, guild, role, add) {
+  const update = add ? 'array_append(array_remove(access_roles,$3),$3)' : 'array_remove(access_roles,$3)';
+  const { rowCount } = await pool.query(`UPDATE pia_server.discord_guild_links SET access_roles=${update}
+    WHERE guild_id=$1 AND bot_account_id=$2`, [guild, botAccount, role]);
+  if (!rowCount) throw new Error('Vincule o servidor com /bless antes de configurar cargos.');
 }
