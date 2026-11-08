@@ -35,12 +35,15 @@ function googleSignIn(path) {
   return '<a href="' + path + '" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>';
 }
 
-function authorizationPage(title, content) {
-  return '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+function authorizationPage(res, title, content) {
+  // Keep the Origin header on same-origin form submissions without sending
+  // the authorization URL as a referrer to Google or other sites.
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Referrer-Policy': 'same-origin' });
+  return res.end('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
     '<title>' + title + '</title><link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/style.css">' +
     '<link rel="stylesheet" href="/login.css"><main class="pia-login"><section class="pia-login-card">' +
     '<img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64"><h2>' + title + '</h2>' +
-    content + '</section></main></html>';
+    content + '</section></main></html>');
 }
 
 async function body(req, limit = 65536) {
@@ -142,8 +145,7 @@ async function route(req, res) {
       content = '<p>Volte ao Discord e confirme com a mesma conta Discord que pediu o vínculo.</p>' +
         '<p>Digite <code>/bless</code> e cole este valor no campo <code>code</code>:</p><pre>' + code + '</pre>';
     } else return json(res, 403, { error: 'Entre na sua conta PIA e abra o link enviado pelo Discord.' });
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(authorizationPage('Vincular Discord à PIA', content));
+    return authorizationPage(res, 'Vincular Discord à PIA', content);
   }
   if (req.method === 'POST' && path === '/device/login/start') {
     const result = beginDeviceLogin(await body(req, 2048));
@@ -167,12 +169,15 @@ async function route(req, res) {
         escape(attempt.name) + '</strong> antes de autorizar.</p>' + (account ?
         '<p>Conta: ' + escape(account.email) + '</p><form method="post" action="' + target +
         '"><button>Autorizar computador</button></form>' + signIn : signIn);
-    } else if (req.method === 'POST' && !login && account && req.headers.origin === origin) {
+    } else if (req.method === 'POST' && !login) {
+      if (!account) return json(res, 403, { error: 'Entre com Google antes de autorizar o computador.' });
+      if (req.headers.origin !== origin) return json(res, 403, {
+        error: 'Origem do formulário inválida. Reabra o link na PIA local e tente novamente.',
+      });
       approveDeviceLogin(id, account);
       content = '<p>Computador autorizado. Você pode fechar esta aba e voltar à PIA.</p>';
-    } else return json(res, 403, { error: 'Entre com Google antes de autorizar o computador.' });
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(authorizationPage('Entrar na PIA', content));
+    } else return json(res, 405, { error: 'Método indisponível.' });
+    return authorizationPage(res, 'Entrar na PIA', content);
   }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
   const connectorCallback = path === '/auth/connectors/microsoft' ? 'microsoft' :
