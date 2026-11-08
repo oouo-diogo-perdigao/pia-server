@@ -19,7 +19,9 @@ export async function configure(account, data) {
     INSERT INTO pia_server.secretary(account_id,mail,calendar,lead_minutes) VALUES($1,$2,$3,$4)
     ON CONFLICT(account_id) DO UPDATE SET mail=EXCLUDED.mail,calendar=EXCLUDED.calendar,
       lead_minutes=EXCLUDED.lead_minutes, last_error=NULL,
-      mail_since=CASE WHEN NOT pia_server.secretary.mail AND EXCLUDED.mail THEN now() ELSE pia_server.secretary.mail_since END
+      mail_since=CASE WHEN NOT pia_server.secretary.mail AND EXCLUDED.mail THEN now() ELSE pia_server.secretary.mail_since END,
+      calendar_since=CASE WHEN NOT pia_server.secretary.calendar AND EXCLUDED.calendar
+        THEN now() ELSE pia_server.secretary.calendar_since END
   `, [account.id, data.mail, data.calendar, data.lead_minutes]);
   return { ok: true };
 }
@@ -82,9 +84,33 @@ async function pollCalendar(account, headers, now) {
   } while (pageToken);
 }
 
+async function calendarChanges(account, headers, now) {
+  const since = new Date(account.calendar_since);
+  const query = new URLSearchParams({ updatedMin: since.toISOString(), showDeleted: 'true', maxResults: '250' });
+  const base = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+  let pageToken;
+  do {
+    if (pageToken) query.set('pageToken', pageToken);
+    const page = await get(base + '?' + query, headers);
+    for (const event of page.items || []) {
+      if (!event.id || !event.updated || new Date(event.updated) < since) continue;
+      const start = event.start?.dateTime || event.start?.date;
+      if (start && new Date(start) < now && event.status !== 'cancelled') continue;
+      const title = event.status === 'cancelled' ? 'Compromisso cancelado' :
+        new Date(event.created) >= since ? 'Novo compromisso' : 'Compromisso atualizado';
+      const link = /^https:\/\/calendar\.google\.com\//.test(event.htmlLink || '') ? event.htmlLink : null;
+      await notice(account.id, 'calendar-change:' + event.id + ':' + event.updated, title,
+        (event.summary || 'Compromisso') + (start ? ' · ' + start : ''), link);
+    }
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+  await pool.query('UPDATE pia_server.secretary SET calendar_since=GREATEST(calendar_since,$2) WHERE account_id=$1',
+    [account.id, new Date(now.getTime() - 120000)]);
+}
+
 export async function monitor() {
   const { rows } = await pool.query(`
-    SELECT a.id,a.email,a.drive_refresh,s.mail,s.calendar,s.lead_minutes,s.mail_since
+    SELECT a.id,a.email,a.drive_refresh,s.mail,s.calendar,s.lead_minutes,s.mail_since,s.calendar_since
     FROM pia_server.accounts a JOIN pia_server.secretary s ON s.account_id=a.id
     WHERE a.drive_refresh IS NOT NULL AND (s.mail OR s.calendar)
   `);
@@ -98,6 +124,7 @@ export async function monitor() {
         const results = await Promise.allSettled([
           account.mail && pollMail(account, headers, now),
           account.calendar && pollCalendar(account, headers, now),
+          account.calendar && calendarChanges(account, headers, now),
         ]);
         const error = results.some((result) => result.status === 'rejected') ?
           'Uma fonte do Google não pôde ser consultada. Confira as permissões de Gmail e Agenda.' : null;

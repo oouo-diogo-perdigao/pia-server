@@ -55,6 +55,7 @@ export async function migrate() {
       mail boolean NOT NULL, calendar boolean NOT NULL, lead_minutes integer NOT NULL,
       mail_since timestamptz NOT NULL DEFAULT now(), last_error text
     );
+    ALTER TABLE pia_server.secretary ADD COLUMN IF NOT EXISTS calendar_since timestamptz NOT NULL DEFAULT now();
     CREATE TABLE IF NOT EXISTS pia_server.notices (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
