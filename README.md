@@ -97,3 +97,13 @@ a Secret Key é carregada somente quando o usuário autenticado aciona o botão 
 A foto da conta Google aparece na navegação do painel e nos desktops pareados.
 O primeiro login após a atualização autoriza a leitura do perfil. Se a conta não
 tiver foto disponível, as interfaces mostram a inicial do e-mail.
+
+No painel **Gravações**, use **Escolher pasta de gravações** para selecionar a
+conta e navegar pelo Drive, ou criar uma pasta. Pastas existentes fora do alcance
+da autorização do login ficam disponíveis ao adicionar uma conta com acesso ao
+Drive em **Conectores / Google**. Sessões já iniciadas mantêm o destino original.
+
+Os novos ZIPs seguem o modelo `RPGs20261108181339235-Bate-Papo.aup.zip`. A data
+do nome usa o horário de São Paulo e tem precisão de milissegundos. Extraia o ZIP
+e abra `pia.aup` com `pia_data` ao lado. As faixas FLAC são identificadas pelo
+nome de usuário do Discord e mantêm o início sincronizado.

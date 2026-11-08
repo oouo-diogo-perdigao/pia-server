@@ -1,6 +1,10 @@
 const element = (id) => document.getElementById(id);
 const say = (text) => { element('feedback').textContent = text; };
-let edited = false;
+let savedRules = null;
+let savingRules = false;
+let selectedDriveAccount = '';
+const rulesDirty = () => savedRules !== null && element('rules').value !== savedRules;
+function updateRulesButton() { element('save-rules').disabled = savingRules || !rulesDirty(); }
 
 async function api(path, data) {
   const response = await fetch('/api/' + path, data === undefined ? {} : {
@@ -44,7 +48,14 @@ async function refresh() {
     ' · Google Drive: ' + (state.driveConnected ? 'autorizado' : 'aguardando autorização');
   element('folder').hidden = !state.folderId;
   if (state.folderId) element('folder').href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(state.folderId);
-  if (!edited) element('rules').value = JSON.stringify(state.rules, null, 2);
+  selectedDriveAccount = state.recordingDriveAccount || 'server-google-primary';
+  element('recording-destination').textContent = state.folderId ?
+    (state.folderName || 'Pasta de gravações já configurada') : 'Nenhuma pasta selecionada.';
+  if (!rulesDirty() && !savingRules) {
+    savedRules = JSON.stringify(state.rules, null, 2);
+    element('rules').value = savedRules;
+  }
+  updateRulesButton();
   element('recordings').replaceChildren(...state.recordings.map((item) => {
     const li = document.createElement('li');
     li.textContent = item.name + ' · ' + item.state + (item.error ? ' · ' + item.error : '') +
@@ -77,12 +88,12 @@ async function refresh() {
   }));
 }
 
-element('rules').oninput = () => { edited = true; };
+element('rules').oninput = updateRulesButton;
 on('example', () => {
-  edited = true;
   element('rules').value = JSON.stringify([{
     guildId: '', channelId: '', noticeChannelId: '', minPeople: 2, triggerUsers: [], emptySeconds: 30,
   }], null, 2);
+  updateRulesButton();
 });
 on('save-discord', async () => {
   const token = botSecrets.discord.edited();
@@ -93,12 +104,110 @@ on('save-discord', async () => {
   say('Bot salvo.');
   await refresh();
 });
-on('drive', async () => { await api('drive/folder', {}); await refresh(); });
-on('save-rules', async () => {
-  await api('rules', { rules: JSON.parse(element('rules').value) });
-  edited = false;
-  say('Regras salvas.');
-  await refresh();
+let drivePath = [];
+let drivePage = null;
+let driveRequest = 0;
+const drivePicker = element('drive-picker');
+const rootFolder = { id: 'root', name: 'Meu Drive' };
+
+async function showDriveFolders(path, cursor) {
+  const version = ++driveRequest;
+  const feedback = element('drive-picker-feedback');
+  const list = element('drive-folders');
+  const identity = element('drive-account').value;
+  drivePath = path;
+  drivePage = null;
+  element('drive-select').disabled = true;
+  element('drive-create').disabled = true;
+  element('drive-more').hidden = true;
+  if (!cursor) list.replaceChildren();
+  element('drive-path').replaceChildren(...path.map((folder, index) => {
+    const button = document.createElement('button');
+    button.textContent = folder.name;
+    button.onclick = () => showDriveFolders(path.slice(0, index + 1));
+    return button;
+  }));
+  feedback.textContent = 'Carregando pastas…';
+  try {
+    const result = await api('recording-folders', { identity, folder: path.at(-1).id, cursor });
+    if (version !== driveRequest || !drivePicker.open) return;
+    drivePage = result;
+    for (const folder of result.folders) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.textContent = folder.name;
+      button.onclick = () => showDriveFolders([...path, folder]);
+      item.append(button);
+      list.append(item);
+    }
+    element('drive-select').disabled = !result.current.writable;
+    element('drive-create').disabled = !(result.current.writable || result.current.canCreate);
+    element('drive-more').hidden = !result.cursor;
+    feedback.textContent = !list.children.length ? 'Nenhuma subpasta disponível nesta conta.' : '';
+  } catch (error) {
+    if (version === driveRequest) feedback.textContent = error.message;
+  }
+}
+
+on('drive', async () => {
+  const state = await api('connectors');
+  const accounts = [...(state.primaryGoogle ? [state.primaryGoogle] : []), ...state.google];
+  if (!accounts.length) throw new Error('Autorize uma conta em Conectores / Google.');
+  const select = element('drive-account');
+  select.replaceChildren(...accounts.map((account) =>
+    new Option(account.email || account.label || account.id, account.id)));
+  if (accounts.some((account) => account.id === selectedDriveAccount)) select.value = selectedDriveAccount;
+  element('drive-new-folder').value = '';
+  drivePicker.showModal();
+  await showDriveFolders([rootFolder]);
+});
+element('drive-account').onchange = () => showDriveFolders([rootFolder]);
+element('drive-close').onclick = () => drivePicker.close();
+element('drive-google-settings').onclick = () => drivePicker.close();
+element('drive-more').onclick = () => showDriveFolders(drivePath, drivePage?.cursor);
+async function saveDriveFolder(name) {
+  const current = drivePage?.current;
+  if (!(current?.writable || (name && current?.canCreate))) return;
+  element('drive-select').disabled = true;
+  element('drive-create').disabled = true;
+  try {
+    await api('recording-folder', { identity: element('drive-account').value, folder: current.id, name });
+    drivePicker.close();
+    await refresh();
+    say('Pasta das novas gravações salva.');
+  } catch (error) {
+    element('drive-picker-feedback').textContent = error.message;
+  } finally {
+    element('drive-select').disabled = !drivePage?.current.writable;
+    element('drive-create').disabled = !(drivePage?.current.writable || drivePage?.current.canCreate);
+  }
+}
+element('drive-select').onclick = () => saveDriveFolder();
+element('drive-create').onclick = () => {
+  const name = element('drive-new-folder').value.trim();
+  if (!name) {
+    element('drive-picker-feedback').textContent = 'Informe o nome da nova pasta.';
+    return;
+  }
+  void saveDriveFolder(name);
+};
+
+element('save-rules').onclick = async () => {
+  if (savingRules || !rulesDirty()) return;
+  savingRules = true;
+  const draft = element('rules').value;
+  updateRulesButton();
+  try {
+    const result = await api('rules', { rules: JSON.parse(draft) });
+    savedRules = JSON.stringify(result.rules, null, 2);
+    if (element('rules').value === draft) element('rules').value = savedRules;
+    say('Regras salvas.');
+  } catch (error) { say(error.message); }
+  finally { savingRules = false; updateRulesButton(); }
+};
+on('prepare-device-drive', async () => {
+  await api('drive/folder', {});
+  say('Pasta para arquivos dos computadores preparada.');
 });
 on('refresh', refresh);
 element('mcp-expiration').onchange = (event) => {

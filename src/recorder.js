@@ -1,3 +1,4 @@
+import { recordingFolder, recordingName } from './recording_format.js';
 import { guildAccount } from './discord_guild_links.js';
 import { handleRecordingCommand, recordingCommands, registerRecordingCommands } from './recording_commands.js';
 import { linkDiscordChannel } from './connectors.js';
@@ -20,9 +21,9 @@ export function positionForFrame(samplesWritten, elapsedMs, frameSamples) {
 }
 
 class Recording {
-  constructor(account, connection, rule, permitted, requester) {
+  constructor(account, connection, rule, channel, requester) {
     this.connection = connection;
-    this.permitted = permitted;
+    this.channel = channel;
     this.rule = rule;
     this.accountId = account.id;
     this.started = performance.now();
@@ -30,12 +31,12 @@ class Recording {
     this.tracks = new Map();
     const date = new Date();
     const id = randomUUID();
-    const name = 'pia_' + id + '_' + date.toISOString().slice(0, 10) + '_' +
-      date.toISOString().slice(11, 19).replaceAll(':', '-') + '.aup.zip';
+    const name = recordingName(channel.guild.name, channel.name, date);
     this.folder = join(root, String(account.id), id);
     mkdirSync(this.folder, { recursive: true, mode: 0o700 });
     this.meta = { id, name, channelId: rule.channelId, guildId: rule.guildId, startedAt: date.toISOString(),
-      folderId: account.folder_id, state: 'recording', tracks: [], ...(requester ? { requester } : {}) };
+      folderId: recordingFolder(account), driveAccount: account.recording_drive_account || null,
+      state: 'recording', tracks: [], usernames: {}, ...(requester ? { requester } : {}) };
     this.persist();
     connection.receiver.speaking.on('start', (userId) => this.listen(userId));
     this.limit = setTimeout(() => this.finish(), MAX_MS);
@@ -44,7 +45,8 @@ class Recording {
   persist() { save(join(this.folder, 'recording.json'), this.meta); }
 
   listen(userId) {
-    if (this.closed || !snowflake.test(userId) || !this.permitted(userId) || this.tracks.has(userId)) return;
+    const user = this.channel.members.get(userId)?.user;
+    if (this.closed || !snowflake.test(userId) || !user || user.bot || this.tracks.has(userId)) return;
     let fd, stream, decoder;
     try {
       fd = openSync(join(this.folder, userId + '.pcm'), 'w', 0o600);
@@ -53,6 +55,7 @@ class Recording {
       const track = { fd, stream, decoder, samples: 0 };
       this.tracks.set(userId, track);
       this.meta.tracks.push(userId);
+      this.meta.usernames[userId] = user.username;
       this.persist();
       stream.on('data', (packet) => {
         if (this.closed) return;
@@ -147,7 +150,7 @@ export class DiscordRecorder {
 
   setDestinations(destinations) {
     const signature = (routes) => JSON.stringify([...routes].sort(([a], [b]) => a.localeCompare(b))
-      .map(([guild, account]) => [guild, account.id, account.folder_id, Boolean(account.drive_refresh), account.rules]));
+      .map(([guild, account]) => [guild, account.id, recordingFolder(account), account.recording_drive_account, Boolean(account.drive_refresh), account.rules]));
     const changed = signature(this.destinations) !== signature(destinations);
     this.destinations = destinations;
     if (changed) this.evaluate();
@@ -172,7 +175,7 @@ export class DiscordRecorder {
     }
     for (const rule of rules.values()) {
       const account = this.destinations.get(rule.guildId);
-      if (!account.drive_refresh || !account.folder_id) continue;
+      if (!account.drive_refresh || !recordingFolder(account)) continue;
       const channel = this.client.channels.cache.get(rule.channelId);
       if (!channel?.isVoiceBased() || channel.guildId !== rule.guildId) continue;
       const humans = channel.members.filter((member) => !member.user.bot);
@@ -194,7 +197,7 @@ export class DiscordRecorder {
 
   async startManual(account, channel, requester) {
     if (this.guildBusy(channel.guildId)) throw new Error('Já há uma gravação ou teste neste servidor.');
-    if (!account.drive_refresh || !account.folder_id)
+    if (!account.drive_refresh || !recordingFolder(account))
       throw new Error('Configure a pasta de gravações no Google Drive no painel da PIA Server.');
     this.pending.add(channel.guildId);
     try {
@@ -221,7 +224,7 @@ export class DiscordRecorder {
     const destination = async () => {
       if (this.closed) return;
       const current = await guildAccount(this.account.id, rule.guildId);
-      if (current?.id === account.id && current.drive_refresh && current.folder_id &&
+      if (current?.id === account.id && current.drive_refresh && recordingFolder(current) &&
           (requester || current.rules.some((item) => item.channelId === rule.channelId))) return current;
     };
     if (!await destination() || channel.members.filter((member) => !member.user.bot).size < rule.minPeople) return false;
@@ -233,8 +236,7 @@ export class DiscordRecorder {
         connection.destroy();
         return;
       }
-      const session = new Recording(current, connection, rule, (id) =>
-        channel.members.has(id) && !channel.members.get(id).user.bot, requester);
+      const session = new Recording(current, connection, rule, channel, requester);
       this.sessions.set(channel.id, session);
       this.blocked.add(channel.id);
       connection.on(VoiceConnectionStatus.Disconnected, () => session.finish('Conexão de voz interrompida.'));

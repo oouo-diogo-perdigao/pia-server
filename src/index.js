@@ -1,3 +1,4 @@
+import { recordingFolder } from './recording_format.js';
 import { approveDeviceLogin, beginDeviceLogin, deviceLoginDetails, pollDeviceLogin } from './device_login.js';
 import { issueMcpToken } from './mcp_tokens.js';
 import { confirmGuildLink, guildLinkRequest } from './discord_guild_links.js';
@@ -6,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { accountProfile, begin, cookie, finish, oauthReady, origin } from './auth.js';
 import { identify, migrate, pool, seal, unseal } from './db.js';
 import { DiscordRecorder } from './recorder.js';
-import { createFolder } from './drive.js';
+import { createFolder, recordingDestination, recordingFolders } from './drive.js';
 import { processRecording, recordings, recover } from './queue.js';
 import { hash, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
@@ -65,7 +66,8 @@ function status(account) {
   return {
     ...accountProfile(account), admin: account.admin, discordConfigured: Boolean(account.discord_token),
     discordConnected: runtime?.client.isReady() || false, discordError: runtime?.error || '',
-    driveConnected: Boolean(account.drive_refresh), folderId: account.folder_id, rules: account.rules,
+    driveConnected: Boolean(account.drive_refresh), folderId: recordingFolder(account), folderName: account.recording_folder_name,
+    recordingDriveAccount: account.recording_drive_account, rules: account.rules,
     recordings: recordings(account).map(({ meta }) => ({
       id: meta.id, channelId: meta.channelId, name: meta.name, state: meta.state,
       startedAt: meta.startedAt, endedAt: meta.endedAt, note: meta.note, error: meta.lastError,
@@ -281,7 +283,7 @@ async function route(req, res) {
   if (path === '/api/rules') {
     const rules = validateRules(data.rules);
     await pool.query('UPDATE pia_server.accounts SET rules=$2 WHERE id=$1', [account.id, JSON.stringify(rules)]);
-    return json(res, 200, { ok: true });
+    return json(res, 200, { ok: true, rules });
   }
   if (path === '/api/discord') {
     const token = typeof data.token === 'string' ? data.token.trim() : '';
@@ -299,6 +301,14 @@ async function route(req, res) {
       throw error;
     }
     return json(res, 200, { ok: true });
+  }
+  if (path === '/api/recording-folders') return json(res, 200, await recordingFolders(account, data));
+  if (path === '/api/recording-folder') {
+    const folder = await recordingDestination(account, data);
+    await pool.query(`UPDATE pia_server.accounts SET recording_folder_id=$2,
+      recording_folder_name=$3, recording_drive_account=$4 WHERE id=$1`,
+    [account.id, folder.id, folder.name, data.identity || null]);
+    return json(res, 200, folder);
   }
   if (path === '/api/drive/folder') {
     if (account.folder_id) return json(res, 200, { id: account.folder_id });

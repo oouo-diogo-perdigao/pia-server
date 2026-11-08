@@ -35,6 +35,9 @@ export async function migrate() {
       folder_id text, rules jsonb NOT NULL DEFAULT '[]'
     );
     ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS google_picture text;
+    ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS recording_folder_id text;
+    ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS recording_folder_name text;
+    ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS recording_drive_account text;
     CREATE TABLE IF NOT EXISTS pia_server.discord_guild_links (
       guild_id text PRIMARY KEY, bot_account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,

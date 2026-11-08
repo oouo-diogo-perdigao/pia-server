@@ -21,7 +21,8 @@ export async function access(account) {
 }
 
 async function driveJSON(response) {
-  if (!response.ok) throw new Error('Google Drive retornou HTTP ' + response.status + '.');
+  if (!response.ok) throw Object.assign(new Error('Google Drive retornou HTTP ' + response.status + '.'),
+    { status: response.status });
   return response.json();
 }
 
@@ -35,8 +36,64 @@ export async function createFolder(account) {
   return driveJSON(response);
 }
 
+async function recordingAccess(account, identity) {
+  if (!identity || identity === 'server-google-primary') return access(account);
+  const { accessToken } = await import('./connectors.js');
+  const { token } = await accessToken(account, 'google', identity);
+  return { Authorization: 'Bearer ' + token };
+}
+
+const folderMime = 'application/vnd.google-apps.folder';
+const folderFields = 'id,name,mimeType,trashed,capabilities(canAddChildren)';
+function checkedFolder(id) {
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,200}$/.test(id)) throw new Error('Pasta do Drive inválida.');
+  return id;
+}
+
+async function folderInfo(headers, id) {
+  const params = new URLSearchParams({ fields: folderFields, supportsAllDrives: 'true' });
+  const folder = await driveJSON(await fetch(FILES + '/' + checkedFolder(id) + '?' + params,
+    { headers, signal: AbortSignal.timeout(15000) }));
+  if (folder.mimeType !== folderMime || folder.trashed) throw new Error('Selecione uma pasta ativa no Drive.');
+  return { id: folder.id, name: id === 'root' ? 'Meu Drive' : folder.name, writable: Boolean(folder.capabilities?.canAddChildren) };
+}
+
+export async function recordingFolders(account, { identity, folder = 'root', cursor }) {
+  const headers = await recordingAccess(account, identity);
+  let current;
+  try { current = await folderInfo(headers, folder); }
+  catch (error) {
+    if (folder !== 'root' || error.status !== 404) throw error;
+    // drive.file can list authorized children but cannot read the root itself.
+    current = { id: 'root', name: 'Meu Drive', writable: false, canCreate: true };
+  }
+  const query = new URLSearchParams({
+    q: "'" + checkedFolder(current.id) + "' in parents and trashed=false and mimeType='" + folderMime + "'",
+    fields: 'nextPageToken,files(id,name)', orderBy: 'name_natural', pageSize: '100',
+    supportsAllDrives: 'true', includeItemsFromAllDrives: 'true',
+  });
+  if (cursor) query.set('pageToken', cursor);
+  const { files, nextPageToken } = await driveJSON(await fetch(FILES + '?' + query,
+    { headers, signal: AbortSignal.timeout(15000) }));
+  return { current, folders: files, cursor: nextPageToken || null };
+}
+
+export async function recordingDestination(account, { identity, folder, name }) {
+  const headers = await recordingAccess(account, identity);
+  const parent = folder === 'root' && name !== undefined ? { id: 'root', writable: true } :
+    await folderInfo(headers, folder);
+  if (!parent.writable) throw new Error('Esta conta não pode gravar nesta pasta.');
+  if (name === undefined) return parent;
+  if (typeof name !== 'string' || !name.trim() || name.length > 120) throw new Error('Informe um nome de pasta válido.');
+  return driveJSON(await fetch(FILES + '?fields=id,name&supportsAllDrives=true', {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name.trim(), mimeType: folderMime, ...(parent.id === 'root' ? {} : { parents: [parent.id] }) }),
+    signal: AbortSignal.timeout(15000),
+  }));
+}
+
 export async function uploadRecording(account, file, meta, persist) {
-  const headers = await access(account);
+  const headers = await recordingAccess(account, meta.driveAccount);
   const length = statSync(file).size;
   const mime = meta.mime || 'application/zip';
   if (!meta.driveId) {
@@ -47,7 +104,7 @@ export async function uploadRecording(account, file, meta, persist) {
     await persist();
   }
   const existing = await fetch(FILES + '/' + encodeURIComponent(meta.driveId) +
-    '?fields=id,name,size,trashed,parents', { headers, signal: AbortSignal.timeout(15000) });
+    '?fields=id,name,size,trashed,parents&supportsAllDrives=true', { headers, signal: AbortSignal.timeout(15000) });
   if (existing.ok) {
     const result = await existing.json();
     if (!result.trashed && result.name === meta.name && Number(result.size) === length &&
@@ -55,7 +112,7 @@ export async function uploadRecording(account, file, meta, persist) {
     throw new Error('O Drive já tem um arquivo diferente para esta gravação.');
   }
   if (existing.status !== 404) await driveJSON(existing);
-  const start = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,size', {
+  const start = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,size&supportsAllDrives=true', {
     method: 'POST', headers: { ...headers, 'Content-Type': 'application/json',
       'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(length) },
     body: JSON.stringify({ id: meta.driveId, name: meta.name, mimeType: mime, parents: [meta.folderId], createdTime: meta.startedAt }),

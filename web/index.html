@@ -40,7 +40,23 @@
   <h2 id="page-title"></h2>
   <section data-page="recordings">
     <h2>Bot Discord e Google Drive</h2>
-    <button id="drive">Criar pasta de gravações no Drive</button>
+    <p id="recording-destination">Nenhuma pasta selecionada.</p>
+    <button id="drive">Escolher pasta de gravações</button>
+    <dialog id="drive-picker" aria-labelledby="drive-picker-title">
+      <h3 id="drive-picker-title">Pasta de gravações no Google Drive</h3>
+      <p>Para encontrar mais pastas, autorize uma conta em <a href="#connectors/google" id="drive-google-settings">Conectores / Google</a>.</p>
+      <label>Conta Google <select id="drive-account"></select></label>
+      <div id="drive-path" class="drive-path" aria-label="Caminho da pasta"></div>
+      <ul id="drive-folders" class="drive-folders"></ul>
+      <button id="drive-more" hidden>Carregar mais</button>
+      <p id="drive-picker-feedback" role="status"></p>
+      <label>Nome da nova pasta <input id="drive-new-folder" maxlength="120"></label>
+      <div class="drive-picker-actions">
+        <button id="drive-create">Criar e usar nova pasta</button>
+        <button id="drive-select">Usar esta pasta</button>
+        <button id="drive-close">Fechar</button>
+      </div>
+    </dialog>
     <p id="connections"></p><a id="folder" hidden target="_blank" rel="noopener">Abrir pasta de gravações</a>
   </section>
   <section data-page="recordings">
@@ -48,7 +64,7 @@
     <p>Sem regras, o bot não grava. Use os IDs copiados com o modo desenvolvedor do Discord. O canal de aviso precisa ser visível aos participantes. Uma lista vazia de participantes permite iniciar quando qualquer pessoa completar o mínimo.</p>
     <label>Regras em JSON <textarea id="rules" rows="12" spellcheck="false"></textarea></label>
     <button id="example">Inserir exemplo</button>
-    <button id="save-rules">Salvar regras</button>
+    <button id="save-rules" disabled>Salvar regras</button>
   </section>
   <section data-page="recordings">
     <h2>Gravações e uploads</h2>
@@ -74,6 +90,7 @@
   <section data-page="devices">
     <h2>Computadores pareados</h2>
     <p>Entre com Google na PIA desktop para conectar um computador a esta conta.</p>
+    <button id="prepare-device-drive">Preparar pasta para arquivos dos computadores</button>
     <ul id="devices"></ul>
   </section>
   <section data-page="secretary">

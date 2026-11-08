@@ -80,3 +80,10 @@ nav .rail-icon { padding: 0; }
 @media (max-width: 620px) {
   .account-actions { top: calc(100% + .4rem); right: 0; bottom: auto; left: auto; }
 }
+
+#drive-picker { width: min(34rem, calc(100vw - 2rem)); max-height: 85dvh; overflow: auto; padding: 1.25rem; color: inherit; background: #1c192b; border: 1px solid #514366; border-radius: .85rem; box-sizing: border-box; }
+#drive-picker::backdrop { background: #090811b3; }
+.drive-path, .drive-picker-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+.drive-folders { padding: 0; list-style: none; min-height: 3rem; max-height: 30vh; overflow: auto; }
+.drive-folders button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+.drive-folders button::before { content: '📁 '; }

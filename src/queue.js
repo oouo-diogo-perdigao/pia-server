@@ -1,3 +1,4 @@
+import { audacityProject, recordingTracks } from './recording_format.js';
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -34,22 +35,25 @@ export async function processRecording(account, { dir, meta }) {
   const persist = () => save(join(dir, 'recording.json'), meta);
   const archive = join(dir, meta.name);
   const tracks = join(dir, 'pia_data');
+  const project = join(dir, 'pia.aup');
+  const entries = recordingTracks(meta);
   try {
     if (!existsSync(archive)) {
       mkdirSync(tracks, { recursive: true, mode: 0o700 });
-      for (const [index, id] of meta.tracks.entries()) {
+      for (const { id, filename } of entries) {
         if (!snowflake.test(id)) throw new Error('Faixa inválida.');
         await run('ffmpeg', ['-v', 'error', '-y', '-f', 's16le', '-ar', '48000', '-ac', '1',
-          '-i', join(dir, id + '.pcm'), '-c:a', 'flac', join(tracks, (index + 1) + '-' + id + '.flac')],
+          '-i', join(dir, id + '.pcm'), '-c:a', 'flac', join(tracks, filename)],
         { timeout: 30 * 60 * 1000 });
       }
+      writeFileSync(project, audacityProject(entries), { mode: 0o600 });
       writeFileSync(join(dir, 'pia-session.json'), JSON.stringify({
         version: 1, source: 'pia-server-discord', id: meta.id, startedAt: meta.startedAt,
-        endedAt: meta.endedAt, channelId: meta.channelId, participants: meta.tracks,
+        endedAt: meta.endedAt, channelId: meta.channelId, participants: meta.tracks, tracks: entries,
       }) + '\n', { mode: 0o600 });
       const temp = archive + '.partial.zip';
       if (existsSync(temp)) unlinkSync(temp);
-      await run('zip', ['-0', '-r', temp, 'pia_data', 'pia-session.json'], { cwd: dir, timeout: 30 * 60 * 1000 });
+      await run('zip', ['-0', '-r', temp, 'pia.aup', ...entries.map(({ filename }) => 'pia_data/' + filename), 'pia-session.json'], { cwd: dir, timeout: 30 * 60 * 1000 });
       renameSync(temp, archive);
     }
     await uploadRecording(account, archive, meta, persist);
@@ -57,8 +61,7 @@ export async function processRecording(account, { dir, meta }) {
     delete meta.retryAt;
     delete meta.lastError;
     persist();
-    const files = [archive, ...meta.tracks.map((id) => join(dir, id + '.pcm')),
-      ...readdirSync(tracks).filter((name) => /^\d+-\d+\.flac$/.test(name)).map((name) => join(tracks, name))];
+    const files = [archive, project, ...entries.flatMap(({ id, filename }) => [join(dir, id + '.pcm'), join(tracks, filename)])];
     for (const file of files) {
       try { unlinkSync(file); } catch { /* Keep the confirmed upload state. */ }
     }
