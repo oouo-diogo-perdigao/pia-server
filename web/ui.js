@@ -26,6 +26,23 @@ function on(id, action) {
   };
 }
 
+let destinationRequest = 0;
+let currentRecordingFolder;
+let destinationLabel;
+async function showRecordingPath() {
+  const id = currentRecordingFolder;
+  const request = ++destinationRequest;
+  if (!id) return;
+  const label = element('recording-destination');
+  try {
+    const result = await api('recording-folder');
+    if (request === destinationRequest && result.id === id && result.path.length)
+      label.textContent = result.path.join(' / ');
+  } catch {
+    if (request === destinationRequest) label.textContent = destinationLabel + ' · caminho indisponível';
+  }
+}
+
 async function refresh() {
   const state = await api('status');
   element('panel').hidden = false;
@@ -49,8 +66,12 @@ async function refresh() {
   element('folder').hidden = !state.folderId;
   if (state.folderId) element('folder').href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(state.folderId);
   selectedDriveAccount = state.recordingDriveAccount || 'server-google-primary';
-  element('recording-destination').textContent = state.folderId ?
+  currentRecordingFolder = state.folderId;
+  destinationRequest++;
+  destinationLabel = state.folderId ?
     (state.folderName || 'Pasta de gravações já configurada') : 'Nenhuma pasta selecionada.';
+  element('recording-destination').textContent = destinationLabel;
+  if (!location.hash || location.hash === '#recordings') void showRecordingPath();
   if (!rulesDirty() && !savingRules) {
     savedRules = JSON.stringify(state.rules, null, 2);
     element('rules').value = savedRules;
@@ -440,7 +461,7 @@ for (const control of document.querySelectorAll('[data-connector]'))
   control.onclick = () => selectConnector(control.dataset.connector);
 selectConnector('google');
 
-function navigate() {
+function navigate(event) {
   const links = Array.from(document.querySelectorAll('aside a.rail-icon:not([hidden])'));
   const [section, connector] = location.hash.split('/');
   const current = links.find((link) => link.hash === section) || links[0];
@@ -453,6 +474,7 @@ function navigate() {
   for (const section of document.querySelectorAll('[data-page]')) {
     section.classList.toggle('page-hidden', section.dataset.page !== page);
   }
+  if (page === 'recordings' && event) void showRecordingPath();
   if (page === 'connectors') {
     const id = connector === 'object_storage' ? 'storage' : connector;
     if (id && Array.from(document.querySelectorAll('[data-connector]')).some((control) => control.dataset.connector === id)) {

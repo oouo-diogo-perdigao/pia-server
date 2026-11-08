@@ -50,12 +50,52 @@ function checkedFolder(id) {
   return id;
 }
 
-async function folderInfo(headers, id) {
-  const params = new URLSearchParams({ fields: folderFields, supportsAllDrives: 'true' });
+async function folderInfo(headers, id, fields = folderFields) {
+  const params = new URLSearchParams({ fields, supportsAllDrives: 'true' });
   const folder = await driveJSON(await fetch(FILES + '/' + checkedFolder(id) + '?' + params,
     { headers, signal: AbortSignal.timeout(15000) }));
   if (folder.mimeType !== folderMime || folder.trashed) throw new Error('Selecione uma pasta ativa no Drive.');
-  return { id: folder.id, name: id === 'root' ? 'Meu Drive' : folder.name, writable: Boolean(folder.capabilities?.canAddChildren) };
+  return { id: folder.id, name: id === 'root' ? 'Meu Drive' : folder.name,
+    writable: Boolean(folder.capabilities?.canAddChildren), parents: folder.parents };
+}
+
+export async function recordingFolderPath(account, identity, folder) {
+  const headers = await recordingAccess(account, identity);
+  const fields = 'id,name,mimeType,trashed,parents';
+  let rootId;
+  try { rootId = (await folderInfo(headers, 'root', fields)).id; }
+  catch (error) { if (error.status !== 403 && error.status !== 404) throw error; }
+  const path = [];
+  const seen = new Set();
+  let id = folder;
+  while (id && !seen.has(id) && seen.size < 30) {
+    if (id === rootId) return ['Meu Drive', ...path];
+    seen.add(id);
+    let entry;
+    try { entry = await folderInfo(headers, id, fields); }
+    catch (error) {
+      if (!path.length || (error.status !== 403 && error.status !== 404)) throw error;
+      // A drive.file grant may expose a child of My Drive while hiding root metadata.
+      if (!rootId) {
+        const name = path[0].replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const query = new URLSearchParams({
+          q: "'root' in parents and trashed=false and name='" + name + "'",
+          fields: 'nextPageToken,files(id,parents)', pageSize: '100',
+        });
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const page = await driveJSON(await fetch(FILES + '?' + query,
+            { headers, signal: AbortSignal.timeout(15000) }));
+          if (page.files.some((item) => item.parents?.includes(id))) return ['Meu Drive', ...path];
+          if (!page.nextPageToken) break;
+          query.set('pageToken', page.nextPageToken);
+        }
+      }
+      return ['…', ...path];
+    }
+    path.unshift(entry.name);
+    id = entry.parents?.[0];
+  }
+  return id ? ['…', ...path] : path;
 }
 
 export async function recordingFolders(account, { identity, folder = 'root', cursor }) {

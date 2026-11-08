@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { accountProfile, begin, cookie, finish, oauthReady, origin } from './auth.js';
 import { identify, migrate, pool, seal, unseal } from './db.js';
 import { DiscordRecorder } from './recorder.js';
-import { createFolder, recordingDestination, recordingFolders } from './drive.js';
+import { createFolder, recordingDestination, recordingFolderPath, recordingFolders } from './drive.js';
 import { processRecording, recordings, recover } from './queue.js';
 import { hash, save, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
@@ -262,6 +262,11 @@ async function route(req, res) {
   const account = await identify(session, 'web');
   if (!account) return json(res, 401, { error: 'Entre com Google.' });
   if (req.method === 'GET' && path === '/api/status') return json(res, 200, status(account));
+  if (req.method === 'GET' && path === '/api/recording-folder') {
+    const id = recordingFolder(account);
+    const folders = id ? await recordingFolderPath(account, account.recording_drive_account, id) : [];
+    return json(res, 200, { id, path: folders });
+  }
   if (req.method === 'GET' && path === '/api/devices') return json(res, 200, await devices(account));
   if (req.method === 'GET' && path === '/api/secretary') return json(res, 200, await preferences(account));
   if (req.method === 'GET' && path === '/api/connectors') return json(res, 200, await publicConnectors(account));
