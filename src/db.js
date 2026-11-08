@@ -34,11 +34,33 @@ export async function migrate() {
       drive_refresh text, discord_token text, discord_bot_id text UNIQUE,
       folder_id text, rules jsonb NOT NULL DEFAULT '[]'
     );
+    ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS google_picture text;
+    CREATE TABLE IF NOT EXISTS pia_server.discord_guild_links (
+      guild_id text PRIMARY KEY, bot_account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      linked_by text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS pia_server.discord_link_requests (
+      digest text PRIMARY KEY, guild_id text NOT NULL, discord_user text NOT NULL,
+      bot_account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      account_id bigint REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      confirmation text UNIQUE, expires timestamptz NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS pia_server.sessions (
       digest text PRIMARY KEY, account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       purpose text NOT NULL CHECK (purpose IN ('web', 'mcp')),
       expires timestamptz NOT NULL
     );
+    ALTER TABLE pia_server.sessions ALTER COLUMN expires DROP NOT NULL;
+    DO $sessions$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='pia_server.sessions'::regclass
+        AND conname='pia_sessions_web_expiry_required') THEN
+        ALTER TABLE pia_server.sessions ADD CONSTRAINT pia_sessions_web_expiry_required
+          CHECK (purpose='mcp' OR expires IS NOT NULL);
+      END IF;
+    END;
+    $sessions$;
     CREATE INDEX IF NOT EXISTS pia_sessions_expiry ON pia_server.sessions(expires);
     CREATE TABLE IF NOT EXISTS pia_server.devices (
       id uuid PRIMARY KEY, account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
@@ -71,6 +93,24 @@ export async function migrate() {
       account_id bigint PRIMARY KEY REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       revision bigint NOT NULL DEFAULT 1, ciphertext text NOT NULL, updated timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS connectors_initialized boolean NOT NULL DEFAULT false;
+    CREATE TABLE IF NOT EXISTS pia_server.connectors (
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      type text NOT NULL,
+      ciphertext text NOT NULL,
+      PRIMARY KEY (account_id,type)
+    );
+    DO $migration$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='pia_server'
+        AND table_name='connectors' AND column_name='type') THEN
+        ALTER TABLE pia_server.connectors ADD COLUMN type text NOT NULL DEFAULT 'legacy';
+        ALTER TABLE pia_server.connectors DROP CONSTRAINT connectors_pkey;
+        ALTER TABLE pia_server.connectors ADD PRIMARY KEY (account_id,type);
+        ALTER TABLE pia_server.connectors ALTER COLUMN type DROP DEFAULT;
+      END IF;
+    END;
+    $migration$;
     CREATE TABLE IF NOT EXISTS pia_server.media (
       account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       id uuid NOT NULL, mime text NOT NULL, bytes bigint NOT NULL, drive_id text,
@@ -82,18 +122,19 @@ export async function migrate() {
 
 export async function accountSession(id, purpose, hours) {
   const token = randomBytes(32).toString('base64url');
+  const expiresAt = hours === null ? null : new Date(Date.now() + hours * 3600000);
   await pool.query('DELETE FROM pia_server.sessions WHERE expires <= now()');
   await pool.query('INSERT INTO pia_server.sessions VALUES($1,$2,$3,$4)', [
-    hash(token), id, purpose, new Date(Date.now() + hours * 3600000),
+    hash(token), id, purpose, expiresAt,
   ]);
-  return token;
+  return { token, expiresAt };
 }
 
 export async function identify(token, purpose) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token || '')) return null;
   const { rows } = await pool.query(`
     SELECT a.* FROM pia_server.sessions s JOIN pia_server.accounts a ON a.id=s.account_id
-    WHERE s.digest=$1 AND s.purpose=$2 AND s.expires>now()
+    WHERE s.digest=$1 AND s.purpose=$2 AND (s.expires IS NULL OR s.expires>now())
   `, [hash(token), purpose]);
   return rows[0] || null;
 }

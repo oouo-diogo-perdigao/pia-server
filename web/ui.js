@@ -27,7 +27,18 @@ async function refresh() {
   element('panel').hidden = false;
   element('login').hidden = true;
   element('admin').hidden = !state.admin;
-  element('account').textContent = state.email;
+  element('admin-link').hidden = !state.admin;
+  element('account').title = state.email;
+  element('account').setAttribute('aria-label', state.email);
+  element('account-initial').textContent = state.email[0]?.toUpperCase() || '';
+  const picture = element('account-picture');
+  if (state.picture) {
+    if (picture.getAttribute('src') !== state.picture) picture.src = state.picture;
+  } else {
+    picture.removeAttribute('src');
+    picture.hidden = true;
+    element('account-initial').hidden = false;
+  }
   element('connections').textContent = 'Discord: ' + (state.discordConnected ? 'conectado' :
     state.discordError || (state.discordConfigured ? 'conectando' : 'aguardando token')) +
     ' · Google Drive: ' + (state.driveConnected ? 'autorizado' : 'aguardando autorização');
@@ -76,6 +87,7 @@ on('example', () => {
 on('save-discord', async () => {
   await api('discord', { token: element('discord').value });
   element('discord').value = '';
+  await refreshConnectors();
   say('Bot salvo.');
   await refresh();
 });
@@ -87,17 +99,24 @@ on('save-rules', async () => {
   await refresh();
 });
 on('refresh', refresh);
+element('mcp-expiration').onchange = (event) => {
+  element('mcp-custom-expiration').hidden = event.target.value !== 'custom';
+};
 on('mcp', async () => {
-  element('token').textContent = (await api('mcp/token', {})).token;
+  const duration = element('mcp-expiration').value;
+  const custom = element('mcp-days');
+  if (duration === 'custom' && !custom.reportValidity()) return;
+  const expiresInDays = duration === 'never' ? null : Number(duration === 'custom' ? custom.value : duration);
+  const issued = await api('mcp/token', { expiresInDays });
+  element('token').textContent = issued.token;
+  element('mcp-issued-expiration').textContent = issued.expiresAt ?
+    'Válido até ' + new Date(issued.expiresAt).toLocaleString() : 'Sem expiração.';
 });
 on('mcp-revoke', async () => {
   await api('mcp/revoke', {});
   element('token').textContent = '';
+  element('mcp-issued-expiration').textContent = '';
   say('Tokens MCP revogados.');
-});
-on('pair-device', async () => {
-  element('device-token').textContent = (await api('devices/pair', { name: element('device-name').value })).token;
-  await refresh();
 });
 on('logout', async () => { await api('logout', {}); location.reload(); });
 on('add-account', async () => {
@@ -105,7 +124,7 @@ on('add-account', async () => {
   element('email').value = '';
   say('Conta autorizada.');
 });
-refresh().catch(async () => {
+refresh().then(navigate).catch(async () => {
   element('login').hidden = false;
   const health = await fetch('/health').then((r) => r.json()).catch(() => null);
   if (!health?.googleLogin) say('O login Google aguarda a configuração do servidor.');
@@ -122,3 +141,177 @@ on('secretary-save', async () => {
   element('secretary-error').textContent = '';
   say('Secretária salva.');
 });
+let connectorState;
+const input = (id) => element(id).value;
+
+let storageVersion = 0;
+let revealedStorageKey = '';
+
+function setStorageVisibility(visible) {
+  const toggle = element('storage-reveal');
+  toggle.setAttribute('aria-pressed', String(visible));
+  const label = visible ? 'Ocultar Secret Key' : 'Mostrar Secret Key';
+  toggle.setAttribute('aria-label', label);
+  toggle.title = label;
+  element('storage-secret').type = visible ? 'text' : 'password';
+}
+
+async function storageFields() {
+  const version = ++storageVersion;
+  revealedStorageKey = '';
+  setStorageVisibility(false);
+  const toggle = element('storage-reveal');
+  const access = element('storage-access');
+  const secret = element('storage-secret');
+  secret.placeholder = '';
+  toggle.hidden = true;
+  const id = input('storage-account');
+  const account = connectorState.objectStorage.find((item) => item.id === id);
+  for (const [field, value] of Object.entries({
+    name: account?.name, type: account?.provider || 's3', endpoint: account?.endpoint,
+    public: account?.public_url, bucket: account?.bucket, region: account?.region,
+    color: account?.color || '#9b7aff', access: '', secret: '', session: '',
+  })) element('storage-' + field).value = value || '';
+  element('storage-default').checked = Boolean(id && id === connectorState.storageDefault);
+  element('storage-remove').hidden = !id;
+  if (!id) return;
+  const data = await api('connectors/storage-credential', { id });
+  if (version !== storageVersion) return;
+  if (!access.value) access.value = data.accessKey;
+  secret.placeholder = data.hasSecret ? '********' : '';
+  toggle.hidden = !data.hasSecret;
+}
+
+async function refreshConnectors(selectedId = input('storage-account')) {
+  connectorState = await api('connectors');
+  for (const provider of ['google', 'microsoft']) {
+    const primary = provider === 'google' && connectorState.primaryGoogle;
+    const accounts = primary ? [primary, ...connectorState.google] : connectorState[provider];
+    element(provider + '-accounts').replaceChildren(...accounts.map((account) => {
+      const item = document.createElement('li');
+      item.textContent = account.email || account.label || account.id;
+      if (account === primary) item.append(' · conta de login');
+      else {
+        const button = document.createElement('button');
+        button.textContent = 'Desconectar';
+        button.onclick = () => removeAccount(provider, account.id).catch((error) => say(error.message));
+        item.append(' ', button);
+      }
+      return item;
+    }));
+  }
+  element('microsoft-client').value = connectorState.microsoftClient;
+  element('discord-state').textContent = connectorState.discord.configured ? '· configurado' : '';
+  element('discord-channel').value = connectorState.discord.channel;
+  element('taverns-state').textContent = connectorState.taverns.configured ? '· configurado' : '';
+  const select = element('storage-account');
+  select.replaceChildren(new Option('Nova conta', ''), ...connectorState.objectStorage.map((item) => new Option(item.name, item.id)));
+  select.value = connectorState.objectStorage.some((item) => item.id === selectedId) ? selectedId : '';
+  await storageFields();
+}
+
+async function removeAccount(provider, id) {
+  if (!window.confirm('Remover este conector da sua conta?')) return;
+  await api('connectors/remove', { provider, id });
+  await refreshConnectors();
+  say('Conector removido.');
+}
+
+async function saveConnector(provider, data) {
+  const result = await api('connectors/save', { provider, ...data });
+  await refreshConnectors(result.id);
+  say('Configuração salva.');
+}
+
+for (const provider of ['google', 'microsoft']) {
+  on(provider + '-add', async () => { location.assign((await api('connectors/oauth', { provider })).url); });
+}
+on('microsoft-save', async () => {
+  await saveConnector('microsoft', { clientId: input('microsoft-client'), clientSecret: input('microsoft-secret') });
+  element('microsoft-secret').value = '';
+});
+on('discord-save-channel', () => saveConnector('discord', { channel: input('discord-channel') }));
+on('discord-link', async () => {
+  await api('connectors/discord-link', {});
+  say('Comando /link habilitado para administradores.');
+});
+on('discord-remove', async () => { await removeAccount('discord'); await refresh(); });
+on('taverns-save', async () => {
+  await saveConnector('taverns', { token: input('taverns-token') });
+  element('taverns-token').value = '';
+});
+on('taverns-remove', () => removeAccount('taverns'));
+for (const [provider, field] of [['discord', 'discord-channel'], ['taverns', 'taverns-destination']]) {
+  on(provider + '-test', async () => {
+    await api('connectors/test', { provider, destination: input(field).trim() });
+    say('Mensagem de teste enviada.');
+  });
+}
+element('storage-account').onchange = () => storageFields().catch((error) => say(error.message));
+on('storage-reveal', async () => {
+  const field = element('storage-secret');
+  if (field.type === 'text') {
+    if (field.value === revealedStorageKey) field.value = '';
+    revealedStorageKey = '';
+    setStorageVisibility(false);
+    return;
+  }
+  if (!field.value) {
+    const version = storageVersion;
+    const data = await api('connectors/storage-credential', { id: input('storage-account'), reveal: true });
+    if (version !== storageVersion || field.value) return;
+    revealedStorageKey = data.secretKey;
+    field.value = data.secretKey;
+  }
+  setStorageVisibility(true);
+});
+on('storage-save', () => saveConnector('object_storage', {
+  id: input('storage-account'), name: input('storage-name'), type: input('storage-type'),
+  endpoint: input('storage-endpoint'), publicUrl: input('storage-public'), region: input('storage-region'),
+  bucket: input('storage-bucket'), color: input('storage-color'), accessKey: input('storage-access'),
+  secretKey: input('storage-secret') === revealedStorageKey ? '' : input('storage-secret'), sessionToken: input('storage-session'), default: element('storage-default').checked,
+}));
+on('storage-remove', () => removeAccount('object_storage', input('storage-account')));
+
+element('account-picture').onload = () => {
+  element('account-picture').hidden = false;
+  element('account-initial').hidden = true;
+};
+element('account-picture').onerror = () => {
+  element('account-picture').hidden = true;
+  element('account-initial').hidden = false;
+};
+
+function selectConnector(id) {
+  for (const control of document.querySelectorAll('[data-connector]'))
+    control.setAttribute('aria-pressed', String(control.dataset.connector === id));
+  for (const panel of document.querySelectorAll('[data-connector-panel]'))
+    panel.hidden = panel.dataset.connectorPanel !== id;
+}
+
+for (const control of document.querySelectorAll('[data-connector]'))
+  control.onclick = () => selectConnector(control.dataset.connector);
+selectConnector('google');
+
+function navigate() {
+  const links = Array.from(document.querySelectorAll('aside a.rail-icon:not([hidden])'));
+  const current = links.find((link) => link.hash === location.hash) || links[0];
+  const page = current.hash.slice(1);
+  element('page-title').textContent = current.getAttribute('aria-label');
+  for (const link of links) {
+    if (link === current) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  for (const section of document.querySelectorAll('[data-page]')) {
+    section.classList.toggle('page-hidden', section.dataset.page !== page);
+  }
+  if (page === 'connectors') refreshConnectors().catch((error) => say(error.message));
+  else {
+    storageVersion++;
+    revealedStorageKey = '';
+    element('storage-secret').value = '';
+    element('storage-access').value = '';
+    setStorageVisibility(false);
+  }
+}
+window.addEventListener('hashchange', navigate);

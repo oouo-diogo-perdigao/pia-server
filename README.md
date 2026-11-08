@@ -23,7 +23,7 @@ Cada gravação é um ZIP com faixas FLAC individuais alinhadas ao relógio de r
 
 ## MCP
 
-Entre com Google e emita um token MCP no painel. Configure no Codex a URL `https://pia.travelrpg.com/mcp` e passe o token via variável de ambiente Bearer. O token expira após 30 dias e pode ser revogado pelo painel. O MCP consulta o estado do gravador e pode solicitar câmera ou tela a um computador escolhido. Gere um token em **Computadores pareados**, informe-o no conector **PIA Server** do desktop e habilite as permissões locais desejadas. O resultado fica na pasta privada da PIA no Drive.
+Entre com Google e emita um token MCP no painel. Configure no Codex a URL `https://pia.travelrpg.com/mcp` e passe o token via variável de ambiente Bearer. A validade padrão é de 30 dias. Escolha de 1 a 3.650 dias ou sem expiração. Todos os tokens MCP da conta podem ser revogados no painel, inclusive os sem vencimento. A API aceita `expiresInDays` inteiro ou `null` em `POST /api/mcp/token` e informa `expiresAt` na resposta. O MCP consulta o estado do gravador e pode solicitar câmera ou tela a um computador escolhido. Entre com Google na PIA desktop, confirme o código no navegador e habilite as permissões locais desejadas. A autorização expira em dez minutos e a sessão do computador pode ser revogada no painel. O resultado fica na pasta privada da PIA no Drive.
 
 ## Escopo desta versão
 
@@ -32,3 +32,69 @@ No painel web, habilite Gmail ou Agenda na seção **Secretária**. Ela consulta
 Configurações, segredos e conversas ficam em revisões criptografadas no PostgreSQL. Use **Perfil compartilhado** no conector desktop para enviar ou carregar o perfil. A sincronização exige confirmação explícita e rejeita alterações sobre uma revisão desatualizada. Credenciais de pareamento e preferências de notificação ficam no computador.
 
 O painel web é a interface administrativa. A captura do Discord, a fila e o envio de gravações rodam no servidor. As capturas solicitadas pelo MCP são executadas no desktop pareado. O desktop também pode sincronizar arquivos de capturas e músicas salvas com o Drive, se essa opção estiver habilitada. A geração musical permanece local. O processamento de sessões no servidor ainda não está disponível.
+## Conectores dos computadores pareados
+
+A página **Conectores** gerencia Google, Microsoft, Object Storage, Discord e
+Taverns. A PIA Server guarda os dados por usuário no PostgreSQL, criptografados
+com `PIA_ENCRYPTION_KEY`. Na primeira consulta, o servidor migra os conectores do
+último perfil recebido, se houver. A edição posterior do perfil não substitui o
+cadastro. Os desktops pareados consultam esse cadastro pelo token do dispositivo.
+Revogue o dispositivo no painel se ele deixar de ser seu.
+
+O login Google do servidor usa a permissão `drive.file`. Para navegar por pastas
+preexistentes de todo o Drive, use **Autorizar conta Google**, que solicita
+o escopo `drive` no mesmo cliente OAuth do login. O projeto Google precisa
+permitir esse escopo. Consulte [escopos do Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+
+Para Microsoft, cadastre um cliente OAuth do tipo Web no Entra e adicione a URI
+`https://pia.travelrpg.com/auth/connectors/microsoft` (ou o domínio da instalação).
+Informe o ID e segredo do cliente em **Conectores / Microsoft**. Consulte
+[URIs de redirecionamento](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-redirect-uri).
+
+A autorização Google/Microsoft mantém o refresh token no servidor. Um desktop
+pareado recebe tokens de acesso temporários para esses provedores. Quando um app
+executa uma operação local com S3, Discord ou Taverns, usa a credencial do cadastro
+em memória. O perfil sincronizado não inclui credenciais desses cinco conectores.
+
+## Comandos de gravação no Discord
+
+A PIA registra os comandos quando o bot conecta ao Discord. Use um bot instalado
+no servidor com o escopo `applications.commands` e permissões para acessar o
+canal de voz e enviar o aviso de gravação. Para gravar, configure a pasta de
+destino no Drive pelo painel.
+
+| Comando | Uso |
+| --- | --- |
+| `/join [channel]` | Grava o canal informado ou o canal de voz atual. Envia o aviso antes de começar. |
+| `/stop` | Encerra a sessão. Disponível para quem iniciou ou para administradores. |
+| `/recordings` | Lista sessões recentes do servidor. Participantes veem suas sessões e administradores veem todas. Links respeitam as permissões do Drive. |
+| `/voice-test` | Entrega uma amostra de cinco segundos do próprio microfone em resposta privada, sem criar sessão nem enviar ao Drive. |
+| `/info` | Mostra estatísticas das gravações visíveis para quem executou o comando. |
+| `/bless`, `/unbless` | Vincula o servidor Discord à conta PIA autenticada ou remove o vínculo para futuras gravações. |
+| `/autorecord on/off/view/prune` | Gerencia as mesmas regras do painel da PIA Server. `prune` remove regras de canais de voz ou de aviso que foram excluídos. |
+| `/bot-profile set/remove` | Ajusta apelido, bio, avatar e banner do bot no servidor, ou restaura o perfil padrão. |
+
+Em canais de palco sem chat, configure previamente o canal de aviso nas regras.
+As operações de configuração são restritas a administradores do Discord.
+
+
+O administrador executa `/bless`, abre o link privado, entra com Google e
+confirma a conta. No Discord, usa `/bless code:<código>` com a mesma identidade
+que solicitou o vínculo. O pedido expira em 15 minutos. Só uma conta PIA pode
+receber gravações de cada servidor Discord. Para trocar de conta, use
+`/unbless` e refaça o vínculo.
+
+A pasta e as regras de gravação automática são as da conta vinculada. Depois
+da atualização, cada servidor precisa concluir o novo `/bless` antes de
+iniciar gravações manuais ou automáticas. `/unbless` impede novas gravações
+até um novo vínculo. Sessões já iniciadas e seus uploads mantêm o destino original.
+
+O PostgreSQL guarda uma linha criptografada por usuário e tipo de conector na
+tabela `pia_server.connectors`, com chave `(account_id, type)`. Contas de storage
+do mesmo usuário ficam na linha `object_storage`. A atualização reparte o cadastro
+anterior automaticamente. No painel, a Access Key aparece ao selecionar a conta e
+a Secret Key é carregada somente quando o usuário autenticado aciona o botão de olho.
+
+A foto da conta Google aparece na navegação do painel e nos desktops pareados.
+O primeiro login após a atualização autoriza a leitura do perfil. Se a conta não
+tiver foto disponível, as interfaces mostram a inicial do e-mail.

@@ -1,3 +1,6 @@
+import { guildAccount } from './discord_guild_links.js';
+import { handleRecordingCommand, recordingCommands, registerRecordingCommands } from './recording_commands.js';
+import { linkDiscordChannel } from './connectors.js';
 import { mkdirSync, closeSync, ftruncateSync, openSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -17,9 +20,11 @@ export function positionForFrame(samplesWritten, elapsedMs, frameSamples) {
 }
 
 class Recording {
-  constructor(account, connection, rule, permitted) {
+  constructor(account, connection, rule, permitted, requester) {
     this.connection = connection;
     this.permitted = permitted;
+    this.rule = rule;
+    this.accountId = account.id;
     this.started = performance.now();
     this.closed = false;
     this.tracks = new Map();
@@ -30,7 +35,7 @@ class Recording {
     this.folder = join(root, String(account.id), id);
     mkdirSync(this.folder, { recursive: true, mode: 0o700 });
     this.meta = { id, name, channelId: rule.channelId, guildId: rule.guildId, startedAt: date.toISOString(),
-      folderId: account.folder_id, state: 'recording', tracks: [] };
+      folderId: account.folder_id, state: 'recording', tracks: [], ...(requester ? { requester } : {}) };
     this.persist();
     connection.receiver.speaking.on('start', (userId) => this.listen(userId));
     this.limit = setTimeout(() => this.finish(), MAX_MS);
@@ -105,25 +110,58 @@ export class DiscordRecorder {
   error = '';
   closed = false;
 
-  constructor(account, token) {
+  constructor(account, token, destinations = new Map()) {
     this.account = account;
+    this.destinations = destinations;
     this.client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
-    this.client.on(Events.ClientReady, () => this.evaluate());
+    this.client.on(Events.ClientReady, () => {
+      this.evaluate();
+      registerRecordingCommands(this.client).catch(() => {
+        console.error('Não foi possível registrar os comandos de gravação do Discord.');
+      });
+    });
     this.client.on(Events.VoiceStateUpdate, (before, after) => {
       if (before.channelId === after.channelId || after.member?.user.bot) return;
       this.evaluate(after.channelId, after.id);
+    });
+    this.client.on(Events.InteractionCreate, (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+      if (interaction.commandName === 'link') void this.linkChannel(interaction);
+      else if (recordingCommands.some(({ name }) => name === interaction.commandName))
+        void handleRecordingCommand(this, interaction);
     });
     this.client.on(Events.Error, () => { this.error = 'Conexão com Discord interrompida.'; });
     this.client.login(token).catch(() => { this.error = 'O Discord recusou a conexão do bot.'; });
   }
 
+  async linkChannel(interaction) {
+    try {
+      await interaction.deferReply({ flags: 64 });
+      await linkDiscordChannel(this.account, interaction);
+      await interaction.editReply('Canal vinculado à PIA Server. DISCORD_CHANNEL_ID=' + interaction.channelId);
+    } catch (error) {
+      const message = error.code ? 'Não foi possível vincular o canal.' : error.message;
+      if (interaction.deferred) await interaction.editReply(message).catch(() => {});
+    }
+  }
+
+  setDestinations(destinations) {
+    const signature = (routes) => JSON.stringify([...routes].sort(([a], [b]) => a.localeCompare(b))
+      .map(([guild, account]) => [guild, account.id, account.folder_id, Boolean(account.drive_refresh), account.rules]));
+    const changed = signature(this.destinations) !== signature(destinations);
+    this.destinations = destinations;
+    if (changed) this.evaluate();
+  }
+
   evaluate(joinedChannel, joinedUser) {
     if (this.closed || !this.client.isReady()) return;
-    const account = this.account;
-    const rules = new Map(account.rules.map((rule) => [rule.channelId, rule]));
+    const rules = new Map([...this.destinations].flatMap(([guild, account]) =>
+      account.rules.filter((rule) => rule.guildId === guild).map((rule) => [rule.channelId, rule])));
     for (const [channelId, recording] of this.sessions) {
       if (recording.closed) { this.sessions.delete(channelId); continue; }
-      const rule = rules.get(channelId);
+      const destination = this.destinations.get(recording.meta.guildId);
+      const rule = recording.meta.requester || destination?.id !== recording.accountId
+        ? recording.rule : rules.get(channelId);
       if (!rule) { recording.finish(); continue; }
       const channel = this.client.channels.cache.get(channelId);
       const humans = channel?.members?.some((member) => !member.user.bot);
@@ -132,55 +170,86 @@ export class DiscordRecorder {
         recording.emptyTimer = setTimeout(() => recording.finish(), rule.emptySeconds * 1000);
       }
     }
-    if (!account.drive_refresh || !account.folder_id) return;
     for (const rule of rules.values()) {
+      const account = this.destinations.get(rule.guildId);
+      if (!account.drive_refresh || !account.folder_id) continue;
       const channel = this.client.channels.cache.get(rule.channelId);
       if (!channel?.isVoiceBased() || channel.guildId !== rule.guildId) continue;
       const humans = channel.members.filter((member) => !member.user.bot);
       if (!humans.size) this.blocked.delete(rule.channelId);
-      if (this.pending.has(rule.guildId) || this.blocked.has(rule.channelId) ||
-          [...this.sessions.values()].some((item) => !item.closed && item.meta.guildId === rule.guildId)) continue;
+      if (this.guildBusy(rule.guildId) || this.blocked.has(rule.channelId)) continue;
       if (humans.size < rule.minPeople) continue;
       if (rule.triggerUsers.length && (joinedChannel !== rule.channelId || !rule.triggerUsers.includes(joinedUser))) continue;
       this.pending.add(rule.guildId);
-      this.start(rule, channel).catch(() => {
+      this.start(account, rule, channel).catch(() => {
         this.error = 'Não foi possível iniciar. Confira acesso ao canal de voz e de aviso.';
       }).finally(() => this.pending.delete(rule.guildId));
     }
   }
 
-  async start(rule, channel) {
-    const notice = await this.client.channels.fetch(rule.noticeChannelId);
-    if (!notice?.isSendable() || notice.guildId !== rule.guildId) throw new Error('invalid notice channel');
-    await notice.send({ content: NOTICE, allowedMentions: { parse: [] } });
-    await new Promise((resolve) => setTimeout(resolve, 8000));
-    if (this.closed || !this.account.rules.some((item) => item.channelId === rule.channelId) ||
-        channel.members.filter((member) => !member.user.bot).size < rule.minPeople) return;
-    const connection = joinVoiceChannel({ channelId: channel.id, guildId: channel.guildId,
+  guildBusy(guildId) {
+    return this.pending.has(guildId) ||
+      [...this.sessions.values()].some((item) => !item.closed && item.meta.guildId === guildId);
+  }
+
+  async startManual(account, channel, requester) {
+    if (this.guildBusy(channel.guildId)) throw new Error('Já há uma gravação ou teste neste servidor.');
+    if (!account.drive_refresh || !account.folder_id)
+      throw new Error('Configure a pasta de gravações no Google Drive no painel da PIA Server.');
+    this.pending.add(channel.guildId);
+    try {
+      const configured = account.rules.find((rule) => rule.channelId === channel.id);
+      const rule = { guildId: channel.guildId, channelId: channel.id,
+        noticeChannelId: channel.isSendable() ? channel.id : configured?.noticeChannelId,
+        minPeople: 1, emptySeconds: 30 };
+      if (!await this.start(account, rule, channel, requester))
+        throw new Error('A gravação não começou. Confira se ainda há participantes no canal.');
+    } finally { this.pending.delete(channel.guildId); }
+  }
+
+  connect(channel) {
+    return joinVoiceChannel({ channelId: channel.id, guildId: channel.guildId,
       adapterCreator: channel.guild.voiceAdapterCreator, group: String(this.account.id),
       selfMute: true, selfDeaf: false });
+  }
+
+  async start(account, rule, channel, requester) {
+    const notice = rule.noticeChannelId && await this.client.channels.fetch(rule.noticeChannelId);
+    if (!notice?.isSendable() || notice.guildId !== rule.guildId) throw new Error('A PIA precisa enviar o aviso no chat do canal antes de gravar.');
+    await notice.send({ content: NOTICE, allowedMentions: { parse: [] } });
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    const destination = async () => {
+      if (this.closed) return;
+      const current = await guildAccount(this.account.id, rule.guildId);
+      if (current?.id === account.id && current.drive_refresh && current.folder_id &&
+          (requester || current.rules.some((item) => item.channelId === rule.channelId))) return current;
+    };
+    if (!await destination() || channel.members.filter((member) => !member.user.bot).size < rule.minPeople) return false;
+    const connection = this.connect(channel);
     try {
       await entersState(connection, VoiceConnectionStatus.Ready, 15000);
-      if (this.closed || !this.account.rules.some((item) => item.channelId === rule.channelId)) {
+      const current = await destination();
+      if (!current) {
         connection.destroy();
         return;
       }
-      const session = new Recording(this.account, connection, rule, (id) =>
-        channel.members.has(id) && !channel.members.get(id).user.bot);
+      const session = new Recording(current, connection, rule, (id) =>
+        channel.members.has(id) && !channel.members.get(id).user.bot, requester);
       this.sessions.set(channel.id, session);
       this.blocked.add(channel.id);
       connection.on(VoiceConnectionStatus.Disconnected, () => session.finish('Conexão de voz interrompida.'));
       connection.on('error', () => session.finish('Falha na conexão de voz.'));
       this.error = '';
+      return true;
     } catch (error) {
       if (connection.state.status !== VoiceConnectionStatus.Destroyed) connection.destroy();
       throw error;
     }
   }
 
-  stop(channelId) {
+  stop(channelId, accountId) {
     const session = this.sessions.get(channelId);
-    if (!session || session.closed) return false;
+    if (!session || session.closed || (accountId !== undefined && session.accountId !== accountId)) return false;
     session.finish();
     return true;
   }
