@@ -38,6 +38,7 @@ export async function createFolder(account) {
 export async function uploadRecording(account, file, meta, persist) {
   const headers = await access(account);
   const length = statSync(file).size;
+  const mime = meta.mime || 'application/zip';
   if (!meta.driveId) {
     const result = await driveJSON(await fetch(FILES + '/generateIds?count=1&space=drive', {
       headers, signal: AbortSignal.timeout(15000),
@@ -56,8 +57,8 @@ export async function uploadRecording(account, file, meta, persist) {
   if (existing.status !== 404) await driveJSON(existing);
   const start = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,size', {
     method: 'POST', headers: { ...headers, 'Content-Type': 'application/json',
-      'X-Upload-Content-Type': 'application/zip', 'X-Upload-Content-Length': String(length) },
-    body: JSON.stringify({ id: meta.driveId, name: meta.name, parents: [meta.folderId], createdTime: meta.startedAt }),
+      'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(length) },
+    body: JSON.stringify({ id: meta.driveId, name: meta.name, mimeType: mime, parents: [meta.folderId], createdTime: meta.startedAt }),
     redirect: 'error', signal: AbortSignal.timeout(20000),
   });
   if (!start.ok) await driveJSON(start);
@@ -66,7 +67,7 @@ export async function uploadRecording(account, file, meta, persist) {
     throw new Error('Endereço de upload inválido.');
   const result = await driveJSON(await fetch(url, {
     method: 'PUT', body: createReadStream(file), duplex: 'half', redirect: 'error',
-    headers: { 'Content-Type': 'application/zip', 'Content-Length': String(length) },
+    headers: { 'Content-Type': mime, 'Content-Length': String(length) },
     signal: AbortSignal.timeout(20 * 60 * 1000),
   }));
   if (result.id !== meta.driveId || Number(result.size) !== length) throw new Error('Upload não confirmado.');

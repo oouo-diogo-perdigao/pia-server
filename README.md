@@ -23,8 +23,8 @@ Cada gravação é um ZIP com faixas FLAC individuais alinhadas ao relógio de r
 
 ## MCP
 
-Entre com Google e emita um token MCP no painel. Configure no Codex a URL `https://pia.travelrpg.com/mcp` e passe o token via variável de ambiente Bearer. O token expira após 30 dias e pode ser revogado pelo painel. Nesta versão o MCP consulta o estado do gravador e dos uploads.
+Entre com Google e emita um token MCP no painel. Configure no Codex a URL `https://pia.travelrpg.com/mcp` e passe o token via variável de ambiente Bearer. O token expira após 30 dias e pode ser revogado pelo painel. O MCP consulta o estado do gravador e pode solicitar câmera ou tela a um computador escolhido. Gere um token em **Computadores pareados**, informe-o no conector **PIA Server** do desktop e habilite as permissões locais desejadas. O resultado fica na pasta privada da PIA no Drive.
 
 ## Escopo desta versão
 
-O painel web é a interface administrativa. A captura do Discord, a fila e o envio de gravações rodam no servidor. A integração nativa com os desktops, o roteamento de ferramentas MCP para dispositivos, o armazenamento de LLM/capturas/músicas, a Secretária remota e o processamento de sessões no servidor ainda não estão disponíveis. O servidor não oferece geração musical.
+O painel web é a interface administrativa. A captura do Discord, a fila e o envio de gravações rodam no servidor. As capturas solicitadas pelo MCP são executadas no desktop pareado. Sincronização de conversas e músicas, Secretária remota e processamento de sessões no servidor ainda não estão disponíveis. O servidor não oferece geração musical.

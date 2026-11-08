@@ -40,6 +40,16 @@ export async function migrate() {
       expires timestamptz NOT NULL
     );
     CREATE INDEX IF NOT EXISTS pia_sessions_expiry ON pia_server.sessions(expires);
+    CREATE TABLE IF NOT EXISTS pia_server.devices (
+      id uuid PRIMARY KEY, account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      name text NOT NULL, digest text NOT NULL UNIQUE, last_seen timestamptz, capabilities text[] NOT NULL DEFAULT '{}'
+    );
+    CREATE TABLE IF NOT EXISTS pia_server.device_jobs (
+      id uuid PRIMARY KEY, device_id uuid NOT NULL REFERENCES pia_server.devices(id) ON DELETE CASCADE,
+      action text NOT NULL, status text NOT NULL DEFAULT 'queued', created timestamptz NOT NULL DEFAULT now(),
+      expires timestamptz NOT NULL, result jsonb
+    );
+    CREATE INDEX IF NOT EXISTS pia_device_jobs_poll ON pia_server.device_jobs(device_id,status,created);
   `);
   await pool.query('INSERT INTO pia_server.accounts(email,admin) VALUES($1,true) ON CONFLICT(email) DO UPDATE SET admin=true', [email]);
 }

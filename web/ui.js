@@ -50,6 +50,20 @@ async function refresh() {
     }
     return li;
   }));
+  const list = await api('devices');
+  element('devices').replaceChildren(...list.map((device) => {
+    const li = document.createElement('li');
+    li.textContent = device.name + (device.online ? ' · online' : ' · offline');
+    const button = document.createElement('button');
+    button.textContent = 'Revogar';
+    button.onclick = async () => {
+      button.disabled = true;
+      try { await api('devices/revoke', { id: device.id }); await refresh(); }
+      catch (error) { say(error.message); button.disabled = false; }
+    };
+    li.append(' ', button);
+    return li;
+  }));
 }
 
 element('rules').oninput = () => { edited = true; };
@@ -80,6 +94,10 @@ on('mcp-revoke', async () => {
   await api('mcp/revoke', {});
   element('token').textContent = '';
   say('Tokens MCP revogados.');
+});
+on('pair-device', async () => {
+  element('device-token').textContent = (await api('devices/pair', { name: element('device-name').value })).token;
+  await refresh();
 });
 on('logout', async () => { await api('logout', {}); location.reload(); });
 on('add-account', async () => {

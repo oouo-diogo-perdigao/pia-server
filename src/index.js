@@ -6,6 +6,7 @@ import { DiscordRecorder } from './recorder.js';
 import { createFolder } from './drive.js';
 import { processRecording, recordings, recover } from './queue.js';
 import { hash, validateRules } from './state.js';
+import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -20,13 +21,13 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function body(req) {
+async function body(req, limit = 65536) {
   if (!req.headers['content-type']?.startsWith('application/json')) throw new Error('Envie JSON.');
   let size = 0;
   const parts = [];
   for await (const part of req) {
     size += part.length;
-    if (size > 65536) throw new Error('Corpo acima de 64 KiB.');
+    if (size > limit) throw new Error('Corpo acima do limite da rota.');
     parts.push(part);
   }
   const data = JSON.parse(Buffer.concat(parts));
@@ -50,9 +51,17 @@ function status(account) {
 const mcpTools = [
   { name: 'pia_server_status', description: 'Veja o estado do gravador e os uploads da sua conta.',
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
+  { name: 'pia_devices', description: 'Liste seus computadores pareados e as ações locais autorizadas.',
+    inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
+  { name: 'pia_device_capture', description: 'Somente quando solicitado, capture câmera ou tela no computador escolhido e salve no Drive privado.',
+    inputSchema: { type: 'object', properties: { device: { type: 'string' },
+      action: { type: 'string', enum: ['camera', 'screenshot'] } }, required: ['device','action'] } },
+  { name: 'pia_device_job', description: 'Consulte o resultado de uma ação local, inclusive o link privado no Drive.',
+    inputSchema: { type: 'object', properties: { job: { type: 'string' } }, required: ['job'] },
+    annotations: { readOnlyHint: true } },
 ];
 
-function mcp(data, account, res) {
+async function mcp(data, account, res) {
   if (data.jsonrpc !== '2.0') return json(res, 400, { error: 'JSON-RPC inválido.' });
   if (data.id === undefined && data.method?.startsWith('notifications/')) { res.writeHead(202); return res.end(); }
   const base = { jsonrpc: '2.0', id: data.id ?? null };
@@ -61,8 +70,21 @@ function mcp(data, account, res) {
     capabilities: { tools: {} }, serverInfo: { name: 'pia-server', version: '0.1.0' } };
   else if (data.method === 'ping') result = {};
   else if (data.method === 'tools/list') result = { tools: mcpTools };
-  else if (data.method === 'tools/call' && data.params?.name === 'pia_server_status')
-    result = { content: [{ type: 'text', text: JSON.stringify(status(account)) }] };
+  else if (data.method === 'tools/call') {
+    const args = data.params?.arguments || {};
+    const tool = data.params?.name;
+    try {
+      let value;
+      if (tool === 'pia_server_status') value = status(account);
+      else if (tool === 'pia_devices') value = await devices(account);
+      else if (tool === 'pia_device_capture') value = await enqueue(account, args.device, args.action);
+      else if (tool === 'pia_device_job') value = await jobStatus(account, args.job);
+      else throw new Error('Ferramenta indisponível.');
+      result = { content: [{ type: 'text', text: JSON.stringify(value) }] };
+    } catch (error) {
+      result = { isError: true, content: [{ type: 'text', text: error.code ? 'Operação indisponível.' : error.message }] };
+    }
+  }
   else return json(res, 200, { ...base, error: { code: -32601, message: 'Método ou ferramenta indisponível.' } });
   return json(res, 200, { ...base, result });
 }
@@ -82,6 +104,13 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
   if (req.method === 'GET' && path === '/auth/google/callback') return finish(req, res, url);
+  if (req.method === 'POST' && ['/device/poll', '/device/complete'].includes(path)) {
+    const account = await authenticateDevice(req.headers.authorization);
+    if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
+    const input = await body(req, path === '/device/complete' ? 17 * 1024 * 1024 : undefined);
+    return json(res, 200, path === '/device/poll' ?
+      await poll(account, input.capabilities) : await complete(account, input));
+  }
   if (path === '/mcp') {
     if (req.headers.origin && req.headers.origin !== origin) return json(res, 403, { error: 'Origem inválida.' });
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
@@ -98,9 +127,12 @@ async function route(req, res) {
   const account = await identify(session, 'web');
   if (!account) return json(res, 401, { error: 'Entre com Google.' });
   if (req.method === 'GET' && path === '/api/status') return json(res, 200, status(account));
+  if (req.method === 'GET' && path === '/api/devices') return json(res, 200, await devices(account));
   if (req.method !== 'POST') return json(res, 405, { error: 'Método indisponível.' });
   if (req.headers.origin !== origin) return json(res, 403, { error: 'Origem inválida.' });
   const data = await body(req);
+  if (path === '/api/devices/pair') return json(res, 200, await pair(account, data.name));
+  if (path === '/api/devices/revoke') return json(res, 200, await revoke(account, data.id));
   if (path === '/api/rules') {
     const rules = validateRules(data.rules);
     await pool.query('UPDATE pia_server.accounts SET rules=$2 WHERE id=$1', [account.id, JSON.stringify(rules)]);
