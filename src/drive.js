@@ -44,7 +44,7 @@ export async function uploadRecording(account, file, meta, persist) {
       headers, signal: AbortSignal.timeout(15000),
     }));
     meta.driveId = result.ids[0];
-    persist();
+    await persist();
   }
   const existing = await fetch(FILES + '/' + encodeURIComponent(meta.driveId) +
     '?fields=id,name,size,trashed,parents', { headers, signal: AbortSignal.timeout(15000) });
@@ -67,7 +67,7 @@ export async function uploadRecording(account, file, meta, persist) {
     throw new Error('Endereço de upload inválido.');
   const result = await driveJSON(await fetch(url, {
     method: 'PUT', body: createReadStream(file), duplex: 'half', redirect: 'error',
-    headers: { 'Content-Type': mime, 'Content-Length': String(length) },
+    headers: { ...headers, 'Content-Type': mime, 'Content-Length': String(length) },
     signal: AbortSignal.timeout(20 * 60 * 1000),
   }));
   if (result.id !== meta.driveId || Number(result.size) !== length) throw new Error('Upload não confirmado.');

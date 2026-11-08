@@ -31,4 +31,4 @@ No painel web, habilite Gmail ou Agenda na seção **Secretária**. Ela consulta
 
 Configurações, segredos e conversas ficam em revisões criptografadas no PostgreSQL. Use **Perfil compartilhado** no conector desktop para enviar ou carregar o perfil. A sincronização exige confirmação explícita e rejeita alterações sobre uma revisão desatualizada. Credenciais de pareamento e preferências de notificação ficam no computador.
 
-O painel web é a interface administrativa. A captura do Discord, a fila e o envio de gravações rodam no servidor. As capturas solicitadas pelo MCP são executadas no desktop pareado. A geração musical permanece local. A cópia das músicas para o Drive e o processamento de sessões no servidor ainda não estão disponíveis.
+O painel web é a interface administrativa. A captura do Discord, a fila e o envio de gravações rodam no servidor. As capturas solicitadas pelo MCP são executadas no desktop pareado. O desktop também pode sincronizar arquivos de capturas e músicas salvas com o Drive, se essa opção estiver habilitada. A geração musical permanece local. O processamento de sessões no servidor ainda não está disponível.

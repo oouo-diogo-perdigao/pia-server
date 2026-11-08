@@ -8,6 +8,7 @@ import { processRecording, recordings, recover } from './queue.js';
 import { hash, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
 import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
+import { receiveMedia } from './media.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -105,6 +106,11 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
   if (req.method === 'GET' && path === '/auth/google/callback') return finish(req, res, url);
+  if (req.method === 'POST' && path === '/device/media') {
+    const account = await authenticateDevice(req.headers.authorization);
+    if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
+    return json(res, 200, await receiveMedia(account, req));
+  }
   if (req.method === 'POST' && ['/device/poll', '/device/complete', '/device/notices/ack',
     '/device/profile/read', '/device/profile/write'].includes(path)) {
     const account = await authenticateDevice(req.headers.authorization);

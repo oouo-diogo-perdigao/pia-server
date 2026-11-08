@@ -70,6 +70,11 @@ export async function migrate() {
       account_id bigint PRIMARY KEY REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       revision bigint NOT NULL DEFAULT 1, ciphertext text NOT NULL, updated timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS pia_server.media (
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      id uuid NOT NULL, mime text NOT NULL, bytes bigint NOT NULL, drive_id text,
+      created timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(account_id,id)
+    );
   `);
   await pool.query('INSERT INTO pia_server.accounts(email,admin) VALUES($1,true) ON CONFLICT(email) DO UPDATE SET admin=true', [email]);
 }
