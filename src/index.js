@@ -1,6 +1,6 @@
 import { approveDeviceLogin, beginDeviceLogin, deviceLoginDetails, pollDeviceLogin } from './device_login.js';
 import { issueMcpToken } from './mcp_tokens.js';
-import { browserClaim } from './discord_guild_links.js';
+import { confirmGuildLink, guildLinkRequest } from './discord_guild_links.js';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { accountProfile, begin, cookie, finish, oauthReady, origin } from './auth.js';
@@ -131,19 +131,23 @@ async function route(req, res) {
   if (blessing) {
     const [, token, login] = blessing;
     const target = '/discord/bless/' + token;
+    const request = await guildLinkRequest(token);
     if (req.method === 'GET' && login) return begin(req, res, target);
     const account = await identify(cookie(req, '__Host-pia_session'), 'web');
+    const escape = (value) => value.replace(/[&<>]/g, (character) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
+    const guild = '<strong>' + escape(request.guild_name) + '</strong>';
     let content;
     if (req.method === 'GET') {
-      const loginLink = '<a href="' + target + '/login">Entrar com outra conta Google</a>';
-      const email = account?.email.replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
-      content = account ? '<p>Conta PIA: <strong>' + email + '</strong></p>' +
-        '<form method="post" action="' + target + '"><button>Gerar código de confirmação</button></form>' + loginLink :
-        '<p>Entre com a conta PIA que receberá as gravações.</p>' + googleSignIn(target + '/login');
+      content = '<p>Servidor Discord: ' + guild + '</p>' + (account ?
+        '<p>As novas gravações irão para a conta <strong>' + escape(account.email) + '</strong>.</p>' +
+        '<form method="post" action="' + target + '"><button>Confirmar vínculo</button></form>' +
+        '<a href="' + target + '/login">Usar outra conta Google</a>' :
+        '<p>Entre com a conta PIA que receberá as gravações.</p>' + googleSignIn(target + '/login'));
     } else if (req.method === 'POST' && !login && account && req.headers.origin === origin) {
-      const code = await browserClaim(token, account.id);
-      content = '<p>Volte ao Discord e confirme com a mesma conta Discord que pediu o vínculo.</p>' +
-        '<p>Digite <code>/bless</code> e cole este valor no campo <code>code</code>:</p><pre>' + code + '</pre>';
+      await confirmGuildLink(token, account.id);
+      content = '<p>Servidor ' + guild + ' abençoado e vinculado à sua conta PIA.</p>' +
+        '<a href="/#recordings">Abrir gravações</a>';
     } else return json(res, 403, { error: 'Entre na sua conta PIA e abra o link enviado pelo Discord.' });
     return authorizationPage(res, 'Vincular Discord à PIA', content);
   }

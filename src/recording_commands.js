@@ -1,6 +1,6 @@
-import { finishGuildLink, guildAccount, requestGuildLink, unlinkGuild } from './discord_guild_links.js';
+import { guildAccount, requestGuildLink, unlinkGuild } from './discord_guild_links.js';
 import { origin } from './auth.js';
-import { ChannelType, PermissionFlagsBits, SlashCommandBuilder, Routes } from 'discord.js';
+import { ButtonStyle, ComponentType, ChannelType, PermissionFlagsBits, SlashCommandBuilder, Routes } from 'discord.js';
 import { EndBehaviorType, entersState, VoiceConnectionStatus } from '@discordjs/voice';
 import OpusScript from 'opusscript';
 import { pool } from './db.js';
@@ -17,8 +17,7 @@ export const recordingCommands = [
   guildOnly('recordings', 'Lista as gravações recentes disponíveis para você'),
   guildOnly('voice-test', 'Recebe uma amostra privada do próprio microfone'),
   guildOnly('info', 'Mostra o estado e as estatísticas do gravador'),
-  adminOnly('bless', 'Vincula este servidor Discord a uma conta PIA')
-    .addStringOption((option) => option.setName('code').setDescription('Código de confirmação exibido no navegador').setMaxLength(24)),
+  adminOnly('bless', 'Vincula este servidor Discord a uma conta PIA'),
   adminOnly('unbless', 'Desvincula este servidor da conta PIA'),
   adminOnly('autorecord', 'Gerencia as regras de gravação automática')
     .addSubcommand((sub) => sub.setName('on').setDescription('Configura a gravação automática no canal')
@@ -196,14 +195,15 @@ async function run(runtime, interaction) {
   if (['bless', 'unbless', 'autorecord', 'bot-profile'].includes(command) && !admin)
     throw new Error('Este comando exige permissão de administrador.');
   if (command === 'bless') {
-    const code = interaction.options.getString('code');
-    if (code) {
-      await finishGuildLink(runtime.account.id, guildId, userId, code);
-      return 'Servidor vinculado. As próximas gravações irão para o Drive da conta PIA confirmada.';
-    }
-    const token = await requestGuildLink(runtime.account.id, guildId, userId);
-    return 'Abra este link privado em até 15 minutos, entre na sua conta PIA e volte aqui com o código: ' +
-      '<' + origin + '/discord/bless/' + token + '>';
+    const token = await requestGuildLink(runtime.account.id, guildId, userId, interaction.guild.name, () =>
+      interaction.editReply({ content: 'Servidor abençoado e vinculado à sua conta PIA.', components: [] }));
+    return {
+      content: 'Abra a PIA Server para confirmar o vínculo deste servidor. O botão é privado e expira em 10 minutos.',
+      components: [{ type: ComponentType.ActionRow, components: [{
+        type: ComponentType.Button, style: ButtonStyle.Link,
+        label: 'Confirmar na PIA Server', url: origin + '/discord/bless/' + token,
+      }] }],
+    };
   }
   if (command === 'unbless') {
     if (!await unlinkGuild(runtime.account.id, guildId)) return 'Este servidor não tinha vínculo ativo.';

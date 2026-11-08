@@ -44,6 +44,6 @@ test('updates server-scoped bless schema already installed by the previous relea
   });
   const local = requests.filter(({ route }) => route.includes('/guilds/'));
   assert.deepEqual(local.map(({ body }) => body.name), ['bless']);
-  assert.equal(local[0].body.options[0].name, 'code');
+  assert.deepEqual(local[0].body.options, []);
   assert.equal(local[0].body.contexts, undefined);
 });

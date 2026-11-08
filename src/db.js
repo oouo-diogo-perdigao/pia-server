@@ -46,6 +46,7 @@ export async function migrate() {
       account_id bigint REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       confirmation text UNIQUE, expires timestamptz NOT NULL
     );
+    ALTER TABLE pia_server.discord_link_requests ADD COLUMN IF NOT EXISTS guild_name text;
     CREATE TABLE IF NOT EXISTS pia_server.sessions (
       digest text PRIMARY KEY, account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       purpose text NOT NULL CHECK (purpose IN ('web', 'mcp')),

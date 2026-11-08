@@ -78,11 +78,10 @@ Em canais de palco sem chat, configure previamente o canal de aviso nas regras.
 As operações de configuração são restritas a administradores do Discord.
 
 
-O administrador executa `/bless`, abre o link privado, entra com Google e
-confirma a conta. No Discord, usa `/bless code:<código>` com a mesma identidade
-que solicitou o vínculo. O pedido expira em 15 minutos. Só uma conta PIA pode
-receber gravações de cada servidor Discord. Para trocar de conta, use
-`/unbless` e refaça o vínculo.
+O administrador executa `/bless` e abre **Confirmar na PIA Server**. A página
+mostra o nome do servidor Discord e a conta Google que receberá as gravações.
+O link privado é de uso único e expira em dez minutos. Para trocar de conta,
+use `/unbless` e refaça o vínculo.
 
 A pasta e as regras de gravação automática são as da conta vinculada. Depois
 da atualização, cada servidor precisa concluir o novo `/bless` antes de
