@@ -1,3 +1,4 @@
+import { mantineCss, workspaceHtml } from './workspace_ui.js';
 import { recordingFolder } from './recording_format.js';
 import { approveDeviceLogin, beginDeviceLogin, deviceLoginDetails, pollDeviceLogin } from './device_login.js';
 import { issueMcpToken } from './mcp_tokens.js';
@@ -19,12 +20,13 @@ const runtimes = new Map();
 const recovered = new Set();
 let tick, closing = false;
 const publicFiles = new Map([
-  ['/', ['text/html; charset=utf-8', readFileSync(new URL('../web/index.html', import.meta.url))]],
+  ['/', ['text/html; charset=utf-8', workspaceHtml(readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'))]],
   ['/ui.js', ['text/javascript; charset=utf-8', readFileSync(new URL('../web/ui.js', import.meta.url))]],
   ['/pia.svg', ['image/svg+xml', readFileSync(new URL('../web/pia.svg', import.meta.url))]],
   ['/secretary.svg', ['image/svg+xml', readFileSync(new URL('../web/secretary.svg', import.meta.url))]],
   ['/login.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/login.css', import.meta.url))]],
   ['/google-signin.png', ['image/png', readFileSync(new URL('../web/google-signin.png', import.meta.url))]],
+  ['/mantine.css', ['text/css; charset=utf-8', mantineCss]],
   ['/style.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/style.css', import.meta.url))]],
 ]);
 

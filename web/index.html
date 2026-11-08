@@ -1,9 +1,11 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-mantine-color-scheme="dark">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PIA Server</title>
 <link rel="icon" type="image/svg+xml" href="/pia.svg">
+<link rel="stylesheet" href="/mantine.css">
+{{mantine-theme}}
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/login.css">
 <h1 class="brand"><img src="/pia.svg" alt="" width="32" height="32"> <span>PIA <small>Server</small></span></h1>
@@ -19,25 +21,25 @@
 <main id="panel" hidden>
   <aside>
     <nav aria-label="Navegação">
-      <a href="#recordings" class="rail-icon" title="Gravações" aria-label="Gravações"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg></a>
+      {{rail:recordings}}
       <a href="#secretary" class="rail-icon" title="Secretária" aria-label="Secretária"><img src="/secretary.svg" width="28" height="28" alt=""></a>
-      <a href="#devices" class="rail-icon" title="Computadores" aria-label="Computadores"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4 0v-4"/></svg></a>
-      <a href="#mcp" class="rail-icon" title="MCP" aria-label="MCP"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5M14 4l-4 16"/></svg></a>
-      <a href="#admin" class="rail-icon" title="Administração" aria-label="Administração" id="admin-link" hidden><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-4 7-10V5l-7-3-7 3v7c0 6 7 10 7 10z"/><path d="m9 12 2 2 4-4"/></svg></a>
+      {{rail:devices}}
+      {{rail:mcp}}
+      {{rail:admin}}
     </nav>
     <div class="rail-bottom">
-      <a href="#connectors" class="rail-icon" title="Conectores" aria-label="Conectores"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5m-3-9V3m6 5V3M7 8h10v4a5 5 0 0 1-10 0z"/></svg></a>
+      {{rail:connectors}}
       <details id="account-menu">
         <summary id="account" class="account-avatar" aria-label="Minha conta" title="Minha conta"><img id="account-picture" alt="" referrerpolicy="no-referrer" hidden><span id="account-initial"></span></summary>
         <div class="account-actions">
           <span id="account-email"></span>
-          <button id="logout" type="button" class="account-logout"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5m5 5H3m9-9h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/></svg> Sair</button>
+          <button id="logout" type="button" class="account-logout">{{icon:LogOut}} Sair</button>
         </div>
       </details>
     </div>
   </aside>
+  <header class="pane-header"><h2 id="page-title"></h2></header>
   <div class="content">
-  <h2 id="page-title"></h2>
   <section data-page="recordings">
     <h2>Bot Discord e Google Drive</h2>
     <p id="recording-destination">Nenhuma pasta selecionada.</p>
@@ -109,11 +111,11 @@
   <section data-page="connectors">
     <p>Gerencie aqui as contas usadas pelos computadores pareados.</p>
     <div class="connector-icons" aria-label="Escolher conector">
-      <button type="button" class="rail-icon" data-connector="google" title="Google" aria-label="Google"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12H12m8.5 0a8.5 8.5 0 1 1-2.1-5.6M20.5 12v2"/></svg></button>
-      <button type="button" class="rail-icon" data-connector="microsoft" title="Microsoft" aria-label="Microsoft"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg></button>
-      <button type="button" class="rail-icon" data-connector="storage" title="Object Storage" aria-label="Object Storage"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></button>
-      <button type="button" class="rail-icon" data-connector="discord" title="Discord" aria-label="Discord"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7a13 13 0 0 1 12 0l3 10-5 2-1-2m-6 0-1 2-5-2L6 7m2 9c2 1 6 1 8 0"/><path d="M9 12h.01M15 12h.01"/></svg></button>
-      <button type="button" class="rail-icon" data-connector="taverns" title="Taverns" aria-label="Taverns"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4zm13 1h2a3 3 0 0 1 0 6h-2M7 4h7"/></svg></button>
+      {{connector:google}}
+      {{connector:microsoft}}
+      {{connector:storage}}
+      {{connector:discord}}
+      {{connector:taverns}}
     </div>
     <div class="connector-panel" data-connector-panel="google"><h3>Google</h3>
       <ul id="google-accounts"></ul>
@@ -139,10 +141,7 @@
         <label>Access Key <input id="storage-access" type="text" autocomplete="off" spellcheck="false"></label>
         <div class="secret-field">
           <label>Secret Key <input id="storage-secret" type="password" autocomplete="new-password"></label>
-          <button id="storage-reveal" type="button" aria-label="Mostrar Secret Key" aria-pressed="false" title="Mostrar Secret Key" hidden>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/>
-            </svg>
+          <button id="storage-reveal" type="button" aria-label="Mostrar Secret Key" aria-pressed="false" title="Mostrar Secret Key" hidden>{{icon:Eye}}
           </button>
         </div>
       </div>
@@ -154,10 +153,7 @@
     <div class="connector-panel" data-connector-panel="discord" hidden><h3>Discord <span id="discord-state"></span></h3>
       <div class="secret-field">
         <label>Token do bot <input id="discord" type="password" autocomplete="new-password"></label>
-        <button id="discord-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/>
-            </svg>
+        <button id="discord-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>{{icon:Eye}}
           </button>
       </div>
       <button id="save-discord">Conectar bot</button>
@@ -170,10 +166,7 @@
     <div class="connector-panel" data-connector-panel="taverns" hidden><h3>Taverns <span id="taverns-state"></span></h3>
       <div class="secret-field">
         <label>Token do bot <input id="taverns-token" type="password" autocomplete="new-password"></label>
-        <button id="taverns-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/>
-            </svg>
+        <button id="taverns-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>{{icon:Eye}}
           </button>
       </div>
       <button id="taverns-save">Salvar bot</button>
