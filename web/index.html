@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIA Server</title>
+<style>
+  :root { color-scheme: dark; font: 16px system-ui; background: #12121d; color: #f3efff }
+  body { max-width: 55rem; margin: 2rem auto; padding: 0 1rem }
+  section { background: #1d1b2e; border: 1px solid #413b61; border-radius: 12px; padding: 1rem; margin: 1rem 0 }
+  button, input, textarea { font: inherit; padding: .6rem; border: 1px solid #706b94; border-radius: 6px; margin: .25rem 0 }
+  button, a { color: #d8c6ff } button { cursor: pointer }
+  label { display: block } textarea { width: 96%; font-family: monospace }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere } [hidden] { display: none }
+</style>
+<h1>PIA Server</h1>
+<p id="feedback" role="status"></p>
+<section id="login" hidden><a href="/auth/google">Entrar com Google</a></section>
+<main id="panel" hidden>
+  <p id="account"></p><button id="logout">Sair</button>
+  <section>
+    <h2>Bot Discord e Google Drive</h2>
+    <label>Token do bot <input id="discord" type="password" autocomplete="off"></label>
+    <button id="save-discord">Conectar bot</button>
+    <button id="drive">Criar pasta de gravações no Drive</button>
+    <p id="connections"></p><a id="folder" hidden target="_blank" rel="noopener">Abrir pasta de gravações</a>
+  </section>
+  <section>
+    <h2>Regras de gravação</h2>
+    <p>Sem regras, o bot não grava. Use os IDs copiados com o modo desenvolvedor do Discord. O canal de aviso precisa ser visível aos participantes. Uma lista vazia de participantes permite iniciar quando qualquer pessoa completar o mínimo.</p>
+    <label>Regras em JSON <textarea id="rules" rows="12" spellcheck="false"></textarea></label>
+    <button id="example">Inserir exemplo</button>
+    <button id="save-rules">Salvar regras</button>
+  </section>
+  <section>
+    <h2>Gravações e uploads</h2>
+    <button id="refresh">Atualizar</button>
+    <ul id="recordings"></ul>
+  </section>
+  <section>
+    <h2>MCP</h2>
+    <p>Use <code>/mcp</code> neste domínio. O token da conta expira em 30 dias.</p>
+    <button id="mcp">Emitir token MCP</button>
+    <button id="mcp-revoke">Revogar tokens MCP</button>
+    <pre id="token"></pre>
+  </section>
+  <section id="admin" hidden>
+    <h2>Contas autorizadas</h2>
+    <label>E-mail Google <input id="email" type="email"></label>
+    <button id="add-account">Autorizar conta</button>
+  </section>
+</main>
+<script type="module" src="/ui.js"></script>
+</html>

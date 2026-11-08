@@ -1,0 +1,16 @@
+services:
+  pia-server:
+    ports: !reset []
+    networks: [proxy-publico, postgres]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy-publico
+      traefik.http.routers.pia-server.rule: Host(`pia.travelrpg.com`)
+      traefik.http.routers.pia-server.entrypoints: websecure
+      traefik.http.routers.pia-server.tls.certresolver: letsencrypt
+      traefik.http.services.pia-server.loadbalancer.server.port: "8787"
+networks:
+  proxy-publico:
+    external: true
+  postgres:
+    external: true

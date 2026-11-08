@@ -1,0 +1,19 @@
+services:
+  pia-server:
+    image: ${PIA_IMAGE:-ghcr.io/oouo-diogo-perdigao/pia-server:main}
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PIA_BIND:-127.0.0.1}:${PIA_PORT:-8787}:8787"
+    volumes:
+      - pia-data:/data
+    stop_grace_period: 45s
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  pia-data:
