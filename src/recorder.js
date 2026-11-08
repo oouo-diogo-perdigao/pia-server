@@ -1,3 +1,4 @@
+import { editWindowMs, RecordingPanels } from './recording_panel.js';
 import { recordingFolder, recordingName } from './recording_format.js';
 import { guildAccount } from './discord_guild_links.js';
 import { handleRecordingCommand, recordingCommands, registerRecordingCommands } from './recording_commands.js';
@@ -21,9 +22,10 @@ export function positionForFrame(samplesWritten, elapsedMs, frameSamples) {
 }
 
 class Recording {
-  constructor(account, connection, rule, channel, requester) {
+  constructor(account, connection, rule, channel, requester, notice, runtime) {
     this.connection = connection;
     this.channel = channel;
+    this.panels = runtime.panels;
     this.rule = rule;
     this.accountId = account.id;
     this.started = performance.now();
@@ -36,13 +38,39 @@ class Recording {
     mkdirSync(this.folder, { recursive: true, mode: 0o700 });
     this.meta = { id, name, channelId: rule.channelId, guildId: rule.guildId, startedAt: date.toISOString(),
       folderId: recordingFolder(account), driveAccount: account.recording_drive_account || null,
-      state: 'recording', tracks: [], usernames: {}, ...(requester ? { requester } : {}) };
+      state: 'recording', tracks: [], usernames: {}, members: {},
+      botAccountId: runtime.account.id, noticeChannelId: notice.channelId, panelMessageId: notice.id,
+      ...(requester ? { requester } : {}) };
+    this.syncMembers(date.toISOString());
     this.persist();
+    this.panels.update(this.meta, connection.ping);
+    this.panelTimer = setInterval(() => this.panels.update(this.meta, connection.ping), 15000);
+    this.panelTimer.unref();
     connection.receiver.speaking.on('start', (userId) => this.listen(userId));
-    this.limit = setTimeout(() => this.finish(), MAX_MS);
+    this.limit = setTimeout(() => this.finish('Limite de duração atingido.'), MAX_MS);
   }
 
   persist() { save(join(this.folder, 'recording.json'), this.meta); }
+
+  syncMembers(now = new Date().toISOString()) {
+    let changed = false;
+    const present = new Set();
+    for (const [id, member] of this.channel.members) {
+      if (member.user.bot) continue;
+      present.add(id);
+      const entry = this.meta.members[id];
+      if (!entry || entry.leftAt) {
+        this.meta.members[id] = { joinedAt: now };
+        changed = true;
+      }
+    }
+    for (const [id, member] of Object.entries(this.meta.members)) {
+      if (present.has(id) || member.leftAt) continue;
+      member.leftAt = now;
+      changed = true;
+    }
+    return changed;
+  }
 
   listen(userId) {
     const user = this.channel.members.get(userId)?.user;
@@ -79,11 +107,12 @@ class Recording {
     }
   }
 
-  finish(reason = '') {
+  finish(reason = '', stoppedBy = { label: 'Sistema' }) {
     if (this.closed) return;
     this.closed = true;
     clearTimeout(this.limit);
     clearTimeout(this.emptyTimer);
+    clearInterval(this.panelTimer);
     const samples = Math.floor((performance.now() - this.started) * RATE / 1000);
     this.meta.tracks = [];
     for (const [id, track] of this.tracks) {
@@ -97,9 +126,16 @@ class Recording {
       closeSync(track.fd);
     }
     this.meta.state = this.meta.tracks.length ? 'queued' : 'empty';
-    this.meta.endedAt = new Date().toISOString();
+    this.meta.durationMs = Math.max(0, Math.floor(performance.now() - this.started));
+    const end = Date.now();
+    this.meta.endedAt = new Date(end).toISOString();
+    this.meta.editUntil = new Date(end + editWindowMs).toISOString();
+    this.meta.stoppedBy = stoppedBy;
     this.meta.note = reason;
-    try { this.persist(); }
+    try {
+      this.persist();
+      this.panels.finish(this.meta, () => this.persist());
+    }
     finally {
       if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) this.connection.destroy();
     }
@@ -117,6 +153,7 @@ export class DiscordRecorder {
     this.account = account;
     this.destinations = destinations;
     this.client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
+    this.panels = new RecordingPanels(this.client);
     this.client.on(Events.ClientReady, () => {
       this.evaluate();
       registerRecordingCommands(this.client).catch(() => {
@@ -128,6 +165,10 @@ export class DiscordRecorder {
       this.evaluate(after.channelId, after.id);
     });
     this.client.on(Events.InteractionCreate, (interaction) => {
+      if (interaction.isButton() || interaction.isModalSubmit()) {
+        void this.panels.handle(this, interaction);
+        return;
+      }
       if (!interaction.isChatInputCommand()) return;
       if (interaction.commandName === 'link') void this.linkChannel(interaction);
       else if (recordingCommands.some(({ name }) => name === interaction.commandName))
@@ -165,12 +206,17 @@ export class DiscordRecorder {
       const destination = this.destinations.get(recording.meta.guildId);
       const rule = recording.meta.requester || destination?.id !== recording.accountId
         ? recording.rule : rules.get(channelId);
-      if (!rule) { recording.finish(); continue; }
+      if (!rule) { recording.finish('Regra de gravação desativada.', { label: 'Autorecord' }); continue; }
+      if (recording.syncMembers()) {
+        recording.persist();
+        this.panels.update(recording.meta, recording.connection.ping);
+      }
       const channel = this.client.channels.cache.get(channelId);
       const humans = channel?.members?.some((member) => !member.user.bot);
       if (humans) { clearTimeout(recording.emptyTimer); recording.emptyTimer = undefined; }
       else if (!recording.emptyTimer) {
-        recording.emptyTimer = setTimeout(() => recording.finish(), rule.emptySeconds * 1000);
+        recording.emptyTimer = setTimeout(() => recording.finish('O canal ficou vazio.',
+          { label: recording.meta.requester ? 'Sistema' : 'Autorecord' }), rule.emptySeconds * 1000);
       }
     }
     for (const rule of rules.values()) {
@@ -219,7 +265,7 @@ export class DiscordRecorder {
   async start(account, rule, channel, requester) {
     const notice = rule.noticeChannelId && await this.client.channels.fetch(rule.noticeChannelId);
     if (!notice?.isSendable() || notice.guildId !== rule.guildId) throw new Error('A PIA precisa enviar o aviso no chat do canal antes de gravar.');
-    await notice.send({ content: NOTICE, allowedMentions: { parse: [] } });
+    const announcement = await notice.send({ content: NOTICE, allowedMentions: { parse: [] } });
     await new Promise((resolve) => setTimeout(resolve, 8000));
     const destination = async () => {
       if (this.closed) return;
@@ -236,7 +282,7 @@ export class DiscordRecorder {
         connection.destroy();
         return;
       }
-      const session = new Recording(current, connection, rule, channel, requester);
+      const session = new Recording(current, connection, rule, channel, requester, announcement, this);
       this.sessions.set(channel.id, session);
       this.blocked.add(channel.id);
       connection.on(VoiceConnectionStatus.Disconnected, () => session.finish('Conexão de voz interrompida.'));
@@ -249,16 +295,17 @@ export class DiscordRecorder {
     }
   }
 
-  stop(channelId, accountId) {
+  stop(channelId, accountId, stoppedBy) {
     const session = this.sessions.get(channelId);
     if (!session || session.closed || (accountId !== undefined && session.accountId !== accountId)) return false;
-    session.finish();
+    session.finish('', stoppedBy);
     return true;
   }
 
   close() {
     this.closed = true;
-    for (const session of this.sessions.values()) session.finish();
+    for (const session of this.sessions.values()) session.finish('Serviço reiniciado.');
+    this.panels.close();
     this.client.destroy();
   }
 }

@@ -4,12 +4,13 @@ import { issueMcpToken } from './mcp_tokens.js';
 import { confirmGuildLink, guildLinkRequest } from './discord_guild_links.js';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { accountProfile, begin, cookie, finish, oauthReady, origin } from './auth.js';
 import { identify, migrate, pool, seal, unseal } from './db.js';
 import { DiscordRecorder } from './recorder.js';
 import { createFolder, recordingDestination, recordingFolders } from './drive.js';
 import { processRecording, recordings, recover } from './queue.js';
-import { hash, validateRules } from './state.js';
+import { hash, save, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
 import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
 import { receiveMedia } from './media.js';
@@ -324,7 +325,7 @@ async function route(req, res) {
     finally { client.release(); }
   }
   if (path === '/api/recordings/stop') {
-    const stopped = [...runtimes.values()].some(({ runtime }) => runtime.stop(data.channelId, account.id));
+    const stopped = [...runtimes.values()].some(({ runtime }) => runtime.stop(data.channelId, account.id, { label: 'Painel PIA Server' }));
     return json(res, stopped ? 200 : 404, stopped ? { ok: true } : { error: 'Gravação ativa não encontrada.' });
   }
   if (path === '/api/mcp/token') return json(res, 200, await issueMcpToken(account.id, data.expiresInDays));
@@ -373,8 +374,16 @@ async function reconcile() {
       previous.runtime.account = account;
       previous.runtime.setDestinations(routes);
     }
+    const items = recordings(account).sort((a, b) => a.meta.startedAt.localeCompare(b.meta.startedAt));
+    for (const { dir, meta } of items) {
+      if (meta.state === 'recording' || !meta.editUntil) continue;
+      const runtime = runtimes.get(meta.botAccountId)?.runtime;
+      if (runtime?.client.isReady()) runtime.panels.finish(meta, () => save(join(dir, 'recording.json'), meta));
+    }
     if (uploads.has(account.id) || !account.drive_refresh) continue;
-    const next = recordings(account).find(({ meta }) => meta.state === 'queued' && (meta.retryAt || 0) <= Date.now());
+    const now = Date.now();
+    const next = items.find(({ meta }) => meta.state === 'queued' &&
+      (!meta.editUntil || Date.parse(meta.editUntil) <= now) && (meta.retryAt || 0) <= now);
     if (next) {
       uploads.add(account.id);
       processRecording(account, next).catch(() => console.error('Falha na fila de gravação.'))

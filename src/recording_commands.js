@@ -222,7 +222,7 @@ async function run(runtime, interaction) {
     const session = [...runtime.sessions.values()].find((item) => !item.closed && item.meta.guildId === guildId);
     if (!session) throw new Error('Nenhuma gravação em andamento neste servidor.');
     if (!admin && session.meta.requester !== userId) throw new Error('Peça a quem iniciou a gravação ou a um administrador.');
-    runtime.stop(session.meta.channelId);
+    runtime.stop(session.meta.channelId, undefined, { user: userId });
     return 'Gravação encerrada. Se houve fala, o arquivo será preparado e enviado ao Drive.';
   }
   if (command === 'voice-test') return voiceTest(runtime, interaction);

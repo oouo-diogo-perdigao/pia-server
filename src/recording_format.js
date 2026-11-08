@@ -30,12 +30,15 @@ const xml = (value) => value.replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
 })[character]);
 
-export function audacityProject(tracks) {
+export function audacityProject(tracks, notes = []) {
+  const labels = notes.length ? '\n  <labeltrack name="Notas" numlabels="' + notes.length + '">\n' +
+    notes.map(({ offsetMs, text }) => '    <label t="' + offsetMs / 1000 + '" t1="' + offsetMs / 1000 +
+      '" title="' + xml(text.replace(/\s+/g, ' ')) + '"/>').join('\n') + '\n  </labeltrack>' : '';
   return '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<project xmlns="http://audacity.sourceforge.net/xml/" projname="pia_data" version="1.3.0" audacityversion="2.4.2" rate="48000">\n' +
     tracks.map(({ filename, username }) => '  <import filename="' + xml(filename) +
       '" name="' + xml(username) + '" offset="0"/>').join('\n') +
-    '\n</project>\n';
+    labels + '\n</project>\n';
 }
 
 export const recordingFolder = (account) => account.recording_folder_id || account.folder_id;

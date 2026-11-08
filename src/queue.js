@@ -1,3 +1,4 @@
+import { editWindowMs } from './recording_panel.js';
 import { audacityProject, recordingTracks } from './recording_format.js';
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,7 +26,11 @@ export function recover(account) {
     meta.tracks = meta.tracks.filter((id) => snowflake.test(id) && existsSync(join(dir, id + '.pcm')) &&
       statSync(join(dir, id + '.pcm')).size >= 2);
     meta.state = meta.tracks.length ? 'queued' : 'empty';
-    meta.endedAt = new Date().toISOString();
+    const end = Date.now();
+    meta.endedAt = new Date(end).toISOString();
+    meta.durationMs = Math.max(0, end - Date.parse(meta.startedAt));
+    if (meta.panelMessageId) meta.editUntil = new Date(end + editWindowMs).toISOString();
+    meta.stoppedBy = { label: 'Sistema' };
     meta.note = 'O serviço foi interrompido durante a gravação.';
     save(join(dir, 'recording.json'), meta);
   }
@@ -46,10 +51,17 @@ export async function processRecording(account, { dir, meta }) {
           '-i', join(dir, id + '.pcm'), '-c:a', 'flac', join(tracks, filename)],
         { timeout: 30 * 60 * 1000 });
       }
-      writeFileSync(project, audacityProject(entries), { mode: 0o600 });
+      const previous = recordings(account).map((item) => item.meta)
+        .filter((item) => item.guildId === meta.guildId && item.channelId === meta.channelId &&
+          item.startedAt < meta.startedAt && item.tracks.length && item.state !== 'recording')
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+      writeFileSync(project, audacityProject(entries, meta.notes), { mode: 0o600 });
       writeFileSync(join(dir, 'pia-session.json'), JSON.stringify({
         version: 1, source: 'pia-server-discord', id: meta.id, startedAt: meta.startedAt,
         endedAt: meta.endedAt, channelId: meta.channelId, participants: meta.tracks, tracks: entries,
+        durationMs: meta.durationMs, requester: meta.requester, stoppedBy: meta.stoppedBy,
+        notes: meta.notes || [], sessionTitle: meta.sessionTitle, seasonEnd: Boolean(meta.seasonEnd),
+        startsSeason: Boolean(previous?.seasonEnd),
       }) + '\n', { mode: 0o600 });
       const temp = archive + '.partial.zip';
       if (existsSync(temp)) unlinkSync(temp);

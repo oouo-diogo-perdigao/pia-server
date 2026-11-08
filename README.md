@@ -107,3 +107,14 @@ Os novos ZIPs seguem o modelo `RPGs20261108181339235-Bate-Papo.aup.zip`. A data
 do nome usa o horário de São Paulo e tem precisão de milissegundos. Extraia o ZIP
 e abra `pia.aup` com `pia_data` ao lado. As faixas FLAC são identificadas pelo
 nome de usuário do Discord e mantêm o início sincronizado.
+
+O aviso de gravação no Discord se transforma em um painel atualizado com ID,
+canal, horários de entrada e saída dos participantes e latência da conexão de
+voz. O organizador ou um administrador pode parar a gravação. Participantes
+podem adicionar notas, que são guardadas no ZIP e no projeto Audacity.
+
+Ao encerrar, o painel mostra a duração e quem iniciou e encerrou a gravação.
+O organizador ou um administrador tem 30 minutos para definir o nome e marcar
+o fim da temporada. O envio ao Drive aguarda esse prazo para incorporar as
+mudanças. O Podcast Automation usa o nome definido e inicia a próxima temporada
+na sessão seguinte gravada no mesmo canal.
