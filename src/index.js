@@ -7,6 +7,7 @@ import { createFolder } from './drive.js';
 import { processRecording, recordings, recover } from './queue.js';
 import { hash, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
+import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -104,12 +105,34 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
   if (req.method === 'GET' && path === '/auth/google/callback') return finish(req, res, url);
-  if (req.method === 'POST' && ['/device/poll', '/device/complete'].includes(path)) {
+  if (req.method === 'POST' && ['/device/poll', '/device/complete', '/device/notices/ack',
+    '/device/profile/read', '/device/profile/write'].includes(path)) {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
-    const input = await body(req, path === '/device/complete' ? 17 * 1024 * 1024 : undefined);
-    return json(res, 200, path === '/device/poll' ?
-      await poll(account, input.capabilities) : await complete(account, input));
+    const large = ['/device/complete', '/device/profile/write'].includes(path);
+    const input = await body(req, large ? 32 * 1024 * 1024 : undefined);
+    if (path === '/device/notices/ack') return json(res, 200, await acknowledge(account, input.ids));
+    if (path === '/device/poll') return json(res, 200, {
+      ...await poll(account, input.capabilities), notices: await pendingNotices(account),
+    });
+    if (path === '/device/complete') return json(res, 200, await complete(account, input));
+    if (path === '/device/profile/read') {
+      const { rows: [profile] } = await pool.query('SELECT revision,ciphertext FROM pia_server.profiles WHERE account_id=$1', [account.id]);
+      return json(res, 200, profile ? { revision: profile.revision,
+        ...(input.metadata ? {} : { snapshot: JSON.parse(unseal(profile.ciphertext)) }),
+      } : { revision: '0' });
+    }
+    if (typeof input.revision !== 'string' || !/^\d{1,18}$/.test(input.revision) ||
+        !input.snapshot || input.snapshot.version !== 1 || typeof input.snapshot.backup !== 'string' ||
+        !input.snapshot.chats || typeof input.snapshot.chats !== 'object') throw new Error('Perfil inválido.');
+    const ciphertext = seal(JSON.stringify(input.snapshot));
+    const result = input.revision === '0' ?
+      await pool.query('INSERT INTO pia_server.profiles(account_id,ciphertext) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING revision',
+        [account.id, ciphertext]) :
+      await pool.query(`UPDATE pia_server.profiles SET ciphertext=$2,revision=revision+1,updated=now()
+        WHERE account_id=$1 AND revision=$3 RETURNING revision`, [account.id, ciphertext, input.revision]);
+    return result.rowCount ? json(res, 200, result.rows[0]) :
+      json(res, 409, { error: 'O perfil do servidor mudou. Confira a versão antes de sincronizar.' });
   }
   if (path === '/mcp') {
     if (req.headers.origin && req.headers.origin !== origin) return json(res, 403, { error: 'Origem inválida.' });
@@ -128,9 +151,11 @@ async function route(req, res) {
   if (!account) return json(res, 401, { error: 'Entre com Google.' });
   if (req.method === 'GET' && path === '/api/status') return json(res, 200, status(account));
   if (req.method === 'GET' && path === '/api/devices') return json(res, 200, await devices(account));
+  if (req.method === 'GET' && path === '/api/secretary') return json(res, 200, await preferences(account));
   if (req.method !== 'POST') return json(res, 405, { error: 'Método indisponível.' });
   if (req.headers.origin !== origin) return json(res, 403, { error: 'Origem inválida.' });
   const data = await body(req);
+  if (path === '/api/secretary') return json(res, 200, await configure(account, data));
   if (path === '/api/devices/pair') return json(res, 200, await pair(account, data.name));
   if (path === '/api/devices/revoke') return json(res, 200, await revoke(account, data.id));
   if (path === '/api/rules') {
@@ -193,6 +218,7 @@ async function route(req, res) {
 
 const uploads = new Set();
 async function reconcile() {
+  await monitor();
   const { rows } = await pool.query('SELECT * FROM pia_server.accounts');
   for (const account of rows) {
     if (closing) return;

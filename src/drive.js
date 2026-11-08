@@ -14,7 +14,7 @@ export async function googleToken(params) {
   return response.json();
 }
 
-async function access(account) {
+export async function access(account) {
   if (!account.drive_refresh) throw new Error('Conecte o Google Drive da conta.');
   const token = await googleToken({ grant_type: 'refresh_token', refresh_token: unseal(account.drive_refresh) });
   return { Authorization: 'Bearer ' + token.access_token };

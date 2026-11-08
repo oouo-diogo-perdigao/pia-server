@@ -110,3 +110,15 @@ refresh().catch(async () => {
   const health = await fetch('/health').then((r) => r.json()).catch(() => null);
   if (!health?.googleLogin) say('O login Google aguarda a configuração do servidor.');
 });
+api('secretary').then((settings) => {
+  element('gmail-watch').checked = settings.mail;
+  element('calendar-watch').checked = settings.calendar;
+  element('calendar-lead').value = settings.lead_minutes;
+  element('secretary-error').textContent = settings.last_error || '';
+}).catch(() => {});
+on('secretary-save', async () => {
+  await api('secretary', { mail: element('gmail-watch').checked,
+    calendar: element('calendar-watch').checked, lead_minutes: Number(element('calendar-lead').value) });
+  element('secretary-error').textContent = '';
+  say('Secretária salva.');
+});

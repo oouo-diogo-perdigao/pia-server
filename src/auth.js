@@ -26,7 +26,7 @@ export function begin(req, res) {
   const query = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     redirect_uri: callback, response_type: 'code',
-    scope: 'openid email https://www.googleapis.com/auth/drive.file',
+    scope: 'openid email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly',
     access_type: 'offline', prompt: 'consent select_account',
     state, code_challenge: createHash('sha256').update(verifier).digest('base64url'),
     code_challenge_method: 'S256',

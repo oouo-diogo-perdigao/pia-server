@@ -50,6 +50,26 @@ export async function migrate() {
       expires timestamptz NOT NULL, result jsonb
     );
     CREATE INDEX IF NOT EXISTS pia_device_jobs_poll ON pia_server.device_jobs(device_id,status,created);
+    CREATE TABLE IF NOT EXISTS pia_server.secretary (
+      account_id bigint PRIMARY KEY REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      mail boolean NOT NULL, calendar boolean NOT NULL, lead_minutes integer NOT NULL,
+      mail_since timestamptz NOT NULL DEFAULT now(), last_error text
+    );
+    CREATE TABLE IF NOT EXISTS pia_server.notices (
+      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      event_key text NOT NULL, title text NOT NULL, text text NOT NULL, url text,
+      created timestamptz NOT NULL DEFAULT now(), UNIQUE(account_id,event_key)
+    );
+    CREATE TABLE IF NOT EXISTS pia_server.notice_delivery (
+      device_id uuid NOT NULL REFERENCES pia_server.devices(id) ON DELETE CASCADE,
+      notice_id bigint NOT NULL REFERENCES pia_server.notices(id) ON DELETE CASCADE,
+      PRIMARY KEY(device_id,notice_id)
+    );
+    CREATE TABLE IF NOT EXISTS pia_server.profiles (
+      account_id bigint PRIMARY KEY REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      revision bigint NOT NULL DEFAULT 1, ciphertext text NOT NULL, updated timestamptz NOT NULL DEFAULT now()
+    );
   `);
   await pool.query('INSERT INTO pia_server.accounts(email,admin) VALUES($1,true) ON CONFLICT(email) DO UPDATE SET admin=true', [email]);
 }

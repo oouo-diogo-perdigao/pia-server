@@ -6,7 +6,7 @@ Serviço da PIA para gravar sessões de voz do Discord continuamente e entregar 
 
 1. Prepare um usuário PostgreSQL dedicado com acesso de conexão e permissão de criar tabelas no schema `pia_server`. O aplicativo cria as tabelas no primeiro início.
 2. Copie `.env.example` para `.env`, restrinja o acesso ao arquivo e configure o PostgreSQL, o domínio, o e-mail administrador e uma chave aleatória gerada com `openssl rand -hex 32`. Guarde a chave com o backup do PostgreSQL.
-3. Crie um cliente OAuth Google do tipo **Aplicativo da Web**, habilite a API Google Drive e cadastre `https://SEU-DOMINIO/auth/google/callback` como redirecionamento. Configure `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` no servidor.
+3. Crie um cliente OAuth Google do tipo **Aplicativo da Web**, habilite as APIs Drive, Gmail e Google Calendar e cadastre `https://SEU-DOMINIO/auth/google/callback` como redirecionamento. Configure `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` no servidor. Gmail e Agenda usam escopos de leitura.
 4. Execute `docker compose up -d`. A porta do exemplo fica em loopback. Configure seu proxy HTTPS para apontar ao serviço. No Traefik com as redes `proxy-publico` e `postgres`, use `docker compose -f compose.yaml -f compose.traefik.yaml up -d` e ajuste o host no arquivo de override.
 5. Confira `/health`. Entre no painel com o e-mail administrador autorizado. O administrador pode autorizar outras contas Google e cada conta tem seu próprio bot, regras, fila e pasta no Drive.
 
@@ -27,4 +27,8 @@ Entre com Google e emita um token MCP no painel. Configure no Codex a URL `https
 
 ## Escopo desta versão
 
-O painel web é a interface administrativa. A captura do Discord, a fila e o envio de gravações rodam no servidor. As capturas solicitadas pelo MCP são executadas no desktop pareado. Sincronização de conversas e músicas, Secretária remota e processamento de sessões no servidor ainda não estão disponíveis. O servidor não oferece geração musical.
+No painel web, habilite Gmail ou Agenda na seção **Secretária**. Ela consulta as fontes a cada minuto e mantém os avisos no PostgreSQL. Cada computador pareado com a recepção de avisos habilitada recebe os pendentes e aplica suas próprias preferências de notificação.
+
+Configurações, segredos e conversas ficam em revisões criptografadas no PostgreSQL. Use **Perfil compartilhado** no conector desktop para enviar ou carregar o perfil. A sincronização exige confirmação explícita e rejeita alterações sobre uma revisão desatualizada. Credenciais de pareamento e preferências de notificação ficam no computador.
+
+O painel web é a interface administrativa. A captura do Discord, a fila e o envio de gravações rodam no servidor. As capturas solicitadas pelo MCP são executadas no desktop pareado. A geração musical permanece local. A cópia das músicas para o Drive e o processamento de sessões no servidor ainda não estão disponíveis.

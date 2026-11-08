@@ -50,6 +50,14 @@
     <pre id="device-token"></pre>
     <ul id="devices"></ul>
   </section>
+  <section>
+    <h2>Secretária</h2>
+    <label><input type="checkbox" id="gmail-watch"> Avisar sobre novos e-mails da caixa de entrada</label>
+    <label><input type="checkbox" id="calendar-watch"> Avisar sobre compromissos próximos</label>
+    <label>Antecedência em minutos <input type="number" id="calendar-lead" min="1" max="1440"></label>
+    <button id="secretary-save">Salvar Secretária</button>
+    <p id="secretary-error"></p>
+  </section>
   <section id="admin" hidden>
     <h2>Contas autorizadas</h2>
     <label>E-mail Google <input id="email" type="email"></label>
