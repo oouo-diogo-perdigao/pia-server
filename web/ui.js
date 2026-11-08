@@ -85,7 +85,9 @@ on('example', () => {
   }], null, 2);
 });
 on('save-discord', async () => {
-  await api('discord', { token: element('discord').value });
+  const token = botSecrets.discord.edited();
+  if (!token) throw new Error('Informe um novo token do Discord.');
+  await api('discord', { token });
   element('discord').value = '';
   await refreshConnectors();
   say('Bot salvo.');
@@ -145,32 +147,67 @@ let connectorState;
 const input = (id) => element(id).value;
 
 let storageVersion = 0;
-let revealedStorageKey = '';
 
-function setStorageVisibility(visible) {
-  const toggle = element('storage-reveal');
-  toggle.setAttribute('aria-pressed', String(visible));
-  const label = visible ? 'Ocultar Secret Key' : 'Mostrar Secret Key';
-  toggle.setAttribute('aria-label', label);
-  toggle.title = label;
-  element('storage-secret').type = visible ? 'text' : 'password';
+function secretField(fieldId, toggleId, label, load) {
+  const field = element(fieldId);
+  const toggle = element(toggleId);
+  let revealed = '';
+  let version = 0;
+
+  function visibility(visible) {
+    const title = (visible ? 'Ocultar ' : 'Mostrar ') + label;
+    toggle.setAttribute('aria-pressed', String(visible));
+    toggle.setAttribute('aria-label', title);
+    toggle.title = title;
+    field.type = visible ? 'text' : 'password';
+  }
+
+  function hide() {
+    version++;
+    if (field.value === revealed) field.value = '';
+    revealed = '';
+    visibility(false);
+  }
+
+  function configured(hasSecret) {
+    field.placeholder = hasSecret ? '********' : '';
+    toggle.hidden = !hasSecret;
+  }
+
+  on(toggleId, async () => {
+    if (field.type === 'text') return hide();
+    if (!field.value) {
+      const request = version;
+      const secret = await load();
+      if (request !== version || field.value || !secret) return;
+      field.value = revealed = secret;
+    }
+    visibility(true);
+  });
+
+  return {
+    hide, configured,
+    reset() { hide(); field.value = ''; configured(false); },
+    edited() { return field.value === revealed ? '' : field.value; },
+  };
 }
+
+const storageSecret = secretField('storage-secret', 'storage-reveal', 'Secret Key', async () =>
+  (await api('connectors/storage-credential', { id: input('storage-account'), reveal: true })).secretKey);
+const botSecrets = Object.fromEntries([['discord', 'discord'], ['taverns', 'taverns-token']].map(([provider, field]) =>
+  [provider, secretField(field, provider + '-reveal', 'token do bot', async () =>
+    (await api('connectors/bot-credential', { provider })).token)]));
 
 async function storageFields() {
   const version = ++storageVersion;
-  revealedStorageKey = '';
-  setStorageVisibility(false);
-  const toggle = element('storage-reveal');
+  storageSecret.reset();
   const access = element('storage-access');
-  const secret = element('storage-secret');
-  secret.placeholder = '';
-  toggle.hidden = true;
   const id = input('storage-account');
   const account = connectorState.objectStorage.find((item) => item.id === id);
   for (const [field, value] of Object.entries({
     name: account?.name, type: account?.provider || 's3', endpoint: account?.endpoint,
     public: account?.public_url, bucket: account?.bucket, region: account?.region,
-    color: account?.color || '#9b7aff', access: '', secret: '', session: '',
+    color: account?.color || '#9b7aff', access: '',
   })) element('storage-' + field).value = value || '';
   element('storage-default').checked = Boolean(id && id === connectorState.storageDefault);
   element('storage-remove').hidden = !id;
@@ -178,12 +215,15 @@ async function storageFields() {
   const data = await api('connectors/storage-credential', { id });
   if (version !== storageVersion) return;
   if (!access.value) access.value = data.accessKey;
-  secret.placeholder = data.hasSecret ? '********' : '';
-  toggle.hidden = !data.hasSecret;
+  storageSecret.configured(data.hasSecret);
 }
 
 async function refreshConnectors(selectedId = input('storage-account')) {
   connectorState = await api('connectors');
+  for (const [provider, control] of Object.entries(botSecrets)) {
+    control.hide();
+    control.configured(connectorState[provider].configured);
+  }
   for (const provider of ['google', 'microsoft']) {
     const primary = provider === 'google' && connectorState.primaryGoogle;
     const accounts = primary ? [primary, ...connectorState.google] : connectorState[provider];
@@ -237,7 +277,9 @@ on('discord-link', async () => {
 });
 on('discord-remove', async () => { await removeAccount('discord'); await refresh(); });
 on('taverns-save', async () => {
-  await saveConnector('taverns', { token: input('taverns-token') });
+  const token = botSecrets.taverns.edited();
+  if (!token) throw new Error('Informe um novo token do Taverns.');
+  await saveConnector('taverns', { token });
   element('taverns-token').value = '';
 });
 on('taverns-remove', () => removeAccount('taverns'));
@@ -248,30 +290,23 @@ for (const [provider, field] of [['discord', 'discord-channel'], ['taverns', 'ta
   });
 }
 element('storage-account').onchange = () => storageFields().catch((error) => say(error.message));
-on('storage-reveal', async () => {
-  const field = element('storage-secret');
-  if (field.type === 'text') {
-    if (field.value === revealedStorageKey) field.value = '';
-    revealedStorageKey = '';
-    setStorageVisibility(false);
-    return;
-  }
-  if (!field.value) {
-    const version = storageVersion;
-    const data = await api('connectors/storage-credential', { id: input('storage-account'), reveal: true });
-    if (version !== storageVersion || field.value) return;
-    revealedStorageKey = data.secretKey;
-    field.value = data.secretKey;
-  }
-  setStorageVisibility(true);
-});
 on('storage-save', () => saveConnector('object_storage', {
   id: input('storage-account'), name: input('storage-name'), type: input('storage-type'),
   endpoint: input('storage-endpoint'), publicUrl: input('storage-public'), region: input('storage-region'),
   bucket: input('storage-bucket'), color: input('storage-color'), accessKey: input('storage-access'),
-  secretKey: input('storage-secret') === revealedStorageKey ? '' : input('storage-secret'), sessionToken: input('storage-session'), default: element('storage-default').checked,
+  secretKey: storageSecret.edited(), default: element('storage-default').checked,
 }));
 on('storage-remove', () => removeAccount('object_storage', input('storage-account')));
+
+const accountMenu = element('account-menu');
+document.addEventListener('click', (event) => {
+  if (!accountMenu.contains(event.target)) accountMenu.open = false;
+});
+accountMenu.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  accountMenu.open = false;
+  element('account').focus();
+});
 
 element('account-picture').onload = () => {
   element('account-picture').hidden = false;
@@ -283,6 +318,9 @@ element('account-picture').onerror = () => {
 };
 
 function selectConnector(id) {
+  for (const [provider, control] of Object.entries(botSecrets))
+    if (id !== provider) control.hide();
+  if (id !== 'storage') storageSecret.hide();
   for (const control of document.querySelectorAll('[data-connector]'))
     control.setAttribute('aria-pressed', String(control.dataset.connector === id));
   for (const panel of document.querySelectorAll('[data-connector-panel]'))
@@ -299,16 +337,6 @@ function navigate() {
   const current = links.find((link) => link.hash === section) || links[0];
   const page = current.hash.slice(1);
   element('page-title').textContent = current.getAttribute('aria-label');
-const accountMenu = element('account-menu');
-document.addEventListener('click', (event) => {
-  if (!accountMenu.contains(event.target)) accountMenu.open = false;
-});
-accountMenu.addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape') return;
-  accountMenu.open = false;
-  element('account').focus();
-});
-
   for (const link of links) {
     if (link === current) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -325,10 +353,9 @@ accountMenu.addEventListener('keydown', (event) => {
   }
   else {
     storageVersion++;
-    revealedStorageKey = '';
-    element('storage-secret').value = '';
+    storageSecret.reset();
+    for (const control of Object.values(botSecrets)) control.reset();
     element('storage-access').value = '';
-    setStorageVisibility(false);
   }
 }
 window.addEventListener('hashchange', navigate);

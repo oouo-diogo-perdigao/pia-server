@@ -12,7 +12,7 @@ import { hash, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
 import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
 import { receiveMedia } from './media.js';
-import { accessToken, enableDiscordLink, isConnectorCallback, migrateConnectorRows, oauthFinish, oauthStart, publicConnectors, registry, removeConnector, runtime, saveConnector, splitProfile, storageCredential, testConnector } from './connectors.js';
+import { accessToken, botCredential, enableDiscordLink, isConnectorCallback, migrateConnectorRows, oauthFinish, oauthStart, publicConnectors, registry, removeConnector, runtime, saveConnector, splitProfile, storageCredential, testConnector } from './connectors.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -258,6 +258,7 @@ async function route(req, res) {
   const data = await body(req);
   if (path === '/api/connectors/save') return json(res, 200, await saveConnector(account, data));
   if (path === '/api/connectors/storage-credential') return json(res, 200, await storageCredential(account, data));
+  if (path === '/api/connectors/bot-credential') return json(res, 200, await botCredential(account, data.provider));
   if (path === '/api/connectors/remove') return json(res, 200, await removeConnector(account, data));
   if (path === '/api/connectors/oauth') return json(res, 200, await oauthStart(account, data.provider));
   if (path === '/api/connectors/test') return json(res, 200, await testConnector(account, data));

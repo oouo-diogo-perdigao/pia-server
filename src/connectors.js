@@ -158,6 +158,12 @@ export async function storageCredential(account, { id, reveal }) {
     { accessKey: secret.access_key || '', hasSecret: Boolean(secret.secret_key) };
 }
 
+export async function botCredential(account, provider) {
+  if (provider !== 'discord' && provider !== 'taverns') throw new Error('Conector de bot inválido.');
+  const { settings } = await runtime(account, provider);
+  return { token: settings[provider === 'discord' ? 'DISCORD_BOT_TOKEN' : 'TAVERNS_BOT_TOKEN'] || '' };
+}
+
 export async function runtime(account, provider, identity) {
   if (!providers.includes(provider)) throw new Error('Conector inválido.');
   const state = await registry(account);

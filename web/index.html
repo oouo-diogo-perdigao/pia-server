@@ -128,7 +128,6 @@
             </svg>
           </button>
         </div>
-        <label>Session token <input id="storage-session" type="password" autocomplete="new-password"></label>
       </div>
       <p>Deixe as chaves em branco para manter as que já estão salvas.</p>
       <label><input type="checkbox" id="storage-default"> Conta padrão</label>
@@ -136,7 +135,14 @@
       <button id="storage-remove">Remover conta</button>
     </div>
     <div class="connector-panel" data-connector-panel="discord" hidden><h3>Discord <span id="discord-state"></span></h3>
-      <label>Token do bot <input id="discord" type="password" autocomplete="new-password"></label>
+      <div class="secret-field">
+        <label>Token do bot <input id="discord" type="password" autocomplete="new-password"></label>
+        <button id="discord-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/>
+            </svg>
+          </button>
+      </div>
       <button id="save-discord">Conectar bot</button>
       <label>ID do canal padrão <input id="discord-channel" inputmode="numeric"></label>
       <button id="discord-save-channel">Salvar canal</button>
@@ -145,7 +151,14 @@
       <button id="discord-remove">Remover bot</button>
     </div>
     <div class="connector-panel" data-connector-panel="taverns" hidden><h3>Taverns <span id="taverns-state"></span></h3>
-      <label>Token do bot <input id="taverns-token" type="password" autocomplete="new-password"></label>
+      <div class="secret-field">
+        <label>Token do bot <input id="taverns-token" type="password" autocomplete="new-password"></label>
+        <button id="taverns-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/>
+            </svg>
+          </button>
+      </div>
       <button id="taverns-save">Salvar bot</button>
       <button id="taverns-remove">Remover bot</button>
       <label>Destino de teste (ID da taverna/ID do canal) <input id="taverns-destination"></label>
