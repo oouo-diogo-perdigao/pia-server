@@ -125,6 +125,9 @@ async function route(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  if (path.startsWith('/device/') || path === '/mcp' || path === '/health') {
+    res.setHeader('X-PIA-Protocol', '1');
+  }
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.googleusercontent.com; frame-ancestors 'none'; base-uri 'none'");
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, googleLogin: oauthReady() });
   if (req.method === 'GET' && publicFiles.has(path)) {
