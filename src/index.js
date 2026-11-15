@@ -15,6 +15,7 @@ import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, 
 import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
 import { receiveMedia } from './media.js';
 import { accessToken, botCredential, enableDiscordLink, isConnectorCallback, migrateConnectorRows, oauthFinish, oauthStart, publicConnectors, registry, removeConnector, runtime, saveConnector, splitProfile, storageCredential, testConnector } from './connectors.js';
+import { renderOAuthCallback } from './oauth_callback.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -22,6 +23,7 @@ let tick, closing = false;
 const publicFiles = new Map([
   ['/', ['text/html; charset=utf-8', workspaceHtml(readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'))]],
   ['/ui.js', ['text/javascript; charset=utf-8', readFileSync(new URL('../web/ui.js', import.meta.url))]],
+  ['/oauth-callback.js', ['text/javascript; charset=utf-8', readFileSync(new URL('../web/oauth-callback.js', import.meta.url))]],
   ['/pia.svg', ['image/svg+xml', readFileSync(new URL('../web/pia.svg', import.meta.url))]],
   ['/secretary.svg', ['image/svg+xml', readFileSync(new URL('../web/secretary.svg', import.meta.url))]],
   ['/login.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/login.css', import.meta.url))]],
@@ -202,6 +204,11 @@ async function route(req, res) {
     return res.end();
   }
   if (req.method === 'GET' && path === '/auth/google/callback') return finish(req, res, url);
+  if (req.method === 'GET' && path === '/oauth/callback') {
+    const result = renderOAuthCallback(url);
+    res.writeHead(result.status, result.headers);
+    return res.end(result.body);
+  }
   if (req.method === 'POST' && path === '/device/logout') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Sessão do computador inválida.' });
