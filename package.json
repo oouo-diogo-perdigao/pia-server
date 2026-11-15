@@ -3,12 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
-  "scripts": { "start": "node src/index.js", "test": "node --test" },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
+    "@mantine/core": "8.3.18",
+    "@mantine/hooks": "8.3.18",
     "discord.js": "^14.26.0",
+    "lucide-react": "0.468.0",
     "opusscript": "0.1.1",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   }
 }

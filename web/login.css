@@ -1,0 +1,53 @@
+.pia-login {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 75vh;
+  width: 100%;
+  padding: 1.5rem;
+  margin: 0;
+  box-sizing: border-box;
+  border: 0;
+  background: radial-gradient(ellipse at 35% 5%, #31254b 0%, transparent 60%),
+    radial-gradient(ellipse at 100% 95%, #17284c 0%, transparent 53%), #11121b;
+}
+.pia-login-card {
+  box-sizing: border-box;
+  width: min(100%, 25rem);
+  margin: 0;
+  padding: clamp(1.5rem, 5vw, 2.6rem);
+  border: 1px solid #514366;
+  border-radius: 1.3rem;
+  background: #1c192b;
+  color: #f3efff;
+  box-shadow: 0 1.2rem 4rem #0b091a77;
+  text-align: center;
+}
+.pia-login-logo { display: block; margin: 0 auto 1rem; }
+.pia-login-card h2 { font-size: 1.6rem; margin: 0 0 .5rem; }
+.pia-login-card p { color: #c6bed8; margin: .5rem 0 1.2rem; }
+.google-signin {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  margin: 0;
+  border: 1px solid #747775;
+  border-radius: 20px;
+  background: #fff;
+  color: #1f1f1f;
+  font: 500 14px/20px "Google Sans", Arial, sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+}
+.google-signin img { width: 20px; height: 20px; object-fit: none; object-position: center; }
+.google-signin:hover:not(:disabled) { background: #edf3fc; color: #1f1f1f; }
+.google-signin:focus-visible { outline: 2px solid #b6a2ff; outline-offset: 4px; }
+.google-signin:disabled { opacity: .65; cursor: wait; }
+.pia-login-options { text-align: left; color: #c6bed8; margin-top: 1.1rem; }
+.pia-login-options summary { cursor: pointer; font-size: .85rem; text-align: center; }
+.pia-login-options label { margin-top: .75rem; }
+.pia-login-code { display: block; color: #eee8ff; font: 700 1.7rem monospace; letter-spacing: .22em; }

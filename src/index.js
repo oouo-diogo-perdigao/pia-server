@@ -1,26 +1,53 @@
+import { mantineCss, workspaceHtml } from './workspace_ui.js';
+import { recordingFolder } from './recording_format.js';
+import { approveDeviceLogin, beginDeviceLogin, deviceLoginDetails, pollDeviceLogin } from './device_login.js';
+import { issueMcpToken } from './mcp_tokens.js';
+import { confirmGuildLink, guildLinkRequest } from './discord_guild_links.js';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { begin, cookie, finish, oauthReady, origin } from './auth.js';
-import { accountSession, identify, migrate, pool, seal, unseal } from './db.js';
+import { accountProfile, begin, cookie, finish, oauthReady, origin } from './auth.js';
+import { identify, migrate, pool, seal, unseal } from './db.js';
 import { DiscordRecorder } from './recorder.js';
-import { createFolder } from './drive.js';
-import { processRecording, recordings, recover } from './queue.js';
+import { createFolder, recordingDestination, recordingFolderPath, recordingFolders } from './drive.js';
+import { needsSidecar, processRecording, processRecordingSidecar, recordings, recover, saveRecordingEdits } from './queue.js';
 import { hash, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
 import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
 import { receiveMedia } from './media.js';
+import { accessToken, botCredential, enableDiscordLink, isConnectorCallback, migrateConnectorRows, oauthFinish, oauthStart, publicConnectors, registry, removeConnector, runtime, saveConnector, splitProfile, storageCredential, testConnector } from './connectors.js';
 
 const runtimes = new Map();
 const recovered = new Set();
 let tick, closing = false;
 const publicFiles = new Map([
-  ['/', ['text/html; charset=utf-8', readFileSync(new URL('../web/index.html', import.meta.url))]],
+  ['/', ['text/html; charset=utf-8', workspaceHtml(readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'))]],
   ['/ui.js', ['text/javascript; charset=utf-8', readFileSync(new URL('../web/ui.js', import.meta.url))]],
+  ['/pia.svg', ['image/svg+xml', readFileSync(new URL('../web/pia.svg', import.meta.url))]],
+  ['/secretary.svg', ['image/svg+xml', readFileSync(new URL('../web/secretary.svg', import.meta.url))]],
+  ['/login.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/login.css', import.meta.url))]],
+  ['/google-signin.png', ['image/png', readFileSync(new URL('../web/google-signin.png', import.meta.url))]],
+  ['/mantine.css', ['text/css; charset=utf-8', mantineCss]],
+  ['/style.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/style.css', import.meta.url))]],
 ]);
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
+}
+
+function googleSignIn(path) {
+  return '<a href="' + path + '" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>';
+}
+
+function authorizationPage(res, title, content) {
+  // Keep the Origin header on same-origin form submissions without sending
+  // the authorization URL as a referrer to Google or other sites.
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Referrer-Policy': 'same-origin' });
+  return res.end('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<title>' + title + '</title><link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/style.css">' +
+    '<link rel="stylesheet" href="/login.css"><main class="pia-login"><section class="pia-login-card">' +
+    '<img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64"><h2>' + title + '</h2>' +
+    content + '</section></main></html>');
 }
 
 async function body(req, limit = 65536) {
@@ -40,9 +67,10 @@ async function body(req, limit = 65536) {
 function status(account) {
   const runtime = runtimes.get(account.id)?.runtime;
   return {
-    email: account.email, admin: account.admin, discordConfigured: Boolean(account.discord_token),
+    ...accountProfile(account), admin: account.admin, discordConfigured: Boolean(account.discord_token),
     discordConnected: runtime?.client.isReady() || false, discordError: runtime?.error || '',
-    driveConnected: Boolean(account.drive_refresh), folderId: account.folder_id, rules: account.rules,
+    driveConnected: Boolean(account.drive_refresh), folderId: recordingFolder(account), folderName: account.recording_folder_name,
+    recordingDriveAccount: account.recording_drive_account, rules: account.rules,
     recordings: recordings(account).map(({ meta }) => ({
       id: meta.id, channelId: meta.channelId, name: meta.name, state: meta.state,
       startedAt: meta.startedAt, endedAt: meta.endedAt, note: meta.note, error: meta.lastError,
@@ -97,26 +125,106 @@ async function route(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'");
+  if (path.startsWith('/device/') || path === '/mcp' || path === '/health') {
+    res.setHeader('X-PIA-Protocol', '1');
+  }
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.googleusercontent.com; frame-ancestors 'none'; base-uri 'none'");
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, googleLogin: oauthReady() });
   if (req.method === 'GET' && publicFiles.has(path)) {
     const [type, data] = publicFiles.get(path);
     res.writeHead(200, { 'Content-Type': type });
     return res.end(data);
   }
+  const blessing = /^\/discord\/bless\/([A-Za-z0-9_-]{43})(\/login)?$/.exec(path);
+  if (blessing) {
+    const [, token, login] = blessing;
+    const target = '/discord/bless/' + token;
+    const request = await guildLinkRequest(token);
+    if (req.method === 'GET' && login) return begin(req, res, target);
+    const account = await identify(cookie(req, '__Host-pia_session'), 'web');
+    const escape = (value) => value.replace(/[&<>]/g, (character) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
+    const guild = '<strong>' + escape(request.guild_name) + '</strong>';
+    let content;
+    if (req.method === 'GET') {
+      content = '<p>Servidor Discord: ' + guild + '</p>' + (account ?
+        '<p>As novas gravações irão para a conta <strong>' + escape(account.email) + '</strong>.</p>' +
+        '<form method="post" action="' + target + '"><button>Confirmar vínculo</button></form>' +
+        '<a href="' + target + '/login">Usar outra conta Google</a>' :
+        '<p>Entre com a conta PIA que receberá as gravações.</p>' + googleSignIn(target + '/login'));
+    } else if (req.method === 'POST' && !login && account && req.headers.origin === origin) {
+      await confirmGuildLink(token, account.id);
+      content = '<p>Servidor ' + guild + ' abençoado e vinculado à sua conta PIA.</p>' +
+        '<a href="/#recordings">Abrir gravações</a>';
+    } else return json(res, 403, { error: 'Entre na sua conta PIA e abra o link enviado pelo Discord.' });
+    return authorizationPage(res, 'Vincular Discord à PIA', content);
+  }
+  if (req.method === 'POST' && path === '/device/login/start') {
+    const result = beginDeviceLogin(await body(req, 2048));
+    return json(res, 200, { ...result, url: origin + '/auth/device/' + result.id });
+  }
+  if (req.method === 'POST' && path === '/device/login/poll')
+    return json(res, 200, await pollDeviceLogin(await body(req, 2048)));
+  const deviceLogin = /^\/auth\/device\/([A-Za-z0-9_-]{43})(\/login)?$/.exec(path);
+  if (deviceLogin) {
+    const [, id, login] = deviceLogin;
+    const attempt = deviceLoginDetails(id);
+    const target = '/auth/device/' + id;
+    if (req.method === 'GET' && login) return begin(req, res, target);
+    const account = await identify(cookie(req, '__Host-pia_session'), 'web');
+    const escape = (value) => value.replace(/[&<>]/g, (character) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
+    let content;
+    if (req.method === 'GET' && !login) {
+      const signIn = googleSignIn(target + '/login');
+      content = '<p>Confira se o código <strong>' + attempt.code + '</strong> aparece em <strong>' +
+        escape(attempt.name) + '</strong> antes de autorizar.</p>' + (account ?
+        '<p>Conta: ' + escape(account.email) + '</p><form method="post" action="' + target +
+        '"><button>Autorizar computador</button></form>' + signIn : signIn);
+    } else if (req.method === 'POST' && !login) {
+      if (!account) return json(res, 403, { error: 'Entre com Google antes de autorizar o computador.' });
+      if (req.headers.origin !== origin) return json(res, 403, {
+        error: 'Origem do formulário inválida. Reabra o link na PIA local e tente novamente.',
+      });
+      approveDeviceLogin(id, account);
+      content = '<p>Computador autorizado. Você pode fechar esta aba e voltar à PIA.</p>';
+    } else return json(res, 405, { error: 'Método indisponível.' });
+    return authorizationPage(res, 'Entrar na PIA', content);
+  }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
+  const connectorCallback = path === '/auth/connectors/microsoft' ? 'microsoft' :
+    path === '/auth/google/callback' && isConnectorCallback(url.searchParams.get('state')) ? 'google' : '';
+  if (req.method === 'GET' && connectorCallback) {
+    const account = await identify(cookie(req, '__Host-pia_session'), 'web');
+    if (!account) return json(res, 401, { error: 'Entre com Google primeiro.' });
+    await oauthFinish(account, connectorCallback, url.searchParams);
+    res.writeHead(303, { Location: '/#connectors' });
+    return res.end();
+  }
   if (req.method === 'GET' && path === '/auth/google/callback') return finish(req, res, url);
+  if (req.method === 'POST' && path === '/device/logout') {
+    const account = await authenticateDevice(req.headers.authorization);
+    if (!account) return json(res, 401, { error: 'Sessão do computador inválida.' });
+    return json(res, 200, await revoke(account, account.device_id));
+  }
+  if (req.method === 'GET' && path === '/device/account') {
+    const account = await authenticateDevice(req.headers.authorization);
+    if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
+    return json(res, 200, accountProfile(account));
+  }
   if (req.method === 'POST' && path === '/device/media') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
     return json(res, 200, await receiveMedia(account, req));
   }
   if (req.method === 'POST' && ['/device/poll', '/device/complete', '/device/notices/ack',
-    '/device/profile/read', '/device/profile/write'].includes(path)) {
+    '/device/profile/read', '/device/profile/write', '/device/connectors/runtime', '/device/connectors/access'].includes(path)) {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
     const large = ['/device/complete', '/device/profile/write'].includes(path);
     const input = await body(req, large ? 32 * 1024 * 1024 : undefined);
+    if (path === '/device/connectors/runtime') return json(res, 200, await runtime(account, input.provider, input.id));
+    if (path === '/device/connectors/access') return json(res, 200, await accessToken(account, input.provider, input.id));
     if (path === '/device/notices/ack') return json(res, 200, await acknowledge(account, input.ids));
     if (path === '/device/poll') return json(res, 200, {
       ...await poll(account, input.capabilities), notices: await pendingNotices(account),
@@ -124,14 +232,17 @@ async function route(req, res) {
     if (path === '/device/complete') return json(res, 200, await complete(account, input));
     if (path === '/device/profile/read') {
       const { rows: [profile] } = await pool.query('SELECT revision,ciphertext FROM pia_server.profiles WHERE account_id=$1', [account.id]);
+      if (!input.metadata && profile) await registry(account);
       return json(res, 200, profile ? { revision: profile.revision,
-        ...(input.metadata ? {} : { snapshot: JSON.parse(unseal(profile.ciphertext)) }),
+        ...(input.metadata ? {} : { snapshot: splitProfile(JSON.parse(unseal(profile.ciphertext))).snapshot }),
       } : { revision: '0' });
     }
     if (typeof input.revision !== 'string' || !/^\d{1,18}$/.test(input.revision) ||
         !input.snapshot || input.snapshot.version !== 1 || typeof input.snapshot.backup !== 'string' ||
         !input.snapshot.chats || typeof input.snapshot.chats !== 'object') throw new Error('Perfil inválido.');
-    const ciphertext = seal(JSON.stringify(input.snapshot));
+    const profile = splitProfile(input.snapshot);
+    await registry(account, profile.state);
+    const ciphertext = seal(JSON.stringify(profile.snapshot));
     const result = input.revision === '0' ?
       await pool.query('INSERT INTO pia_server.profiles(account_id,ciphertext) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING revision',
         [account.id, ciphertext]) :
@@ -156,18 +267,34 @@ async function route(req, res) {
   const account = await identify(session, 'web');
   if (!account) return json(res, 401, { error: 'Entre com Google.' });
   if (req.method === 'GET' && path === '/api/status') return json(res, 200, status(account));
+  if (req.method === 'GET' && path === '/api/recording-folder') {
+    const id = recordingFolder(account);
+    const folders = id ? await recordingFolderPath(account, account.recording_drive_account, id) : [];
+    return json(res, 200, { id, path: folders });
+  }
   if (req.method === 'GET' && path === '/api/devices') return json(res, 200, await devices(account));
   if (req.method === 'GET' && path === '/api/secretary') return json(res, 200, await preferences(account));
+  if (req.method === 'GET' && path === '/api/connectors') return json(res, 200, await publicConnectors(account));
   if (req.method !== 'POST') return json(res, 405, { error: 'Método indisponível.' });
   if (req.headers.origin !== origin) return json(res, 403, { error: 'Origem inválida.' });
   const data = await body(req);
+  if (path === '/api/connectors/save') return json(res, 200, await saveConnector(account, data));
+  if (path === '/api/connectors/storage-credential') return json(res, 200, await storageCredential(account, data));
+  if (path === '/api/connectors/bot-credential') return json(res, 200, await botCredential(account, data.provider));
+  if (path === '/api/connectors/remove') return json(res, 200, await removeConnector(account, data));
+  if (path === '/api/connectors/oauth') return json(res, 200, await oauthStart(account, data.provider));
+  if (path === '/api/connectors/test') return json(res, 200, await testConnector(account, data));
+  if (path === '/api/connectors/discord-link') {
+    const application = runtimes.get(account.id)?.runtime.client.application?.id;
+    return json(res, 200, await enableDiscordLink(account, application));
+  }
   if (path === '/api/secretary') return json(res, 200, await configure(account, data));
   if (path === '/api/devices/pair') return json(res, 200, await pair(account, data.name));
   if (path === '/api/devices/revoke') return json(res, 200, await revoke(account, data.id));
   if (path === '/api/rules') {
     const rules = validateRules(data.rules);
     await pool.query('UPDATE pia_server.accounts SET rules=$2 WHERE id=$1', [account.id, JSON.stringify(rules)]);
-    return json(res, 200, { ok: true });
+    return json(res, 200, { ok: true, rules });
   }
   if (path === '/api/discord') {
     const token = typeof data.token === 'string' ? data.token.trim() : '';
@@ -186,6 +313,14 @@ async function route(req, res) {
     }
     return json(res, 200, { ok: true });
   }
+  if (path === '/api/recording-folders') return json(res, 200, await recordingFolders(account, data));
+  if (path === '/api/recording-folder') {
+    const folder = await recordingDestination(account, data);
+    await pool.query(`UPDATE pia_server.accounts SET recording_folder_id=$2,
+      recording_folder_name=$3, recording_drive_account=$4 WHERE id=$1`,
+    [account.id, folder.id, folder.name, data.identity || null]);
+    return json(res, 200, folder);
+  }
   if (path === '/api/drive/folder') {
     if (account.folder_id) return json(res, 200, { id: account.folder_id });
     const client = await pool.connect();
@@ -200,10 +335,10 @@ async function route(req, res) {
     finally { client.release(); }
   }
   if (path === '/api/recordings/stop') {
-    const stopped = runtimes.get(account.id)?.runtime.stop(data.channelId);
+    const stopped = [...runtimes.values()].some(({ runtime }) => runtime.stop(data.channelId, account.id, { label: 'Painel PIA Server' }));
     return json(res, stopped ? 200 : 404, stopped ? { ok: true } : { error: 'Gravação ativa não encontrada.' });
   }
-  if (path === '/api/mcp/token') return json(res, 200, { token: await accountSession(account.id, 'mcp', 24 * 30) });
+  if (path === '/api/mcp/token') return json(res, 200, await issueMcpToken(account.id, data.expiresInDays));
   if (path === '/api/mcp/revoke') {
     await pool.query("DELETE FROM pia_server.sessions WHERE account_id=$1 AND purpose='mcp'", [account.id]);
     return json(res, 200, { ok: true });
@@ -225,34 +360,50 @@ async function route(req, res) {
 const uploads = new Set();
 async function reconcile() {
   await monitor();
+  const { rows: links } = await pool.query('SELECT guild_id, bot_account_id, account_id FROM pia_server.discord_guild_links');
   const { rows } = await pool.query('SELECT * FROM pia_server.accounts');
+  const accounts = new Map(rows.map((account) => [account.id, account]));
+  const destinations = new Map();
+  for (const link of links) {
+    if (!accounts.has(link.account_id)) continue;
+    if (!destinations.has(link.bot_account_id)) destinations.set(link.bot_account_id, new Map());
+    destinations.get(link.bot_account_id).set(link.guild_id, accounts.get(link.account_id));
+  }
   for (const account of rows) {
     if (closing) return;
+    const routes = destinations.get(account.id) || new Map();
     if (!recovered.has(account.id)) { recover(account); recovered.add(account.id); }
     const previous = runtimes.get(account.id);
     if (previous?.encrypted !== account.discord_token) {
       previous?.runtime.close();
       runtimes.delete(account.id);
       if (account.discord_token) runtimes.set(account.id, {
-        encrypted: account.discord_token, runtime: new DiscordRecorder(account, unseal(account.discord_token)),
+        encrypted: account.discord_token, runtime: new DiscordRecorder(account, unseal(account.discord_token), routes),
       });
     } else if (previous) {
-      const changed = JSON.stringify(previous.runtime.account.rules) !== JSON.stringify(account.rules) ||
-        previous.runtime.account.folder_id !== account.folder_id;
       previous.runtime.account = account;
-      if (changed) previous.runtime.evaluate();
+      previous.runtime.setDestinations(routes);
+    }
+    const items = recordings(account).sort((a, b) => a.meta.startedAt.localeCompare(b.meta.startedAt));
+    for (const { dir, meta } of items) {
+      if (meta.state === 'recording' || !meta.editUntil) continue;
+      const runtime = runtimes.get(meta.botAccountId)?.runtime;
+      if (runtime?.client.isReady()) runtime.panels.finish(meta, () => saveRecordingEdits(dir, meta));
     }
     if (uploads.has(account.id) || !account.drive_refresh) continue;
-    const next = recordings(account).find(({ meta }) => meta.state === 'queued' && (meta.retryAt || 0) <= Date.now());
-    if (next) {
+    const now = Date.now();
+    const sidecar = items.find(({ meta }) => needsSidecar(meta, now));
+    const next = sidecar ? null : items.find(({ meta }) => meta.state === 'queued' && (meta.retryAt || 0) <= now);
+    if (next || sidecar) {
       uploads.add(account.id);
-      processRecording(account, next).catch(() => console.error('Falha na fila de gravação.'))
+      (next ? processRecording(account, next) : processRecordingSidecar(account, sidecar)).catch(() => console.error('Falha na fila de gravação.'))
         .finally(() => uploads.delete(account.id));
     }
   }
 }
 
 await migrate();
+await migrateConnectorRows();
 const server = createServer((req, res) => {
   route(req, res).catch((error) => {
     if (res.headersSent) { res.end(); return; }

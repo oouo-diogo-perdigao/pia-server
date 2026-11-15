@@ -1,56 +1,101 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-mantine-color-scheme="dark">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PIA Server</title>
-<style>
-  :root { color-scheme: dark; font: 16px system-ui; background: #12121d; color: #f3efff }
-  body { max-width: 55rem; margin: 2rem auto; padding: 0 1rem }
-  section { background: #1d1b2e; border: 1px solid #413b61; border-radius: 12px; padding: 1rem; margin: 1rem 0 }
-  button, input, textarea { font: inherit; padding: .6rem; border: 1px solid #706b94; border-radius: 6px; margin: .25rem 0 }
-  button, a { color: #d8c6ff } button { cursor: pointer }
-  label { display: block } textarea { width: 96%; font-family: monospace }
-  pre { white-space: pre-wrap; overflow-wrap: anywhere } [hidden] { display: none }
-</style>
-<h1>PIA Server</h1>
+<link rel="icon" type="image/svg+xml" href="/pia.svg">
+<link rel="stylesheet" href="/mantine.css">
+{{mantine-theme}}
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/login.css">
+<h1 class="brand"><img src="/pia.svg" alt="" width="32" height="32"> <span>PIA <small>Server</small></span></h1>
 <p id="feedback" role="status"></p>
-<section id="login" hidden><a href="/auth/google">Entrar com Google</a></section>
+<main id="login" class="pia-login" hidden>
+  <section class="pia-login-card" aria-labelledby="login-title">
+    <img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64">
+    <h2 id="login-title">Entrar na PIA Server</h2>
+    <p>Acesse suas contas, gravações e computadores em um só lugar.</p>
+    <a href="/auth/google" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>
+  </section>
+</main>
 <main id="panel" hidden>
-  <p id="account"></p><button id="logout">Sair</button>
-  <section>
+  <aside>
+    <nav aria-label="Navegação">
+      {{rail:recordings}}
+      <a href="#secretary" class="rail-icon" title="Secretária" aria-label="Secretária"><img src="/secretary.svg" width="28" height="28" alt=""></a>
+      {{rail:devices}}
+      {{rail:mcp}}
+      {{rail:admin}}
+    </nav>
+    <div class="rail-bottom">
+      {{rail:connectors}}
+      <details id="account-menu">
+        <summary id="account" class="account-avatar" aria-label="Minha conta" title="Minha conta"><img id="account-picture" alt="" referrerpolicy="no-referrer" hidden><span id="account-initial"></span></summary>
+        <div class="account-actions">
+          <span id="account-email"></span>
+          <button id="logout" type="button" class="account-logout">{{icon:LogOut}} Sair</button>
+        </div>
+      </details>
+    </div>
+  </aside>
+  <header class="pane-header"><h2 id="page-title"></h2></header>
+  <div class="content">
+  <section data-page="recordings">
     <h2>Bot Discord e Google Drive</h2>
-    <label>Token do bot <input id="discord" type="password" autocomplete="off"></label>
-    <button id="save-discord">Conectar bot</button>
-    <button id="drive">Criar pasta de gravações no Drive</button>
+    <p id="recording-destination">Nenhuma pasta selecionada.</p>
+    <button id="drive">Escolher pasta de gravações</button>
+    <dialog id="drive-picker" aria-labelledby="drive-picker-title">
+      <h3 id="drive-picker-title">Pasta de gravações no Google Drive</h3>
+      <p>Para encontrar mais pastas, autorize uma conta em <a href="#connectors/google" id="drive-google-settings">Conectores / Google</a>.</p>
+      <label>Conta Google <select id="drive-account"></select></label>
+      <div id="drive-path" class="drive-path" aria-label="Caminho da pasta"></div>
+      <ul id="drive-folders" class="drive-folders"></ul>
+      <button id="drive-more" hidden>Carregar mais</button>
+      <p id="drive-picker-feedback" role="status"></p>
+      <label>Nome da nova pasta <input id="drive-new-folder" maxlength="120"></label>
+      <div class="drive-picker-actions">
+        <button id="drive-create">Criar e usar nova pasta</button>
+        <button id="drive-select">Usar esta pasta</button>
+        <button id="drive-close">Fechar</button>
+      </div>
+    </dialog>
     <p id="connections"></p><a id="folder" hidden target="_blank" rel="noopener">Abrir pasta de gravações</a>
   </section>
-  <section>
+  <section data-page="recordings">
     <h2>Regras de gravação</h2>
     <p>Sem regras, o bot não grava. Use os IDs copiados com o modo desenvolvedor do Discord. O canal de aviso precisa ser visível aos participantes. Uma lista vazia de participantes permite iniciar quando qualquer pessoa completar o mínimo.</p>
     <label>Regras em JSON <textarea id="rules" rows="12" spellcheck="false"></textarea></label>
     <button id="example">Inserir exemplo</button>
-    <button id="save-rules">Salvar regras</button>
+    <button id="save-rules" disabled>Salvar regras</button>
   </section>
-  <section>
+  <section data-page="recordings">
     <h2>Gravações e uploads</h2>
     <button id="refresh">Atualizar</button>
     <ul id="recordings"></ul>
   </section>
-  <section>
+  <section data-page="mcp">
     <h2>MCP</h2>
-    <p>Use <code>/mcp</code> neste domínio. O token da conta expira em 30 dias.</p>
+    <p>Use <code>/mcp</code> neste domínio. Escolha a validade ao emitir um token.</p>
+    <label>Validade
+      <select id="mcp-expiration">
+        <option value="30">30 dias</option><option value="7">7 dias</option>
+        <option value="90">90 dias</option><option value="custom">Personalizada</option>
+        <option value="never">Sem expiração</option>
+      </select>
+    </label>
+    <label id="mcp-custom-expiration" hidden>Dias de validade <input id="mcp-days" type="number" min="1" max="3650" step="1" value="30" required></label>
     <button id="mcp">Emitir token MCP</button>
+    <p id="mcp-issued-expiration" role="status"></p>
     <button id="mcp-revoke">Revogar tokens MCP</button>
     <pre id="token"></pre>
   </section>
-  <section>
+  <section data-page="devices">
     <h2>Computadores pareados</h2>
-    <label>Nome do computador <input id="device-name" maxlength="60"></label>
-    <button id="pair-device">Gerar token de pareamento</button>
-    <pre id="device-token"></pre>
+    <p>Entre com Google na PIA desktop para conectar um computador a esta conta.</p>
+    <button id="prepare-device-drive">Preparar pasta para arquivos dos computadores</button>
     <ul id="devices"></ul>
   </section>
-  <section>
+  <section data-page="secretary">
     <h2>Secretária</h2>
     <label><input type="checkbox" id="gmail-watch"> Avisar sobre novos e-mails da caixa de entrada</label>
     <label><input type="checkbox" id="calendar-watch"> Avisar sobre compromissos novos, alterados e próximos</label>
@@ -58,11 +103,79 @@
     <button id="secretary-save">Salvar Secretária</button>
     <p id="secretary-error"></p>
   </section>
-  <section id="admin" hidden>
+  <section id="admin" data-page="admin" hidden>
     <h2>Contas autorizadas</h2>
     <label>E-mail Google <input id="email" type="email"></label>
     <button id="add-account">Autorizar conta</button>
   </section>
+  <section data-page="connectors">
+    <p>Gerencie aqui as contas usadas pelos computadores pareados.</p>
+    <div class="connector-icons" aria-label="Escolher conector">
+      {{connector:google}}
+      {{connector:microsoft}}
+      {{connector:storage}}
+      {{connector:discord}}
+      {{connector:taverns}}
+    </div>
+    <div class="connector-panel" data-connector-panel="google"><h3>Google</h3>
+      <ul id="google-accounts"></ul>
+      <button id="google-add">Autorizar conta Google</button>
+    </div>
+    <div class="connector-panel" data-connector-panel="microsoft" hidden><h3>Microsoft</h3>
+      <ul id="microsoft-accounts"></ul>
+      <label>Client ID <input id="microsoft-client"></label>
+      <label>Client secret <input id="microsoft-secret" type="password" autocomplete="new-password"></label>
+      <button id="microsoft-save">Salvar cliente OAuth</button>
+      <button id="microsoft-add">Autorizar conta Microsoft</button>
+    </div>
+    <div class="connector-panel" data-connector-panel="storage" hidden><h3>Object Storage</h3>
+      <label>Conta <select id="storage-account"></select></label>
+      <div class="fields">
+        <label>Nome <input id="storage-name"></label>
+        <label>Tipo <select id="storage-type"><option value="s3">S3</option><option value="r2">R2</option><option value="compatible">Compatível</option></select></label>
+        <label>Endpoint <input id="storage-endpoint" type="url"></label>
+        <label>URL pública <input id="storage-public" type="url"></label>
+        <label>Bucket padrão <input id="storage-bucket"></label>
+        <label>Região <input id="storage-region"></label>
+        <label>Cor <input id="storage-color" type="color" value="#9b7aff"></label>
+        <label>Access Key <input id="storage-access" type="text" autocomplete="off" spellcheck="false"></label>
+        <div class="secret-field">
+          <label>Secret Key <input id="storage-secret" type="password" autocomplete="new-password"></label>
+          <button id="storage-reveal" type="button" aria-label="Mostrar Secret Key" aria-pressed="false" title="Mostrar Secret Key" hidden>{{icon:Eye}}
+          </button>
+        </div>
+      </div>
+      <p>Deixe as chaves em branco para manter as que já estão salvas.</p>
+      <label><input type="checkbox" id="storage-default"> Conta padrão</label>
+      <button id="storage-save">Salvar conta</button>
+      <button id="storage-remove">Remover conta</button>
+    </div>
+    <div class="connector-panel" data-connector-panel="discord" hidden><h3>Discord <span id="discord-state"></span></h3>
+      <div class="secret-field">
+        <label>Token do bot <input id="discord" type="password" autocomplete="new-password"></label>
+        <button id="discord-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>{{icon:Eye}}
+          </button>
+      </div>
+      <button id="save-discord">Conectar bot</button>
+      <label>ID do canal padrão <input id="discord-channel" inputmode="numeric"></label>
+      <button id="discord-save-channel">Salvar canal</button>
+      <button id="discord-link">Habilitar /link para administradores</button>
+      <button id="discord-test">Enviar mensagem de teste</button>
+      <button id="discord-remove">Remover bot</button>
+    </div>
+    <div class="connector-panel" data-connector-panel="taverns" hidden><h3>Taverns <span id="taverns-state"></span></h3>
+      <div class="secret-field">
+        <label>Token do bot <input id="taverns-token" type="password" autocomplete="new-password"></label>
+        <button id="taverns-reveal" type="button" aria-label="Mostrar token do bot" aria-pressed="false" title="Mostrar token do bot" hidden>{{icon:Eye}}
+          </button>
+      </div>
+      <button id="taverns-save">Salvar bot</button>
+      <button id="taverns-remove">Remover bot</button>
+      <label>Destino de teste (ID da taverna/ID do canal) <input id="taverns-destination"></label>
+      <button id="taverns-test">Enviar mensagem de teste</button>
+    </div>
+  </section>
+  </div>
 </main>
 <script type="module" src="/ui.js"></script>
 </html>

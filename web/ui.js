@@ -1,6 +1,10 @@
 const element = (id) => document.getElementById(id);
 const say = (text) => { element('feedback').textContent = text; };
-let edited = false;
+let savedRules = null;
+let savingRules = false;
+let selectedDriveAccount = '';
+const rulesDirty = () => savedRules !== null && element('rules').value !== savedRules;
+function updateRulesButton() { element('save-rules').disabled = savingRules || !rulesDirty(); }
 
 async function api(path, data) {
   const response = await fetch('/api/' + path, data === undefined ? {} : {
@@ -22,18 +26,57 @@ function on(id, action) {
   };
 }
 
+let destinationRequest = 0;
+let currentRecordingFolder;
+let destinationLabel;
+async function showRecordingPath() {
+  const id = currentRecordingFolder;
+  const request = ++destinationRequest;
+  if (!id) return;
+  const label = element('recording-destination');
+  try {
+    const result = await api('recording-folder');
+    if (request === destinationRequest && result.id === id && result.path.length)
+      label.textContent = result.path.join(' / ');
+  } catch {
+    if (request === destinationRequest) label.textContent = destinationLabel + ' · caminho indisponível';
+  }
+}
+
 async function refresh() {
   const state = await api('status');
   element('panel').hidden = false;
   element('login').hidden = true;
   element('admin').hidden = !state.admin;
-  element('account').textContent = state.email;
+  element('admin-link').hidden = !state.admin;
+  element('account').title = state.email;
+  element('account-email').textContent = state.email;
+  element('account-initial').textContent = state.email[0]?.toUpperCase() || '';
+  const picture = element('account-picture');
+  if (state.picture) {
+    if (picture.getAttribute('src') !== state.picture) picture.src = state.picture;
+  } else {
+    picture.removeAttribute('src');
+    picture.hidden = true;
+    element('account-initial').hidden = false;
+  }
   element('connections').textContent = 'Discord: ' + (state.discordConnected ? 'conectado' :
     state.discordError || (state.discordConfigured ? 'conectando' : 'aguardando token')) +
     ' · Google Drive: ' + (state.driveConnected ? 'autorizado' : 'aguardando autorização');
   element('folder').hidden = !state.folderId;
   if (state.folderId) element('folder').href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(state.folderId);
-  if (!edited) element('rules').value = JSON.stringify(state.rules, null, 2);
+  selectedDriveAccount = state.recordingDriveAccount || 'server-google-primary';
+  currentRecordingFolder = state.folderId;
+  destinationRequest++;
+  destinationLabel = state.folderId ?
+    (state.folderName || 'Pasta de gravações já configurada') : 'Nenhuma pasta selecionada.';
+  element('recording-destination').textContent = destinationLabel;
+  if (!location.hash || location.hash === '#recordings') void showRecordingPath();
+  if (!rulesDirty() && !savingRules) {
+    savedRules = JSON.stringify(state.rules, null, 2);
+    element('rules').value = savedRules;
+  }
+  updateRulesButton();
   element('recordings').replaceChildren(...state.recordings.map((item) => {
     const li = document.createElement('li');
     li.textContent = item.name + ' · ' + item.state + (item.error ? ' · ' + item.error : '') +
@@ -66,38 +109,146 @@ async function refresh() {
   }));
 }
 
-element('rules').oninput = () => { edited = true; };
+element('rules').oninput = updateRulesButton;
 on('example', () => {
-  edited = true;
   element('rules').value = JSON.stringify([{
     guildId: '', channelId: '', noticeChannelId: '', minPeople: 2, triggerUsers: [], emptySeconds: 30,
   }], null, 2);
+  updateRulesButton();
 });
 on('save-discord', async () => {
-  await api('discord', { token: element('discord').value });
+  const token = botSecrets.discord.edited();
+  if (!token) throw new Error('Informe um novo token do Discord.');
+  await api('discord', { token });
   element('discord').value = '';
+  await refreshConnectors();
   say('Bot salvo.');
   await refresh();
 });
-on('drive', async () => { await api('drive/folder', {}); await refresh(); });
-on('save-rules', async () => {
-  await api('rules', { rules: JSON.parse(element('rules').value) });
-  edited = false;
-  say('Regras salvas.');
-  await refresh();
+let drivePath = [];
+let drivePage = null;
+let driveRequest = 0;
+const drivePicker = element('drive-picker');
+const rootFolder = { id: 'root', name: 'Meu Drive' };
+
+async function showDriveFolders(path, cursor) {
+  const version = ++driveRequest;
+  const feedback = element('drive-picker-feedback');
+  const list = element('drive-folders');
+  const identity = element('drive-account').value;
+  drivePath = path;
+  drivePage = null;
+  element('drive-select').disabled = true;
+  element('drive-create').disabled = true;
+  element('drive-more').hidden = true;
+  if (!cursor) list.replaceChildren();
+  element('drive-path').replaceChildren(...path.map((folder, index) => {
+    const button = document.createElement('button');
+    button.textContent = folder.name;
+    button.onclick = () => showDriveFolders(path.slice(0, index + 1));
+    return button;
+  }));
+  feedback.textContent = 'Carregando pastas…';
+  try {
+    const result = await api('recording-folders', { identity, folder: path.at(-1).id, cursor });
+    if (version !== driveRequest || !drivePicker.open) return;
+    drivePage = result;
+    for (const folder of result.folders) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.textContent = folder.name;
+      button.onclick = () => showDriveFolders([...path, folder]);
+      item.append(button);
+      list.append(item);
+    }
+    element('drive-select').disabled = !result.current.writable;
+    element('drive-create').disabled = !(result.current.writable || result.current.canCreate);
+    element('drive-more').hidden = !result.cursor;
+    feedback.textContent = !list.children.length ? 'Nenhuma subpasta disponível nesta conta.' : '';
+  } catch (error) {
+    if (version === driveRequest) feedback.textContent = error.message;
+  }
+}
+
+on('drive', async () => {
+  const state = await api('connectors');
+  const accounts = [...(state.primaryGoogle ? [state.primaryGoogle] : []), ...state.google];
+  if (!accounts.length) throw new Error('Autorize uma conta em Conectores / Google.');
+  const select = element('drive-account');
+  select.replaceChildren(...accounts.map((account) =>
+    new Option(account.email || account.label || account.id, account.id)));
+  if (accounts.some((account) => account.id === selectedDriveAccount)) select.value = selectedDriveAccount;
+  element('drive-new-folder').value = '';
+  drivePicker.showModal();
+  await showDriveFolders([rootFolder]);
+});
+element('drive-account').onchange = () => showDriveFolders([rootFolder]);
+element('drive-close').onclick = () => drivePicker.close();
+element('drive-google-settings').onclick = () => drivePicker.close();
+element('drive-more').onclick = () => showDriveFolders(drivePath, drivePage?.cursor);
+async function saveDriveFolder(name) {
+  const current = drivePage?.current;
+  if (!(current?.writable || (name && current?.canCreate))) return;
+  element('drive-select').disabled = true;
+  element('drive-create').disabled = true;
+  try {
+    await api('recording-folder', { identity: element('drive-account').value, folder: current.id, name });
+    drivePicker.close();
+    await refresh();
+    say('Pasta das novas gravações salva.');
+  } catch (error) {
+    element('drive-picker-feedback').textContent = error.message;
+  } finally {
+    element('drive-select').disabled = !drivePage?.current.writable;
+    element('drive-create').disabled = !(drivePage?.current.writable || drivePage?.current.canCreate);
+  }
+}
+element('drive-select').onclick = () => saveDriveFolder();
+element('drive-create').onclick = () => {
+  const name = element('drive-new-folder').value.trim();
+  if (!name) {
+    element('drive-picker-feedback').textContent = 'Informe o nome da nova pasta.';
+    return;
+  }
+  void saveDriveFolder(name);
+};
+
+element('save-rules').onclick = async () => {
+  if (savingRules || !rulesDirty()) return;
+  savingRules = true;
+  const draft = element('rules').value;
+  updateRulesButton();
+  try {
+    const result = await api('rules', { rules: JSON.parse(draft) });
+    savedRules = JSON.stringify(result.rules, null, 2);
+    if (element('rules').value === draft) element('rules').value = savedRules;
+    say('Regras salvas.');
+  } catch (error) { say(error.message); }
+  finally { savingRules = false; updateRulesButton(); }
+};
+on('prepare-device-drive', async () => {
+  await api('drive/folder', {});
+  say('Pasta para arquivos dos computadores preparada.');
 });
 on('refresh', refresh);
+element('mcp-expiration').onchange = (event) => {
+  element('mcp-custom-expiration').hidden = event.target.value !== 'custom';
+};
 on('mcp', async () => {
-  element('token').textContent = (await api('mcp/token', {})).token;
+  const duration = element('mcp-expiration').value;
+  const custom = element('mcp-days');
+  if (duration === 'custom' && !custom.reportValidity()) return;
+  const expiresInDays = duration === 'never' ? null : Number(duration === 'custom' ? custom.value : duration);
+  const issued = await api('mcp/token', { expiresInDays });
+  element('token').textContent = issued.token;
+  element('mcp-issued-expiration').textContent = issued.expiresAt ?
+    'Válido até ' + new Date(issued.expiresAt).toLocaleString() : 'Sem expiração.';
 });
 on('mcp-revoke', async () => {
   await api('mcp/revoke', {});
   element('token').textContent = '';
+  element('mcp-issued-expiration').textContent = '';
   say('Tokens MCP revogados.');
-});
-on('pair-device', async () => {
-  element('device-token').textContent = (await api('devices/pair', { name: element('device-name').value })).token;
-  await refresh();
 });
 on('logout', async () => { await api('logout', {}); location.reload(); });
 on('add-account', async () => {
@@ -105,7 +256,7 @@ on('add-account', async () => {
   element('email').value = '';
   say('Conta autorizada.');
 });
-refresh().catch(async () => {
+refresh().then(navigate).catch(async () => {
   element('login').hidden = false;
   const health = await fetch('/health').then((r) => r.json()).catch(() => null);
   if (!health?.googleLogin) say('O login Google aguarda a configuração do servidor.');
@@ -122,3 +273,220 @@ on('secretary-save', async () => {
   element('secretary-error').textContent = '';
   say('Secretária salva.');
 });
+let connectorState;
+const input = (id) => element(id).value;
+
+let storageVersion = 0;
+
+function secretField(fieldId, toggleId, label, load) {
+  const field = element(fieldId);
+  const toggle = element(toggleId);
+  let revealed = '';
+  let version = 0;
+
+  function visibility(visible) {
+    const title = (visible ? 'Ocultar ' : 'Mostrar ') + label;
+    toggle.setAttribute('aria-pressed', String(visible));
+    toggle.setAttribute('aria-label', title);
+    toggle.title = title;
+    field.type = visible ? 'text' : 'password';
+  }
+
+  function hide() {
+    version++;
+    if (field.value === revealed) field.value = '';
+    revealed = '';
+    visibility(false);
+  }
+
+  function configured(hasSecret) {
+    field.placeholder = hasSecret ? '********' : '';
+    toggle.hidden = !hasSecret;
+  }
+
+  on(toggleId, async () => {
+    if (field.type === 'text') return hide();
+    if (!field.value) {
+      const request = version;
+      const secret = await load();
+      if (request !== version || field.value || !secret) return;
+      field.value = revealed = secret;
+    }
+    visibility(true);
+  });
+
+  return {
+    hide, configured,
+    reset() { hide(); field.value = ''; configured(false); },
+    edited() { return field.value === revealed ? '' : field.value; },
+  };
+}
+
+const storageSecret = secretField('storage-secret', 'storage-reveal', 'Secret Key', async () =>
+  (await api('connectors/storage-credential', { id: input('storage-account'), reveal: true })).secretKey);
+const botSecrets = Object.fromEntries([['discord', 'discord'], ['taverns', 'taverns-token']].map(([provider, field]) =>
+  [provider, secretField(field, provider + '-reveal', 'token do bot', async () =>
+    (await api('connectors/bot-credential', { provider })).token)]));
+
+async function storageFields() {
+  const version = ++storageVersion;
+  storageSecret.reset();
+  const access = element('storage-access');
+  const id = input('storage-account');
+  const account = connectorState.objectStorage.find((item) => item.id === id);
+  for (const [field, value] of Object.entries({
+    name: account?.name, type: account?.provider || 's3', endpoint: account?.endpoint,
+    public: account?.public_url, bucket: account?.bucket, region: account?.region,
+    color: account?.color || '#9b7aff', access: '',
+  })) element('storage-' + field).value = value || '';
+  element('storage-default').checked = Boolean(id && id === connectorState.storageDefault);
+  element('storage-remove').hidden = !id;
+  if (!id) return;
+  const data = await api('connectors/storage-credential', { id });
+  if (version !== storageVersion) return;
+  if (!access.value) access.value = data.accessKey;
+  storageSecret.configured(data.hasSecret);
+}
+
+async function refreshConnectors(selectedId = input('storage-account')) {
+  connectorState = await api('connectors');
+  for (const [provider, control] of Object.entries(botSecrets)) {
+    control.hide();
+    control.configured(connectorState[provider].configured);
+  }
+  for (const provider of ['google', 'microsoft']) {
+    const primary = provider === 'google' && connectorState.primaryGoogle;
+    const accounts = primary ? [primary, ...connectorState.google] : connectorState[provider];
+    element(provider + '-accounts').replaceChildren(...accounts.map((account) => {
+      const item = document.createElement('li');
+      item.textContent = account.email || account.label || account.id;
+      if (account === primary) item.append(' · conta de login');
+      else {
+        const button = document.createElement('button');
+        button.textContent = 'Desconectar';
+        button.onclick = () => removeAccount(provider, account.id).catch((error) => say(error.message));
+        item.append(' ', button);
+      }
+      return item;
+    }));
+  }
+  element('microsoft-client').value = connectorState.microsoftClient;
+  element('discord-state').textContent = connectorState.discord.configured ? '· configurado' : '';
+  element('discord-channel').value = connectorState.discord.channel;
+  element('taverns-state').textContent = connectorState.taverns.configured ? '· configurado' : '';
+  const select = element('storage-account');
+  select.replaceChildren(new Option('Nova conta', ''), ...connectorState.objectStorage.map((item) => new Option(item.name, item.id)));
+  select.value = connectorState.objectStorage.some((item) => item.id === selectedId) ? selectedId : '';
+  await storageFields();
+}
+
+async function removeAccount(provider, id) {
+  if (!window.confirm('Remover este conector da sua conta?')) return;
+  await api('connectors/remove', { provider, id });
+  await refreshConnectors();
+  say('Conector removido.');
+}
+
+async function saveConnector(provider, data) {
+  const result = await api('connectors/save', { provider, ...data });
+  await refreshConnectors(result.id);
+  say('Configuração salva.');
+}
+
+for (const provider of ['google', 'microsoft']) {
+  on(provider + '-add', async () => { location.assign((await api('connectors/oauth', { provider })).url); });
+}
+on('microsoft-save', async () => {
+  await saveConnector('microsoft', { clientId: input('microsoft-client'), clientSecret: input('microsoft-secret') });
+  element('microsoft-secret').value = '';
+});
+on('discord-save-channel', () => saveConnector('discord', { channel: input('discord-channel') }));
+on('discord-link', async () => {
+  await api('connectors/discord-link', {});
+  say('Comando /link habilitado para administradores.');
+});
+on('discord-remove', async () => { await removeAccount('discord'); await refresh(); });
+on('taverns-save', async () => {
+  const token = botSecrets.taverns.edited();
+  if (!token) throw new Error('Informe um novo token do Taverns.');
+  await saveConnector('taverns', { token });
+  element('taverns-token').value = '';
+});
+on('taverns-remove', () => removeAccount('taverns'));
+for (const [provider, field] of [['discord', 'discord-channel'], ['taverns', 'taverns-destination']]) {
+  on(provider + '-test', async () => {
+    await api('connectors/test', { provider, destination: input(field).trim() });
+    say('Mensagem de teste enviada.');
+  });
+}
+element('storage-account').onchange = () => storageFields().catch((error) => say(error.message));
+on('storage-save', () => saveConnector('object_storage', {
+  id: input('storage-account'), name: input('storage-name'), type: input('storage-type'),
+  endpoint: input('storage-endpoint'), publicUrl: input('storage-public'), region: input('storage-region'),
+  bucket: input('storage-bucket'), color: input('storage-color'), accessKey: input('storage-access'),
+  secretKey: storageSecret.edited(), default: element('storage-default').checked,
+}));
+on('storage-remove', () => removeAccount('object_storage', input('storage-account')));
+
+const accountMenu = element('account-menu');
+document.addEventListener('click', (event) => {
+  if (!accountMenu.contains(event.target)) accountMenu.open = false;
+});
+accountMenu.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  accountMenu.open = false;
+  element('account').focus();
+});
+
+element('account-picture').onload = () => {
+  element('account-picture').hidden = false;
+  element('account-initial').hidden = true;
+};
+element('account-picture').onerror = () => {
+  element('account-picture').hidden = true;
+  element('account-initial').hidden = false;
+};
+
+function selectConnector(id) {
+  for (const [provider, control] of Object.entries(botSecrets))
+    if (id !== provider) control.hide();
+  if (id !== 'storage') storageSecret.hide();
+  for (const control of document.querySelectorAll('[data-connector]'))
+    control.setAttribute('aria-pressed', String(control.dataset.connector === id));
+  for (const panel of document.querySelectorAll('[data-connector-panel]'))
+    panel.hidden = panel.dataset.connectorPanel !== id;
+}
+
+for (const control of document.querySelectorAll('[data-connector]'))
+  control.onclick = () => selectConnector(control.dataset.connector);
+selectConnector('google');
+
+function navigate(event) {
+  const links = Array.from(document.querySelectorAll('aside a.rail-icon:not([hidden])'));
+  const [section, connector] = location.hash.split('/');
+  const current = links.find((link) => link.hash === section) || links[0];
+  const page = current.hash.slice(1);
+  element('page-title').textContent = current.getAttribute('aria-label');
+  for (const link of links) {
+    if (link === current) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  for (const section of document.querySelectorAll('[data-page]')) {
+    section.classList.toggle('page-hidden', section.dataset.page !== page);
+  }
+  if (page === 'recordings' && event) void showRecordingPath();
+  if (page === 'connectors') {
+    const id = connector === 'object_storage' ? 'storage' : connector;
+    if (id && Array.from(document.querySelectorAll('[data-connector]')).some((control) => control.dataset.connector === id)) {
+      selectConnector(id);
+    }
+    refreshConnectors().catch((error) => say(error.message));
+  }
+  else {
+    storageVersion++;
+    storageSecret.reset();
+    for (const control of Object.values(botSecrets)) control.reset();
+    element('storage-access').value = '';
+  }
+}
+window.addEventListener('hashchange', navigate);
