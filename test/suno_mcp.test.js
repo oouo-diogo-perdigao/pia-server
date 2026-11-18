@@ -210,8 +210,9 @@ describe('redact and leaky fake', () => {
     const { clips } = await generateOnce(mcp, { prompt: 'x' });
     await mcp.close();
     assert.match(clips[0].audio_url, /X-Amz-Signature/);
-    const red = redactSuno('falhou ' + clips[0].audio_url + ' Authorization: Bearer ' + fake.token + ' token=abc sig=1', [fake.token]);
-    assert.ok(!red.includes(fake.token) && !red.includes('fake-suno-signature') && !red.includes('abc'));
+    const red = redactSuno('falhou ' + clips[0].audio_url + ' Authorization: Bearer ' + fake.token + ' token=pia-redact-marker sig=1', [fake.token]);
+    // Marcador fixo: um trecho curto ('abc') podia aparecer no id aleatório clip-<hex> e quebrar o teste.
+    assert.ok(!red.includes(fake.token) && !red.includes('fake-suno-signature') && !red.includes('pia-redact-marker'));
     assert.match(red, /\[redacted\]/);
     assert.ok(!logged.some((line) => line.includes(fake.token) || line.includes('fake-suno-signature')));
   });
@@ -272,14 +273,15 @@ describe('polling and discovery with an inline stub', () => {
     assert.deepEqual(stub.toolCalls('create_song')[0].params.arguments, { gpt_description_prompt: 'samba', make_instrumental: true });
   });
 
-  test('transient polling failures never end the generation: backoff 5 s → 60 s, then it completes (batch tool)', async () => {
+  test('transient polling failures (5xx, 429, 408) never end the generation: backoff 5 s → 60 s, then it completes (batch tool)', async () => {
     let polls = 0;
     const stub = await startStub((message, send) => {
       if (message.method === 'tools/list') return send({ result: { tools: [GEN, BATCH] } });
       if (message.params.name === 'create_song') return send(text({ clips: [{ id: 'a', status: 'complete', audio_url: 'https://cdn.test/a.mp3' }, { id: 'b', status: 'queued' }] }));
       polls++;
-      if (polls <= 4) return send({}, 503); // 5xx
-      if (polls === 5) return send({ error: { code: -32603, message: 'boom Bearer t' } }); // erro de protocolo
+      if (polls <= 3) return send({}, 503); // 5xx
+      if (polls === 4) return send({ error: { code: -32000, message: 'Too many requests Bearer t' } }, 429); // rate limit
+      if (polls === 5) return send({}, 408);
       if (polls <= 7) return send(text({ clips: [{ id: 'b', status: 'streaming' }] })); // sem progresso
       return send(text({ clips: [{ id: 'b', status: 'complete', audio_url: 'https://cdn.test/b.mp3' }] }));
     });
@@ -292,6 +294,16 @@ describe('polling and discovery with an inline stub', () => {
     assert.equal(stub.toolCalls('create_song').length, 1);
     await mcp.close();
     await stub.close();
+  });
+
+  test('transient errors are classified as such; permanent ones are not', () => {
+    const { transientSunoError, SunoMcpError } = mcpLib;
+    const make = (code, detail, upstreamStatus) => new SunoMcpError(code, 'x', { detail, upstreamStatus });
+    for (const error of [make('suno_unavailable', 'network'), make('suno_unavailable', 'http_5xx', 503), make('suno_unavailable', 'rate_limited', 429),
+      make('suno_timeout', 'timeout'), make('suno_timeout', 'timeout', 408)]) assert.equal(transientSunoError(error), true, error.detail);
+    for (const error of [make('suno_no_credits', null, 402), make('suno_unavailable', 'protocol'), make('suno_unavailable', 'http_4xx', 403),
+      make('suno_unavailable', 'tool_error'), make('suno_credential_expired', null, 401), make('suno_cancelled', 'cancelled')])
+      assert.equal(transientSunoError(error), false, error.code + ' ' + error.detail);
   });
 
   test('a request timeout while polling is transient; progress resets the backoff to 5 s', async () => {
@@ -402,6 +414,162 @@ describe('polling and discovery with an inline stub', () => {
       assert.equal(identity.subject, 'u-2');
       assert.equal(identity.source, 'mcp_initialize_meta');
     } finally { sunoIdentity.mcpUrl = previous; await stub.close(); }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Polling com o fake da T3c (cenário `pending` + tool de status). O fake não
+// injeta erro HTTP na tool de status, então um proxy fino na frente dele troca
+// só as consultas escolhidas por uma resposta de erro; o resto vai ao fake.
+
+function startStatusProxy(target, statusName) {
+  const state = { inject: null, injected: 0 };
+  const server = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const raw = Buffer.concat(chunks);
+    let message = null;
+    try { message = JSON.parse(raw.toString() || 'null'); } catch { message = null; }
+    if (message?.method === 'tools/call' && message.params?.name === statusName && state.inject) {
+      const out = state.inject(message.params.arguments || {});
+      if (out) {
+        state.injected += 1;
+        res.writeHead(out.status || 200, { 'Content-Type': 'application/json' });
+        return res.end(typeof out.raw === 'string' ? out.raw : JSON.stringify({ jsonrpc: '2.0', id: message.id, ...out.body }));
+      }
+    }
+    const headers = {};
+    for (const name of ['authorization', 'content-type', 'accept', 'mcp-session-id', 'mcp-protocol-version'])
+      if (req.headers[name]) headers[name] = req.headers[name];
+    const upstream = await fetch(target, { method: req.method, headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : raw });
+    const out = {};
+    for (const name of ['content-type', 'mcp-session-id']) if (upstream.headers.get(name)) out[name] = upstream.headers.get(name);
+    res.writeHead(upstream.status, out);
+    res.end(Buffer.from(await upstream.arrayBuffer()));
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
+    url: 'http://127.0.0.1:' + server.address().port + '/mcp', state,
+    close: () => new Promise((done) => { server.closeAllConnections(); server.close(done); }),
+  })));
+}
+
+describe('polling with the T3c fake (pending scenario + status tool)', () => {
+  let fake, proxy;
+  beforeEach(fast);
+  afterEach(async () => { await proxy?.close(); await fake?.close(); proxy = null; fake = null; });
+  const start = async (options) => {
+    fake = await startFakeSunoMcp({ scenarios: 'pending', requireSession: true, ...options });
+    proxy = await startStatusProxy(fake.url, fake.statusTool?.name ?? null);
+    return new SunoMcpClient({ token: fake.token, url: proxy.url });
+  };
+  const ids = () => fake.clips().map((clip) => clip.id);
+
+  test('pending clips poll until ready or failed; the failed one comes back without audio', async () => {
+    const mcp = await start({ statusTool: 'get_clip', pendingPolls: 2, pendingFail: [2] });
+    const { clips } = await generateOnce(mcp, { prompt: 'x' });
+    assert.deepEqual(clips.map((clip) => clip.state), ['ready', 'failed']);
+    assert.ok(clips[0].audio_url && !clips[1].audio_url);
+    assert.equal(fake.generationCalls().length, 1, 'um único tools/call pago');
+    assert.equal(fake.statusCalls().length, 6, '3 rodadas × 2 clips (K=2 pendentes + a final)');
+    assert.deepEqual(sleeps, [5000, 10000, 20000]);
+    await mcp.close();
+  });
+
+  test('permanent errors end the polling with the ready tracks: 402, credits, 4xx, protocol', async () => {
+    const cases = [
+      ['402', 'suno_no_credits', 400, () => ({ status: 402, body: { error: { code: 402, message: 'Insufficient credits' } } })],
+      ['credits', 'suno_no_credits', 400, () => ({ body: { result: { isError: true, content: [{ type: 'text', text: 'Insufficient credits' }] } } })],
+      ['400', 'suno_unavailable', 502, () => ({ status: 400, body: {} })],
+      ['403', 'suno_unavailable', 502, () => ({ status: 403, body: {} })],
+      ['rpc', 'suno_unavailable', 502, () => ({ body: { error: { code: -32603, message: 'boom Bearer t' } } })],
+      ['garbage', 'suno_unavailable', 502, () => ({ raw: '{"jsonrpc":"2.0"' })],
+      ['tool_error', 'suno_unavailable', 502, () => ({ body: { result: { isError: true, content: [{ type: 'text', text: 'boom' }] } } })],
+    ];
+    for (const [name, code, status, reply] of cases) {
+      sleeps.length = 0;
+      const mcp = await start({ statusTool: 'get_clip', pendingPolls: 0 });
+      // 1ª rodada: o clip 1 vai ao fake e fica pronto; o clip 2 recebe o erro permanente.
+      proxy.state.inject = (args) => (args.clip_id === ids()[1] ? reply() : null);
+      await expectCode(generateOnce(mcp, { prompt: 'x' }), code, (error) => {
+        assert.equal(error.status, status, name);
+        assert.deepEqual(error.partial.map((clip) => [clip.id, clip.state]), [[ids()[0], 'ready']], name + ': prontas preservadas');
+        assert.ok(error.partial[0].audio_url);
+        assert.ok(!/Bearer|boom|Insufficient/.test(error.message), 'texto do Suno não vaza');
+      });
+      assert.equal(proxy.state.injected, 1, name + ': o polling para no erro');
+      assert.deepEqual(sleeps, [5000], name + ': sem backoff');
+      assert.equal(fake.generationCalls().length, 1);
+      await mcp.close();
+      await proxy.close(); await fake.close(); proxy = null; fake = null;
+    }
+  });
+
+  test('429, 408 and 5xx back off and retry (batch tool); ready tracks are kept and a pending clip may end failed', async () => {
+    const mcp = await start({ statusTool: 'get_clips', pendingPolls: 0, pendingFail: [2] });
+    const replies = [{ status: 503, body: {} }, { status: 500, body: {} }, { status: 429, body: { error: { code: -32000, message: 'Too many requests' } } },
+      { status: 408, body: {} }, { status: 502, body: {} }];
+    proxy.state.inject = () => replies.shift() || null;
+    const { clips } = await generateOnce(mcp, { prompt: 'x' });
+    assert.deepEqual(clips.map((clip) => clip.state), ['ready', 'failed']);
+    assert.equal(proxy.state.injected, 5);
+    assert.equal(fake.statusCalls().length, 1, 'uma consulta em lote chegou ao fake');
+    assert.deepEqual(sleeps, [5000, 10000, 20000, 40000, 60000, 60000]);
+    await mcp.close();
+  });
+
+  test('a 401 while polling refreshes and retries; a repeated 401 is suno_credential_expired with the ready tracks', async () => {
+    // Igual ao withSunoToken: um 401 renova o token e repete só aquela requisição; o segundo 401 expira.
+    let refreshes = 0;
+    const withToken = async (fn) => {
+      const outcome = await fn(fake.token);
+      if (outcome?.status !== 401) return outcome;
+      refreshes += 1;
+      const again = await fn(fake.token);
+      if (again?.status === 401) throw new mcpLib.SunoMcpError('suno_credential_expired', 'expirou', { upstreamStatus: 401 });
+      return again;
+    };
+    const unauthorized = { status: 401, body: { error: { code: -32001, message: 'Unauthorized' } } };
+    await start({ statusTool: 'get_clip', pendingPolls: 0 });
+    let mcp = new SunoMcpClient({ withToken, url: proxy.url });
+    let once = true;
+    proxy.state.inject = () => (once ? (once = false, unauthorized) : null);
+    const ok = await generateOnce(mcp, { prompt: 'x' });
+    assert.deepEqual(ok.clips.map((clip) => clip.state), ['ready', 'ready']);
+    assert.equal(refreshes, 1);
+    await mcp.close();
+    sleeps.length = 0;
+    mcp = new SunoMcpClient({ withToken, url: proxy.url });
+    const first = fake.clips().length;
+    proxy.state.inject = (args) => (args.clip_id === fake.clips()[first + 1]?.id ? unauthorized : null);
+    await expectCode(generateOnce(mcp, { prompt: 'x' }), 'suno_credential_expired', (error) => {
+      assert.deepEqual(error.partial.map((clip) => clip.id), [fake.clips()[first].id]);
+    });
+    assert.deepEqual(sleeps, [5000], 'credencial expirada não faz backoff');
+    await mcp.close();
+  });
+
+  test('tool_error scenarios on the paid call map to unavailable, credits and expired without leaking the text', async () => {
+    const mcp = await start({ scenarios: ['tool_error', 'tool_error_credits', 'tool_error_unauthorized'], leaky: true });
+    await expectCode(generateOnce(mcp, { prompt: 'x' }), 'suno_unavailable', (error) => assert.equal(error.detail, 'tool_error'));
+    await expectCode(generateOnce(mcp, { prompt: 'x' }), 'suno_no_credits');
+    await expectCode(generateOnce(mcp, { prompt: 'x' }), 'suno_credential_expired', (error) => assert.ok(!error.message.includes(fake.token)));
+    await mcp.close();
+  });
+
+  test('identity through account-me and every account envelope of the fake', async () => {
+    const previous = sunoIdentity.mcpUrl;
+    try {
+      for (const [accountTool, accountEnvelope] of [['account-me', 'user'], ['get_account', 'profile'], ['account-me', 'none'], ['get_account', 'account']]) {
+        const local = await startFakeSunoMcp({ accountTool, accountEnvelope, account: { id: 'suno-id-' + accountEnvelope, email: accountEnvelope + '@suno.test', label: 'Conta' } });
+        sunoIdentity.mcpUrl = local.url;
+        try {
+          const identity = await resolveSunoIdentity(local.token, { sources: ['mcp_get_account'] });
+          assert.equal(identity.subject, 'suno-id-' + accountEnvelope, accountTool + '/' + accountEnvelope);
+          assert.equal(identity.email, accountEnvelope + '@suno.test');
+          assert.equal(identity.source, 'mcp_get_account');
+        } finally { await local.close(); }
+      }
+    } finally { sunoIdentity.mcpUrl = previous; }
   });
 });
 

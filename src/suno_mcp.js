@@ -34,6 +34,7 @@ const CLIP_ID_FIELDS = ['id', 'clip_id', 'song_id', 'task_id'];
 const STATUS_ID_FIELDS = ['ids', 'clip_ids', 'id', 'clip_id', 'song_id', 'task_id'];
 const FAILED_STATES = new Set(['error', 'failed', 'failure', 'cancelled', 'canceled']);
 const AUTH_TEXT = /\bunauthori[sz]ed\b|\b(?:invalid|expired|revoked)[_ -]?(?:access[_ -]?|bearer[_ -]?)?token\b|\btoken[_ -]?(?:has[_ -]?)?(?:expired|invalid|revoked)\b|\bsign in\b/i;
+const RATE_TEXT = /rate[_ -]?limit|too many requests|\bthrottl/i;
 const CREDIT_TEXT = /insufficient[_ ]credits?|no credits|out of credits|not enough credits|credits? (?:exhausted|insufficient)|payment required|insufficient[_ ]balance/i;
 
 // ---------------------------------------------------------------------------
@@ -45,7 +46,7 @@ export class SunoMcpError extends SunoError {
     super(code, message, status ?? (code === 'suno_credential_expired' || code === 'suno_no_credits' ? 400 : 502));
     this.name = 'SunoMcpError';
     this.upstreamStatus = upstreamStatus;
-    this.detail = detail; // 'http_5xx' | 'timeout' | 'network' | 'protocol' | 'session' | 'cancelled' | 'tool_error'
+    this.detail = detail; // 'http_5xx' | 'rate_limited' | 'timeout' | 'network' | 'protocol' | 'http_4xx' | 'session' | 'cancelled' | 'tool_error'
   }
 }
 
@@ -75,7 +76,19 @@ function httpError(status) {
   if (status === 401) return authError();
   if (status === 402) return new SunoMcpError('suno_no_credits', sunoMcpMessages.credits, { upstreamStatus: 402 });
   if (status === 408 || status === 504) return Object.assign(timeoutError(), { upstreamStatus: status });
-  return unavailableError(status >= 500 ? 'http_5xx' : 'protocol', status);
+  if (status === 429) return unavailableError('rate_limited', 429);
+  return unavailableError(status >= 500 ? 'http_5xx' : status >= 400 ? 'http_4xx' : 'protocol', status);
+}
+
+// Falha do polling que merece backoff e nova tentativa: rede, timeout de uma
+// requisição, 5xx, 408 e 429. O resto (402, protocolo, outro 4xx, isError sem
+// rate limit) é permanente e encerra o polling.
+export function transientSunoError(error) {
+  if (!error || error.code === 'suno_credential_expired' || error.code === 'suno_no_credits' || error.code === 'suno_cancelled') return false;
+  if (error.code === 'suno_timeout') return true;
+  if (['network', 'http_5xx', 'rate_limited', 'timeout'].includes(error.detail)) return true;
+  const status = Number(error.upstreamStatus);
+  return status === 408 || status === 429 || status >= 500;
 }
 
 function rpcError(error, httpStatus) {
@@ -83,7 +96,9 @@ function rpcError(error, httpStatus) {
   const message = typeof error?.message === 'string' ? error.message : '';
   if (code === 401 || code === -32001 || httpStatus === 401 || AUTH_TEXT.test(message) && code !== -32602) return authError();
   if (code === 402 || httpStatus === 402 || CREDIT_TEXT.test(message)) return httpError(402);
-  if (httpStatus >= 500) return unavailableError('http_5xx', httpStatus);
+  if (httpStatus >= 500 || [408, 429, 504].includes(httpStatus)) return httpError(httpStatus);
+  if (code === 429 || RATE_TEXT.test(message)) return httpError(429);
+  if (httpStatus >= 400) return unavailableError('http_4xx', httpStatus);
   return protocolError();
 }
 
@@ -231,6 +246,7 @@ export class SunoMcpClient {
       const text = toolErrorText(result);
       if (AUTH_TEXT.test(text)) throw authError();
       if (CREDIT_TEXT.test(text)) throw httpError(402);
+      if (RATE_TEXT.test(text)) throw httpError(429);
       throw Object.assign(protocolError(), { detail: 'tool_error' });
     }
     return normalizeToolResult(result);
@@ -387,10 +403,12 @@ const cancelled = () => new SunoMcpError('suno_cancelled', sunoMcpMessages.cance
 // pendentes pela tool de status. Nunca repete o tools/call de geração. Não há
 // prazo total: o polling só termina com todos os clips em estado terminal, com
 // o cancelamento (signal -> suno_cancelled) ou com a credencial expirada depois
-// do refresh (suno_credential_expired). Qualquer outra falha do polling
-// (timeout de uma requisição, 5xx, rede, protocolo) é transitória: backoff e
-// nova tentativa. suno_timeout só sai do timeout de uma requisição HTTP fora
-// do polling (ex.: o tools/call inicial).
+// do refresh (suno_credential_expired; o 401 já passou por refresh e retry no
+// withToken). Só rede, timeout de uma requisição, 5xx, 408 e 429 são
+// transitórios (backoff e nova tentativa, sem limite). Erro permanente encerra
+// o polling: 402 -> suno_no_credits; protocolo ou outro 4xx -> suno_unavailable.
+// Em todo erro, `partial` leva os clips já prontos. suno_timeout só sai do
+// timeout de uma requisição HTTP fora do polling (ex.: o tools/call inicial).
 export async function generateOnce(client, { prompt, lyrics, duration, instrumental, signal, tools } = {}) {
   const found = discoverSunoTools(tools || await client.listTools());
   if (!found.generation) throw protocolError(sunoMcpMessages.noTool);
@@ -418,8 +436,13 @@ export async function generateOnce(client, { prompt, lyrics, duration, instrumen
       try { update = await client.callTool(found.status.name, callArgs, { timeoutMs: sunoMcp.requestTimeoutMs }); }
       catch (error) {
         const translated = translateSunoError(error, { signal });
-        if (translated.code === 'suno_credential_expired' || translated.code === 'suno_cancelled' || signal?.aborted)
-          throw withPartial(signal?.aborted ? cancelled() : translated);
+        if (signal?.aborted || translated.code === 'suno_cancelled') throw withPartial(cancelled());
+        if (!transientSunoError(translated)) {
+          // Permanente: o polling termina com o code do contrato (502 suno_unavailable para protocolo/4xx).
+          const final = translated.code === 'suno_no_credits' || translated.code === 'suno_credential_expired'
+            ? translated : unavailableError(translated.detail || 'protocol', translated.upstreamStatus ?? null);
+          throw withPartial(final);
+        }
         continue; // transitória: backoff e tenta de novo, sem limite de falhas
       }
       const byId = new Map(clips.map((clip) => [clipId(clip), clip]));

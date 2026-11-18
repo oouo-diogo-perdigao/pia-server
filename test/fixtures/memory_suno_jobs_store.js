@@ -8,7 +8,8 @@ export function createMemorySunoJobsStore(sunoStore) {
   const view = (row) => {
     if (!row) return null;
     const sa = row.suno_account_id ? sunoStore?.accounts.get(row.suno_account_id) : null;
-    const name = sa && String(sa.account_id) === String(row.account_id) ? sa.label || sa.suno_name || sa.suno_email || null : null;
+    const live = sa && String(sa.account_id) === String(row.account_id) ? sa.label || sa.suno_name || sa.suno_email || null : null;
+    const name = live || row.suno_account_name || null; // conta apagada: nome guardado na criação
     const { prompt, lyrics, ...rest } = row;
     void prompt; void lyrics;
     return { ...rest, suno_account_name: name,
@@ -25,7 +26,8 @@ export function createMemorySunoJobsStore(sunoStore) {
       generations.set(input.id, { id: input.id, account_id: input.account_id, client_id: input.client_id, source: 'suno',
         provider: 'suno_mcp', suno_account_id: input.suno_account_id, job_id: input.job_id, device_id: input.device_id,
         prompt: input.prompt, lyrics: input.lyrics, title: null, count: input.count, duration: input.duration,
-        instrumental: input.instrumental, state: 'queued', code: null, created: new Date(Date.now() + generations.size) });
+        instrumental: input.instrumental, state: 'queued', code: null, created: new Date(Date.now() + generations.size),
+        suno_account_name: view({ account_id: input.account_id, suno_account_id: input.suno_account_id }).suno_account_name });
       return { job: view(generations.get(input.id)), created: true };
     },
     async byClient(accountId, clientId) { return view(find((row) => String(row.account_id) === String(accountId) && row.client_id === clientId)); },
@@ -60,6 +62,15 @@ export function createMemorySunoJobsStore(sunoStore) {
       for (const row of generations.values()) if (active(row) && (accountId === null || String(row.account_id) === String(accountId))) { Object.assign(row, { state: 'interrupted', code: null }); ids.push(row.job_id); }
       return ids;
     },
+    // Mesma interface do pgTrackStore (src/suno_audio.js).
+    async findTrack(accountId, generationId, n) {
+      const row = generations.get(generationId);
+      if (!row || String(row.account_id) !== String(accountId)) return { generation: false };
+      const track = (tracks.get(generationId) || []).find((item) => item.n === n);
+      return { generation: true, audio_url: row.source === 'suno' && track?.audio_url ? track.audio_url : null };
+    },
+    // Geração local (T5b) para os testes: sem link de áudio.
+    insertLocal(row) { generations.set(row.id, { source: 'local', provider: 'local', state: 'completed', ...row }); tracks.set(row.id, [{ n: 1, title: 'Local', duration: 30, extra: false, audio_url: null }]); },
     // Hard delete como o da T5b (para os testes): 409 se ativa.
     deleteGeneration(id) {
       const row = generations.get(id);

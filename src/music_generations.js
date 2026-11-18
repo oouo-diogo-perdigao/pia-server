@@ -168,12 +168,13 @@ export function parseLimit(raw) {
 }
 
 /**
- * Conta Suno do item: { id, name } com name = label (apelido do RN07) → suno_name → suno_email.
- * O join também exige a mesma conta PIA, por defesa. Sem conta (ou conta apagada, SET NULL) -> null.
+ * Conta Suno do item: { id, name } com name = label (apelido do RN07) → suno_name → suno_email
+ * → suno_account_name (nome guardado na criação do job). O join também exige a mesma conta PIA,
+ * por defesa. Conta apagada (SET NULL): { id: null, name: nome guardado }. Sem conta nenhuma -> null.
  */
 export const SUNO_ACCOUNT_SQL = Object.freeze({
   join: 'LEFT JOIN pia_server.suno_accounts sa ON sa.id=g.suno_account_id AND sa.account_id=g.account_id',
-  name: 'COALESCE(sa.label, sa.suno_name, sa.suno_email)',
+  name: 'COALESCE(sa.label, sa.suno_name, sa.suno_email, g.suno_account_name)',
 });
 
 const ITEM_COLUMNS = `g.id,g.client_id,g.source,g.provider,g.device_id,g.suno_account_id,
@@ -193,7 +194,8 @@ export function publicItem(row, deviceId) {
     provider: row.provider,
     device_id: row.device_id ?? null,
     from_this_device: Boolean(deviceId && row.device_id && row.device_id === deviceId),
-    suno_account: row.suno_account_id ? { id: row.suno_account_id, name: row.suno_account_name ?? null } : null,
+    suno_account: row.suno_account_id || row.suno_account_name
+      ? { id: row.suno_account_id ?? null, name: row.suno_account_name ?? null } : null,
     prompt: row.prompt,
     lyrics: row.lyrics ?? null,
     count: row.count,

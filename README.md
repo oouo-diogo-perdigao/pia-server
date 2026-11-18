@@ -104,10 +104,17 @@ descartados pelo servidor, porque pertencem a cada computador.
 renova o token uma vez e repete só aquela requisição. A geração faz um único
 `tools/call` (nunca repetido depois de enviado) e acompanha clips pendentes pela
 tool de status, sem prazo total: o intervalo começa em 5 s e dobra até 60 s
-enquanto nada muda, e volta a 5 s quando um clip fica pronto. Falhas
-transitórias do polling (timeout de uma requisição, 5xx, rede) não encerram a
-geração. Ela termina só quando todos os clips chegam a um estado final, quando é
-cancelada ou quando a credencial expira mesmo depois do refresh. Os erros saem
+enquanto nada muda, e volta a 5 s quando um clip fica pronto. Só falhas
+transitórias do polling fazem backoff e nova tentativa, sem limite: rede,
+timeout de uma requisição, 5xx, 408 e 429 (ou `isError` com texto de rate
+limit). Erro permanente encerra o polling: 402 (ou texto de créditos) vira
+`suno_no_credits`; erro de protocolo (JSON-RPC inválido ou com `error`, resposta
+ilegível, `isError` genérico) ou outro 4xx vira `suno_unavailable`. Um 401
+continua renovando o token e repetindo a consulta; se repetir, vira
+`suno_credential_expired`. Em todos os casos as faixas já prontas vêm em
+`partial`, e o job guarda essas faixas (com `extra` quando cabe). Fora isso, a
+geração termina quando todos os clips chegam a um estado final ou quando é
+cancelada. Os erros saem
 com o `code` do contrato: `suno_credential_expired` e `suno_no_credits` (400),
 `suno_timeout` (só o timeout de uma requisição, como o `tools/call` inicial) e
 `suno_unavailable` (502). Uma conta em
@@ -130,9 +137,10 @@ tokens, e não gera música.
 
 O job tem este formato: `{job_id, generation_id, client_job_id, state, completed, total, extra_ready,
 ready_text, error, code, suno_account: {id, name}, device_id, from_this_device,
-created, tracks: [{n, title, duration, extra}]}`. Os estados possíveis são `queued`,
+created, tracks: [{n, title, duration, extra}]}`. Com a conta Suno apagada,
+`suno_account` vira `{id: null, name}` com o nome guardado na criação. Os estados possíveis são `queued`,
 `running`, `completed`, `failed`, `interrupted` e `cancelled`. O `audio_url`, o
-prompt e a letra nunca vão no job. O áudio sai pelo download da T5.
+prompt e a letra nunca vão no job. O áudio sai pelo download abaixo.
 
 Recusas antes de criar o job:
 - `suno_not_connected` quando não há conta Suno;
@@ -160,6 +168,45 @@ repetem o `tools/call`. O `active_job` do `GET /device/suno/status` traz `{job_i
 generation_id, client_job_id, state, suno_account_id, completed, total,
 extra_ready, device_id, from_this_device}` ou `null`.
 
+### Download do áudio de uma faixa Suno
+
+`GET /device/music/generations/:id/tracks/:n/audio` faz proxy em streaming puro
+do `audio_url` guardado no servidor: Suno → limitador → resposta, via
+`stream.pipeline`. Nada vai para disco (sem tmpdir nem arquivo parcial) e o
+arquivo nunca é juntado em memória; o limite de 100 MiB é contado chunk a chunk.
+No banco ficam só o link (`audio_url`) e o `suno_account_name`. O link (ou a
+query dele) nunca aparece em headers, erros ou logs. Qualquer PC pareado da mesma
+conta PIA pode baixar (o que vale é a conta, não o PC de origem).
+
+| Situação | Resposta |
+|---|---|
+| sucesso | `200` com o corpo do áudio; repassa `Content-Type` e `Content-Length`, mais `Cache-Control: no-store` e `X-Content-Type-Options: nosniff` |
+| `Range: bytes=a-b` simples | repassado ao Suno; `206` com `Content-Range`. Outros formatos de Range são ignorados (`200` inteiro); Range fora do arquivo → `416 bad_request` |
+| PC não pareado | `401 {"error":"Pareamento inválido."}` |
+| geração de outra conta, inexistente ou id malformado | `404 music_generation_not_found` |
+| faixa inexistente ou geração local (sem link do Suno) | `404 suno_track_not_found` |
+| Suno respondeu 401/403/404/410 | `410 suno_track_unavailable` ("Esta música não está mais disponível no Suno.") |
+| Suno 5xx ou falha de rede/DNS | `502 suno_unavailable` |
+| timeout (headers ou ociosidade), 408/504 | `502 suno_timeout` |
+| `Content-Length` acima de 100 MiB | `502 suno_track_too_large` (sem baixar o corpo) |
+| destino inseguro, mais de 3 redirects, `Content-Type` que não é áudio | `502 download_failed` |
+
+Depois que os headers saíram, qualquer falha (corpo truncado, passou de 100 MiB
+sem `Content-Length`, timeout de ociosidade) derruba a conexão, e o cliente vê o
+corpo incompleto. Se o cliente desconectar, o download no Suno é abortado.
+
+Regras do download seguro (`sunoAudio` em `src/suno_audio.js`):
+- só `https://`, sem usuário/senha na URL;
+- até 3 redirects (301/302/303/307/308), cada salto revalidado;
+- IPs privados, loopback, link-local, multicast e reservados (v4, v6 e
+  IPv4-mapped) são bloqueados depois da resolução DNS, e também em IP literal;
+- timeout de 30 s para os headers e de 30 s de ociosidade no corpo;
+- `Content-Type` precisa ser `audio/*` ou `application/octet-stream`
+  (`text/html` é recusado).
+
+Nos testes, `sunoAudio.allowLoopbackForTests = true` aceita `http://` apenas
+para destino loopback, e `sunoAudio.lookup` troca o DNS.
+
 ## Histórico de gerações de música
 
 O servidor guarda o histórico de músicas da conta PIA (RN13, RN14, RN25/CA24) na
@@ -175,7 +222,10 @@ nunca tem link nem arquivo no servidor.
 | `GET /device/music/generations?limit=100&cursor=` | `{items: [{id, client_id, source, provider, device_id, from_this_device, suno_account: {id, name}\|null, prompt, lyrics, count, duration, state, code, created, tracks: [{n, title, duration, extra}]}], next_cursor}`. Todos os PCs da conta; ativos (`queued`/`running`) primeiro, depois do mais novo ao mais antigo |
 | `DELETE /device/music/generations/:id` | `{ok: true}`. Exclusão definitiva do registro, do prompt, da letra e das faixas, feita por qualquer PC da conta. `404 music_generation_not_found` para id de outra conta ou já apagado; `409 music_generation_active` com job em andamento |
 
-O `name` da conta Suno é `label`, depois `suno_name`, depois `suno_email`.
+O `name` da conta Suno é `label`, depois `suno_name`, depois `suno_email` e, por
+último, `suno_account_name`: o nome guardado em `music_generations` quando o job
+foi criado. Com a conta Suno apagada (`suno_account_id` vira `NULL`), o item e o
+job continuam mostrando `suno_account: {id: null, name}`.
 O cursor é opaco e só posiciona a página dentro da conta do computador; um
 cursor malformado responde `400 invalid_cursor`. Erros saem como `{error, code}`.
 

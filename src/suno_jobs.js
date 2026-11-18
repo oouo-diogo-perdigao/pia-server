@@ -62,8 +62,9 @@ export const pgJobStore = {
         WHERE account_id=$1 AND source='suno' AND state IN ('queued','running') LIMIT 1`, [input.account_id]);
       if (active) { await client.query('ROLLBACK'); return { conflict: 'active' }; }
       await client.query(`INSERT INTO pia_server.music_generations(id,account_id,client_id,source,provider,suno_account_id,job_id,
-        device_id,prompt,lyrics,count,duration,instrumental,state)
-        VALUES($1,$2,$3,'suno',$4,$5,$6,$7,$8,$9,$10,$11,$12,'queued')`,
+        device_id,prompt,lyrics,count,duration,instrumental,state,suno_account_name)
+        VALUES($1,$2,$3,'suno',$4,$5,$6,$7,$8,$9,$10,$11,$12,'queued',
+          (SELECT COALESCE(label, suno_name, suno_email) FROM pia_server.suno_accounts WHERE id=$5 AND account_id=$2))`,
       [input.id, input.account_id, input.client_id, SUNO_PROVIDER, input.suno_account_id, input.job_id, input.device_id,
         input.prompt, input.lyrics, input.count, input.duration, input.instrumental]);
       await client.query('COMMIT');
@@ -156,7 +157,8 @@ export function publicJob(row, device = null) {
     job_id: row.job_id, generation_id: row.id, client_job_id: row.client_id, state: row.state,
     completed, total: row.count, extra_ready: extra, ready_text: readyText(completed, row.count, extra),
     error: jobMessage(row), code: row.code ?? null,
-    suno_account: row.suno_account_id ? { id: row.suno_account_id, name: row.suno_account_name ?? null } : null,
+    suno_account: row.suno_account_id || row.suno_account_name
+      ? { id: row.suno_account_id ?? null, name: row.suno_account_name ?? null } : null,
     device_id: row.device_id ?? null, from_this_device: Boolean(device?.device_id && row.device_id === device.device_id),
     created: row.created instanceof Date ? row.created.toISOString() : row.created ?? null,
     tracks,

@@ -19,6 +19,8 @@
 - Cliente MCP do Suno (T3b, `src/suno_mcp.js` e `src/suno_client.js`): Streamable HTTP com `Mcp-Session-Id` e reinitialize, JSON e SSE, timeout por `AbortSignal`, descoberta tolerante das tools (geração, status, conta, créditos), mapeamento de argumentos pelo schema, polling de clips pendentes sem prazo total (backoff de 5 s a 60 s; falha transitória não encerra a geração) e tradução de erros (`suno_credential_expired`, `suno_no_credits`, `suno_timeout`, `suno_unavailable`) sem vazar tokens, corpos ou URLs assinadas.
 - `POST /api/admin/suno/spike` (admin, sessão web): `tools/list` de uma conta Suno conectada, sem tokens.
 - Jobs do Suno (T4, `src/suno_jobs.js`): `POST /device/suno/jobs` (idempotente por `client_job_id`, um job ativo por conta PIA, escolha da conta Suno), `GET /device/suno/jobs/:id` e `POST /device/suno/jobs/:id/cancel`. O worker roda no processo e faz `ceil(N/2)` chamadas, guardando todas as faixas prontas (extras com `extra: true`) em `music_generations`/`music_generation_tracks` com o link do Suno só no servidor; o cancelamento mantém as faixas prontas; no boot, os jobs ativos viram `interrupted` sem refazer `tools/call`; `active_job` aparece no status.
+- Download do áudio (T5, `src/suno_audio.js`): `GET /device/music/generations/:id/tracks/:n/audio`, proxy em streaming do link do Suno para qualquer PC da mesma conta PIA, sem gravar em disco nem vazar o link. Tem `Range`/206, limite de 100 MiB (pelo `Content-Length` ou por contagem), só https, até 3 redirects revalidados, bloqueio de IP privado/loopback/link-local depois do DNS, timeouts, exigência de `Content-Type` de áudio e abort do upstream quando o cliente desconecta. Codes novos: `music_generation_not_found`, `suno_track_not_found`, `suno_track_unavailable` (410), `suno_track_too_large`, `download_failed`.
+- Coluna `music_generations.suno_account_name` (migração idempotente `ADD COLUMN IF NOT EXISTS`), preenchida na criação do job com o nome da conta Suno escolhida. Histórico e job usam `COALESCE(label, suno_name, suno_email, suno_account_name)`; com a conta Suno apagada, `suno_account` sai como `{id: null, name}`.
 
 ### Changed
 - `resolveSunoIdentity` usa o cliente MCP e a tool de conta descoberta (`get_account`, `account-me`, `get_profile`…).
@@ -26,6 +28,7 @@
 - `splitProfile` descarta segredos `mcp:*` dos perfis sincronizados.
 - `credential_state` não tem mais `expired`: só `configured`, `unavailable` e `refresh_failed`.
 - Tentativa de connect inexistente: code `suno_connect_not_found` (antes `not_found`).
+- Polling da geração Suno: erro permanente encerra o polling, mantendo as faixas prontas em `partial` (402 → `suno_no_credits`; protocolo ou 4xx não transitório → `suno_unavailable`; 401 repetido depois do refresh → `suno_credential_expired`). Só rede, timeout, 5xx, 408 e 429 fazem backoff. `transientSunoError()` exportada; 429 e texto de rate limit agora são `detail: "rate_limited"` e outros 4xx `detail: "http_4xx"`.
 
 ## v0.2.1 - 2026-11-15
 
