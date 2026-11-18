@@ -429,7 +429,8 @@ test('F2-02: fragmentos v1.0 sem marcador pendente, colchete, script ou recurso 
     assert.doesNotMatch(bruto, /\[|TEXTO PENDENTE|TODO|XXX|lorem|example\.invalid/i);
     assert.doesNotMatch(bruto, /<script|<style|<img|<link|<iframe|\son[a-z]+=/i);
     const externos = [...bruto.matchAll(/href="(https?:[^"]+)"/g)].map((m) => m[1]);
-    assert.ok(externos.every((url) => url === 'https://developers.google.com/terms/api-services-user-data-policy'), externos.join(', '));
+    const permitidos = ['https://developers.google.com/terms/api-services-user-data-policy', 'https://developers.google.com/workspace/workspace-api-user-data-developer-policy'];
+    assert.ok(externos.every((url) => permitidos.includes(url)), externos.join(', '));
   }
 });
 
@@ -467,37 +468,49 @@ test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () 
     /A PIA Server não guarda o arquivo: ele fica numa pasta temporária só durante o envio e é apagado ao final/,
     /O servidor mantém apenas metadados/,
     /não garantimos que o envio aconteça nem que a cópia exista/,
-    /A PIA Server não guarda logs de acesso com endereço IP/,
+    /A PIA Server não guarda logs de acesso com endereço IP\./,
   ]) assert.match(secao, termo);
-  assert.doesNotMatch(secao, /podem registrar logs/);
   const retencao = secaoDe(paginaReal('privacidade'), 'retencao');
   assert.match(retencao, /Não garantimos a retenção nem a disponibilidade dos dados/);
   assert.match(retencao, /A PIA Server não guarda arquivos de áudio nem de imagem/);
-  assert.match(retencao, /podem não ser removíveis/);
+  assert.match(retencao, /podem não permitir a remoção individual desses dados/);
+  // Parecer 5.3 (obrigatório): o que é apagado e o que não é na exclusão da conta. Sem backups do banco (decisão do Diogo).
+  assert.match(retencao, /Quando você pede a exclusão da conta, apagamos do servidor a conta, as sessões, os computadores pareados, as conversas e configurações sincronizadas, os conectores, os avisos da Secretária, os metadados de mídia e as gravações pendentes\. Não apagamos as cópias na pasta da PIA no seu Google Drive nem os dados guardados no seu computador/);
+  assert.match(retencao, /Os dados ficam guardados enquanto a sua conta existir; depois do pedido de exclusão, pelo prazo da frase acima\./);
+  assert.doesNotMatch(retencao, /enquanto forem úteis|Cópias de segurança do banco|30 dias/);
 });
 
-test('F2-02: finalidades e licença citam voz do Discord e MP3 no treinamento, e Microsoft fora (RN03a)', () => {
-  const finalidades = secaoDe(paginaReal('privacidade'), 'finalidades');
-  assert.match(finalidades, /gravações de voz do Discord \(também as de terceiros\), podem ser usados para treinar modelos/);
-  assert.match(finalidades, /As músicas geradas \(MP3\) também são usadas para treinamento de modelos e melhoria do serviço\./);
-  // TREINAMENTO_MP3_GERADOS (DevBackend) cobre o MP3 no treinamento: na Política, só nas Finalidades, sem duplicar.
+test('F2-02: Caminho A do parecer: só texto no treinamento; voz, MP3 e terceiros fora (4.2, 4.4, 4.5, 5.1, 5.2)', () => {
   const html = paginaReal('privacidade');
-  assert.equal(html.split('[EM REVISÃO JURÍDICA: P11 MP3 gerados no treinamento]').length - 1, 1);
-  assert.equal(html.split(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto).length - 1, 1);
-  // Nos Termos (decisão do TechLead): o token aparece no Em resumo e na licença, e nenhum texto fixo fala de MP3.
-  const termos = paginaReal('termos');
-  assert.equal(termos.split('[EM REVISÃO JURÍDICA: P11 MP3 gerados no treinamento]').length - 1, 2);
-  assert.doesNotMatch(fragmentoReal('termos').replace(/\{\{[A-Z0-9_]+\}\}/g, ''), /MP3/, 'MP3 nos Termos só pelo token');
-  const resumoTermos = termos.slice(termos.indexOf('<h2 id="em-resumo">'), termos.indexOf('<nav class="legal-sumario"'));
-  assert.ok(resumoTermos.includes(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto), 'token no Em resumo dos Termos');
-  for (const documento of ['privacidade', 'termos']) {
-    assert.ok(!paginaReal(documento).includes('aviso de gravação no Discord'), 'AVISO_GRAVACAO_DISCORD é só do embed');
-  }
-  assert.match(finalidades, /Dados obtidos da sua conta Microsoft \(e-mails, agenda e arquivos via Microsoft Graph\) não são usados para treinar modelos\. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento\./);
+  const finalidades = secaoDe(html, 'finalidades');
+  assert.match(finalidades, /conversas, prompts e outros conteúdos de texto que você envia podem ser usados para treinar modelos e melhorar a PIA/);
+  assert.match(finalidades, /Hoje a PIA não guarda cópia das músicas geradas \(MP3\/WAV\) nem das gravações de voz e, por isso, não as usa para treinar modelos\./);
+  assert.match(finalidades, /exceto trechos de e-mails, eventos, arquivos ou outros conteúdos obtidos do Google ou da Microsoft que apareçam nessas conversas, que são excluídos antes de qualquer treinamento/);
   assert.match(finalidades, /Credenciais e tokens nunca são usados em treinamento/);
-  const licenca = secaoDe(paginaReal('termos'), 'conteudo-e-licenca');
+  const resumo = textoVisivel(html.slice(html.indexOf('<h2 id="em-resumo">'), html.indexOf('<nav class="legal-sumario"')));
+  assert.match(resumo, /Seus dados de texto, como conversas e prompts, podem ser usados para treinar modelos de IA e melhorar o serviço ?\. Gravações de voz e músicas geradas não são usadas em treinamento hoje\./);
+  const dados = secaoDe(html, 'dados-coletados');
+  assert.match(dados, /As vozes de pessoas que não usam a PIA \(terceiros\) são gravadas apenas para entregar a gravação a quem a configurou, na pasta da PIA no Google Drive dessa pessoa, e não são usadas para treinar modelos de IA\./);
+  // TREINAMENTO_MP3_GERADOS: uma vez na Política (Finalidades) e duas nos Termos (Em resumo e licença).
+  const seloMp3 = '[EM REVISÃO JURÍDICA: P11 voz e MP3 fora do treinamento]';
+  assert.equal(html.split(seloMp3).length - 1, 1);
+  const termos = paginaReal('termos');
+  assert.equal(termos.split(seloMp3).length - 1, 2);
+  assert.doesNotMatch(fragmentoReal('termos').replace(/\{\{[A-Z0-9_]+\}\}/g, ''), /MP3/, 'MP3 nos Termos só pelo token');
+  const resumoTermos = textoVisivel(termos.slice(termos.indexOf('<h2 id="em-resumo">'), termos.indexOf('<nav class="legal-sumario"')));
+  assert.match(resumoTermos, /seus conteúdos de texto, como conversas e prompts, podem ser usados para treinar modelos de IA e melhorar o serviço ?, e você pode pedir que deixem de ser usados\. Hoje a PIA não guarda cópia/);
+  const licenca = secaoDe(termos, 'conteudo-e-licenca');
   assert.match(licenca, /licença gratuita, não exclusiva, mundial/);
-  assert.match(licenca, /gravações de voz do Discord, inclusive as vozes de outros participantes do canal\. As músicas geradas \(MP3\) também são usadas para treinamento/);
+  assert.match(licenca, /hospedar e processar esse conteúdo e usar conteúdos de texto no treinamento de modelos de IA e na melhoria do serviço ?\. Hoje a PIA não guarda cópia/);
+  assert.match(licenca, /Você declara ter os direitos sobre o que envia e se compromete a avisar os participantes antes de gravar\./);
+  assert.match(secaoDe(termos, 'uso-aceitavel'), /quem configura a gravação deve informar os participantes antes de começar e respeitar quem não quiser ser gravado;/);
+  // Nada no texto renderizado pode dizer que voz, terceiros ou MP3 entram no treinamento.
+  for (const pagina of [html, termos]) {
+    const texto = textoVisivel(pagina);
+    assert.doesNotMatch(texto, /vozes de terceiros, podem ser usadas para treinamento|também são usadas para treinamento|inclusive as gravações de voz do Discord \(também as de terceiros\)|Isso inclui as gravações de voz/);
+    assert.doesNotMatch(texto, /músicas que você gera ou envia à PIA podem ser usados/);
+    assert.ok(!pagina.includes('aviso de gravação no Discord'), 'AVISO_GRAVACAO_DISCORD é só do embed');
+  }
 });
 
 test('F2-02: compartilhamento, Limited Use e transferência internacional (CA07, CA09)', () => {
@@ -508,11 +521,19 @@ test('F2-02: compartilhamento, Limited Use e transferência internacional (CA07,
   assert.match(comp, /Google API Services User Data Policy/);
   assert.match(comp, /Limited Use/);
   assert.match(comp, /não são usados para treinar modelos de IA generalizados/);
-  assert.match(comp, /não são obtidos pela leitura do seu Google Drive por meio das APIs do Google/);
+  assert.match(comp, /não são lidas de volta do Drive para treinar modelos/);
+  assert.match(comp, /Dados obtidos pelas APIs do Google, inclusive os derivados deles, não são usados para criar, treinar ou melhorar modelos de IA\./);
   assert.match(html, /<a href="https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy" rel="noreferrer">/);
+  // Parecer 5.9: link da Google Workspace User Data and Developer Policy (URL oficial conferida com HTTP 200).
+  assert.match(html, /<a href="https:\/\/developers\.google\.com\/workspace\/workspace-api-user-data-developer-policy" rel="noreferrer">Google Workspace User Data and Developer Policy<\/a>/);
   const transf = secaoDe(html, 'transferencia-internacional');
   assert.match(transf, /principalmente no Brasil/);
   assert.match(transf, /art\. 33/);
+  // Adendo do parecer (nova 4.8): banco de dados no Brasil, fornecedores nos Estados Unidos, mídias na conta do usuário.
+  assert.ok(transf.includes('Transferência internacional de dados. O banco de dados da PIA, onde ficam guardados os seus dados pessoais, está no Brasil. Para que o serviço funcione, porém, alguns dados passam por fornecedores sediados nos Estados Unidos, que podem tratá-los em servidores nos Estados Unidos ou em outros países. O Google faz o login, recebe as suas mídias no seu Google Drive, dá acesso ao Gmail e à Agenda quando você conecta essas integrações e processa as mensagens pelo modelo de linguagem Gemini. A Microsoft dá acesso a e-mail, agenda e arquivos quando você conecta essa integração. A Groq processa as mensagens por modelo de linguagem. O Discord transmite o áudio das chamadas de voz gravadas pelo bot. As mídias geradas, como imagens e áudios, ficam na conta de armazenamento que você mesmo conecta, como o seu Google Drive, e podem estar fora do Brasil, conforme as regras desse provedor. A PIA não contrata armazenamento de mídia fora do país. Essas transferências acontecem porque são necessárias para prestar o serviço que você pediu, nos termos do art. 33, inciso IX, combinado com o art. 7º, inciso V, da LGPD. Cada fornecedor trata os dados conforme os próprios termos de uso e políticas de privacidade, publicados em seus sites. Se quiser saber mais sobre essas transferências, escreva para contato@travelrpg.com.'), 'texto exato do adendo na seção 7');
+  for (const pagina of [paginaReal('privacidade'), paginaReal('termos')]) {
+    assert.doesNotMatch(textoVisivel(pagina), /nenhum dado pessoal sai do Brasil/i, 'adendo, observação 1');
+  }
   assert.match(textoVisivel(paginaReal('termos')), /Limited Use/);
 });
 
@@ -521,11 +542,14 @@ test('F2-02: direitos do titular com art. 18, e-mail, prazo, opt-out e ANPD, sem
   assert.match(secao, /art\. 18 da LGPD/);
   for (const d of [/acesso/, /correção/, /anonimização, bloqueio ou eliminação/, /portabilidade/, /compartilhamos/, /revogação do consentimento/, /oposição/]) assert.match(secao, d);
   assert.match(secao, /contato@travelrpg\.com/);
-  assert.match(secao, /Respondemos aos pedidos em até 15 dias, contados do recebimento\./);
+  assert.match(secao, /enviamos uma resposta simplificada imediatamente/);
+  assert.match(secao, /Os demais pedidos são respondidos em até 15 dias contados do recebimento\./);
+  assert.match(secao, /O atendimento é gratuito\./);
   assert.match(secao, /com o assunto 'Opt-out de treinamento', a partir do e-mail da sua conta/);
   assert.match(secao, /Basta enviar um e-mail para contato@travelrpg\.com/);
-  assert.match(secao, /informando o servidor, o canal e a data aproximada da gravação/);
-  assert.match(secao, /ANPD/);
+  assert.match(secao, /informando o servidor, o canal, a data aproximada da gravação e o seu nome de usuário no Discord/);
+  assert.match(secao, /Agência Nacional de Proteção de Dados \(ANPD\)/);
+  assert.doesNotMatch(secao, /Autoridade Nacional/);
   assert.match(secao, /feitas manualmente/);
   assert.doesNotMatch(paginaReal('privacidade'), /exclusão automática/i);
 });
@@ -534,7 +558,8 @@ test('F2-02: controlador, DPO, cifragem honesta, cookies e sem CPF (6.1 itens 1,
   const texto = textoVisivel(paginaReal('privacidade'));
   assert.match(texto, /controlador e responsável .* Diogo Passos Perdigão Britto/);
   assert.match(texto, /Encarregado \(DPO\): Diogo Passos Perdigão Britto, pelo contato@travelrpg\.com/);
-  assert.match(texto, /O próprio controlador atua como encarregado/);
+  assert.match(texto, /O encarregado atua como canal de comunicação entre o controlador, os titulares dos dados e a Agência Nacional de Proteção de Dados \(ANPD\)/);
+  assert.doesNotMatch(texto, /pequeno porte|Resolução CD\/ANPD/, 'sem invocar a dispensa de pequeno porte (decisão do Diogo, parecer 4.1)');
   assert.match(texto, /A cifragem não é ponta a ponta/);
   assert.doesNotMatch(texto, /criptografia ponta a ponta/i);
   assert.match(texto, /__Host-pia_session/);
@@ -552,10 +577,19 @@ test('F2-02: Termos com garantias, responsabilidade com ressalva, perda de dados
   assert.match(texto, /foro da comarca de Belo Horizonte\/MG, ressalvado o foro do domicílio do consumidor quando a lei garantir/);
   assert.match(texto, /por convite/);
   assert.match(texto, /quem configura a gravação deve informar os participantes/);
+  assert.match(texto, /As limitações acima não se aplicam a danos causados por dolo ou culpa grave/);
+  // Parecer 5.6 (mudanças). A 5.7 (aviso de 30 dias antes de encerrar o serviço) não entra, por decisão do Diogo.
+  assert.doesNotMatch(secaoDe(paginaReal('termos'), 'suspensao-e-encerramento'), /30 dias/);
+  for (const [documento, id] of [['privacidade', 'mudancas'], ['termos', 'mudancas-nos-termos']]) {
+    const mudancas = secaoDe(paginaReal(documento), id);
+    assert.match(mudancas, /são avisadas com antecedência mínima de 15 dias no app ou por e-mail\. Quando a mudança depender do seu consentimento, você poderá recusá-la ou revogá-lo\./);
+    assert.doesNotMatch(mudancas, /Continuar usando a PIA depois da alteração/);
+  }
 });
 
-test('F2-02: Discord no treinamento e idade mínima de 18 anos nos dois documentos (CA21)', () => {
-  assert.match(textoVisivel(paginaReal('privacidade')), /gravações de voz, inclusive as vozes de terceiros, podem ser usadas para treinamento de modelos/);
+test('F2-02: vozes do Discord fora do treinamento, menores e idade mínima de 18 anos (CA21 ajustado pelo parecer, 5.5)', () => {
+  // CA21 previa voz no treinamento; o parecer (Caminho A, decidido pelo Diogo) inverte: terceiros e menores fora.
+  assert.match(secaoDe(paginaReal('privacidade'), 'menores'), /Se identificarmos dados de crianças ou adolescentes, inclusive vozes gravadas no Discord, eles são excluídos e nunca usados em treinamento\./);
   for (const documento of ['privacidade', 'termos']) assert.match(textoVisivel(paginaReal(documento)), /18 anos/);
 });
 
@@ -574,23 +608,37 @@ test('F2-02: v1.0 não cita Suno nem histórico de gerações, em lugar nenhum (
   }
 });
 
-test('F2-02: trechos jurídicos da v1.0 em revisão, com as redações exatas do PO', () => {
+test('F2-02: trechos jurídicos da v1.0 com as redações exatas do parecer (Caminho A) e revisado:false', () => {
   const v1 = JURIDICO['1.0'];
-  for (const chave of ['DIREITOS_MUSICAS_GERADAS', 'ENCARREGADO', 'SALVAGUARDAS_TRANSFERENCIA', 'ORIGEM_TREINAMENTO_MIDIA', 'TREINAMENTO_MICROSOFT', 'TREINAMENTO_MP3_GERADOS', 'LOGS_ACESSO', 'OPT_OUT_TREINAMENTO', 'PRAZO_RESPOSTA_TITULAR']) {
-    assert.ok(v1[chave], `chave ausente: ${chave}`);
-    assert.equal(v1[chave].revisado, false, `${chave} segue com revisado:false até o parecer`);
+  // Seção 4 do parecer jurídico sobre f1338f7, copiada literalmente (4.12 aprovado sem ajuste).
+  const PARECER = {
+      "ENCARREGADO": "O encarregado atua como canal de comunicação entre o controlador, os titulares dos dados e a Agência Nacional de Proteção de Dados (ANPD), recebendo pedidos, reclamações e comunicações pelo e-mail {{CONTATO_EMAIL}}.",
+      "CONSENTIMENTO_TERCEIROS_DISCORD": "Enquanto a gravação está ativa, o bot avisa no canal que ela está acontecendo. Quem configura a gravação deve avisar os participantes antes de começar e respeitar quem não quiser ser gravado. As vozes de pessoas que não usam a PIA (terceiros) são gravadas apenas para entregar a gravação a quem a configurou, na pasta da PIA no Google Drive dessa pessoa, e não são usadas para treinar modelos de IA. Pessoas gravadas podem pedir informações, acesso ou exclusão pelo e-mail {{CONTATO_EMAIL}}, informando o servidor, o canal, a data aproximada e o seu nome de usuário no Discord.",
+      "TREINAMENTO_MP3_GERADOS": "Hoje a PIA não guarda cópia das músicas geradas (MP3/WAV) nem das gravações de voz e, por isso, não as usa para treinar modelos. Se isso mudar, publicaremos uma nova versão destes documentos antes, com aviso prévio.",
+      "TREINAMENTO_MICROSOFT": "Dados obtidos da sua conta Microsoft (e-mails, agenda e arquivos, via Microsoft Graph) não são usados para treinar modelos. Conversas e prompts que você envia à PIA podem ser usados para treinamento, exceto trechos de e-mails, eventos, arquivos ou outros conteúdos obtidos do Google ou da Microsoft que apareçam nessas conversas, que são excluídos antes de qualquer treinamento.",
+      "BASE_LEGAL_TREINAMENTO": "para treinar modelos de IA e melhorar o serviço com conversas, prompts e outros conteúdos de texto que você envia à PIA: legítimo interesse do controlador (inciso IX e art. 10), limitado aos dados necessários, com transparência e com o direito de pedir a qualquer momento que seus dados deixem de ser usados (seção Direitos do titular). Dados pessoais sensíveis, como dados de saúde, biométricos ou de crianças e adolescentes, não são usados em treinamento com base no legítimo interesse e, quando identificados, são retirados dos conjuntos de treinamento. Gravações de voz só poderão ser usadas em treinamento com o consentimento específico e destacado de cada pessoa gravada (art. 11, inciso I), pedido à parte, fora destes documentos;",
+      "ORIGEM_TREINAMENTO_MIDIA": "Gravações de voz, músicas e capturas que a PIA envia ao seu Google Drive não são lidas de volta do Drive para treinar modelos, nem para qualquer outra finalidade além de prestar o serviço que você pediu. Dados obtidos pelas APIs do Google, inclusive os derivados deles, não são usados para criar, treinar ou melhorar modelos de IA.",
+      "SALVAGUARDAS_TRANSFERENCIA": "Transferência internacional de dados. O banco de dados da PIA, onde ficam guardados os seus dados pessoais, está no Brasil. Para que o serviço funcione, porém, alguns dados passam por fornecedores sediados nos Estados Unidos, que podem tratá-los em servidores nos Estados Unidos ou em outros países. O Google faz o login, recebe as suas mídias no seu Google Drive, dá acesso ao Gmail e à Agenda quando você conecta essas integrações e processa as mensagens pelo modelo de linguagem Gemini. A Microsoft dá acesso a e-mail, agenda e arquivos quando você conecta essa integração. A Groq processa as mensagens por modelo de linguagem. O Discord transmite o áudio das chamadas de voz gravadas pelo bot. As mídias geradas, como imagens e áudios, ficam na conta de armazenamento que você mesmo conecta, como o seu Google Drive, e podem estar fora do Brasil, conforme as regras desse provedor. A PIA não contrata armazenamento de mídia fora do país. Essas transferências acontecem porque são necessárias para prestar o serviço que você pediu, nos termos do art. 33, inciso IX, combinado com o art. 7º, inciso V, da LGPD. Cada fornecedor trata os dados conforme os próprios termos de uso e políticas de privacidade, publicados em seus sites. Se quiser saber mais sobre essas transferências, escreva para {{CONTATO_EMAIL}}.",
+      "REMOCAO_DADOS_TREINADOS": "Se você pedir a eliminação dos seus dados, eles também são retirados das cópias guardadas para treinamento e deixam de ser usados em novos treinamentos. Modelos que já foram treinados antes do pedido podem não permitir a remoção individual desses dados, no limite técnico do que é possível hoje (art. 16 da LGPD). Nesse caso, não usamos esses modelos para identificar você nem para reproduzir intencionalmente o seu conteúdo, e eles são substituídos à medida que novos modelos forem treinados sem os seus dados.",
+      "PRAZO_RESPOSTA_TITULAR": "Se você pedir confirmação de que tratamos seus dados ou acesso a eles, enviamos uma resposta simplificada imediatamente, assim que confirmarmos que o pedido veio do e-mail da sua conta, ou, se preferir, uma declaração clara e completa, com a origem dos dados, os critérios usados e a finalidade, em até 15 dias contados do pedido. Os demais pedidos são respondidos em até 15 dias contados do recebimento. Se não for possível atender de imediato, informamos os motivos nesse prazo. O atendimento é gratuito.",
+      "OPT_OUT_TREINAMENTO": "Você pode pedir, a qualquer momento e sem custo, que seus dados deixem de ser usados para treinar modelos. Basta enviar um e-mail para {{CONTATO_EMAIL}} com o assunto 'Opt-out de treinamento', a partir do e-mail da sua conta. Confirmamos o pedido em até 15 dias, e ele vale para todos os treinamentos feitos depois da confirmação. Treinamentos feitos antes do pedido continuam válidos, e dados já incorporados a modelos treinados podem não ser removíveis desses modelos. Se você quiser também que suas cópias guardadas para treinamento sejam apagadas, peça a eliminação no mesmo e-mail. Pessoas que não usam a PIA, mas foram gravadas em canais do Discord, podem fazer os mesmos pedidos pelo mesmo e-mail, informando o servidor, o canal, a data aproximada da gravação e o seu nome de usuário no Discord, para que possamos localizar a gravação.",
+      "LIMITACAO_CDC": "Nada nestes Termos afasta ou limita direitos que a lei não permite renunciar, inclusive os previstos no Código de Defesa do Consumidor e na LGPD. As limitações acima não se aplicam a danos causados por dolo ou culpa grave, nem à responsabilidade por tratamento de dados pessoais em desacordo com a LGPD. Se a relação com você for de consumo, valem integralmente as regras do Código de Defesa do Consumidor, inclusive o direito de propor ação no seu domicílio.",
+      "AVISO_GRAVACAO_DISCORD": "Este canal está sendo gravado pela PIA. O áudio de cada participante vai para o Google Drive de quem configurou a gravação. As vozes de quem não usa a PIA não são usadas para treinar modelos. Se não quiser ser gravado, avise quem configurou a gravação ou saia do canal. Dúvidas e pedidos: {{CONTATO_EMAIL}}."
+  };
+  for (const [chave, texto] of Object.entries(PARECER)) {
+    assert.equal(v1[chave].texto, texto, `${chave} difere do parecer`);
   }
+  for (const [chave, trecho] of Object.entries(v1)) assert.equal(trecho.revisado, false, `${chave} segue com revisado:false até o parecer favorável`);
+  assert.equal(Object.keys(v1).length, 14);
+  // LOGS_ACESSO fica com o texto da base f1338f7 até a decisão sobre o access log do Traefik (redação 4.3 não aplicada).
+  assert.equal(v1.LOGS_ACESSO.texto, 'A PIA Server não guarda logs de acesso com endereço IP.');
   assert.equal(v1.DIREITOS_MUSICAS_SUNO, undefined);
-  // Redação aprovada pelo PO (Termos, seção 6); revisado:false até o parecer.
+  assert.equal(v1.TREINAMENTO_MICROSOFT_SUNO, undefined);
   const direitosMusicas = 'Os direitos e limites de uso das músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.';
   assert.equal(v1.DIREITOS_MUSICAS_GERADAS.texto, direitosMusicas);
-  assert.equal(v1.DIREITOS_MUSICAS_GERADAS.assunto, 'direito autoral das músicas geradas');
-  const secao6 = paginaReal('termos').slice(paginaReal('termos').indexOf('<h2 id="conteudo-gerado-por-ia">'), paginaReal('termos').indexOf('<h2 id="isencao-de-garantias">'));
+  const termos = paginaReal('termos');
+  const secao6 = termos.slice(termos.indexOf('<h2 id="conteudo-gerado-por-ia">'), termos.indexOf('<h2 id="isencao-de-garantias">'));
   assert.ok(secao6.includes('[EM REVISÃO JURÍDICA: P11 direito autoral das músicas geradas]</span> ' + direitosMusicas), 'texto exato na seção 6 dos Termos');
-  assert.equal(v1.TREINAMENTO_MICROSOFT_SUNO, undefined);
-  assert.equal(v1.TREINAMENTO_MICROSOFT.texto, 'Dados obtidos da sua conta Microsoft (e-mails, agenda e arquivos via Microsoft Graph) não são usados para treinar modelos. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento.');
-  assert.equal(v1.PRAZO_RESPOSTA_TITULAR.texto, 'Respondemos aos pedidos em até 15 dias, contados do recebimento.');
-  assert.match(v1.OPT_OUT_TREINAMENTO.texto, /^Você pode pedir, a qualquer momento, que seus dados deixem de ser usados para treinar modelos\. Basta enviar um e-mail para \{\{CONTATO_EMAIL\}\} com o assunto 'Opt-out de treinamento'/);
-  assert.equal(v1.LOGS_ACESSO.texto, 'A PIA Server não guarda logs de acesso com endereço IP.');
   for (const trecho of Object.values(v1)) assert.doesNotMatch(trecho.texto + trecho.assunto, /[[\]<>]/, 'texto puro, sem colchetes nem HTML');
+  for (const trecho of Object.values(v1)) assert.doesNotMatch(trecho.texto, /\{\{(?!CONTATO_EMAIL|CONTROLADOR_NOME|IDADE_MINIMA)[A-Z_]+\}\}/, 'só tokens de dados');
 });

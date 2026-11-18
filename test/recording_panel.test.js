@@ -40,13 +40,15 @@ test('closing panel expires at the exact deadline while keeping the duration and
   assert.ok(expired.components[0].components.every(button => button.disabled));
 });
 
-test('live panel warns that the recording may be used for training and links the privacy policy (RF10, CA26)', () => {
+test('live panel announces the recording, keeps non-users out of training and links the privacy policy (RF10, CA26, parecer 4.14)', () => {
   const field = (result) => result.embeds[0].fields.find(({ name }) => name === 'Privacidade');
   const live = recordingPanel({ ...meta, state: 'recording' }, null, Date.now(), 'https://pia.travelrpg.com/qualquer');
   assert.equal(live.embeds[0].title, '🔴 Gravação em andamento');
   const notice = field(live).value;
-  assert.match(notice, /pode ser usada para treinar modelos/);
-  assert.match(notice, /inclusive a dos demais participantes do canal/);
+  // Redação 4.14 do parecer jurídico (Caminho A): terceiros fora do treinamento; contato por e-mail.
+  assert.match(notice, /Este canal está sendo gravado pela PIA\. O áudio de cada participante vai para o Google Drive de quem configurou a gravação\. As vozes de quem não usa a PIA não são usadas para treinar modelos\. Se não quiser ser gravado, avise quem configurou a gravação ou saia do canal\. Dúvidas e pedidos: contato@travelrpg\.com\./);
+  assert.doesNotMatch(notice, /pode ser usada para treinar modelos/);
+  assert.doesNotMatch(notice, /\{\{/, 'token de dados expandido no embed');
   assert.match(notice, /^\[EM REVISÃO JURÍDICA: P11 aviso de gravação no Discord\] /, 'rascunho visível até o parecer');
   assert.match(notice, /\nPolítica de Privacidade: https:\/\/pia\.travelrpg\.com\/privacidade$/);
   assert.doesNotMatch(notice, /MP3/);

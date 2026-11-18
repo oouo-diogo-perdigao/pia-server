@@ -9,6 +9,10 @@
 - Gate de release `test/legal_release.test.js`, sobre `pendencias()`, `legalFiles()` e `versoesAlteradas()` de `src/legal.js`, ligado por `PIA_LEGAL_RELEASE=1` no workflow `container.yml` em push para `main` e em tags `v*`.
 - `docs/legal.md` (como lançar uma versão nova dos textos) e template de PR com o checklist da Política.
 
+### Changed
+- Textos v1.0 ajustados ao parecer jurídico sobre `f1338f7` (Caminho A, decisões do Diogo): as redações da seção 4 e do adendo (nova 4.8) em `JURIDICO['1.0']`, e os ajustes 5.1 a 5.6 e 5.9 no HTML fixo. Só conteúdos de texto entram no treinamento; voz, MP3 e terceiros do Discord ficam fora. `LOGS_ACESSO` fica com o texto anterior até a decisão sobre o access log do Traefik (a 4.3 não foi aplicada). Também: encarregado sem a dispensa de pequeno porte, eliminação e retenção explicadas, "Agência Nacional de Proteção de Dados" e link da Google Workspace User Data and Developer Policy. 5.7 e 5.8 ficam fora da v1.0. Todos os trechos seguem com `revisado:false` até o parecer favorável.
+- Embed "Gravação em andamento" do bot do Discord com o aviso da 4.14 (terceiros fora do treinamento e contato por e-mail).
+
 ## v0.2.1 - 2026-11-15
 
 ### Added

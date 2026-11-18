@@ -30,22 +30,52 @@ Feature 0002. As páginas são públicas, sem login, em `/privacidade` e `/termo
 
 ### Trechos jurídicos da v1.0 (`JURIDICO['1.0']`, todos `revisado:false`)
 
-| Chave | Pendência | Onde aparece |
-|---|---|---|
-| `ENCARREGADO` | P04 | Política, 1 |
-| `CONSENTIMENTO_TERCEIROS_DISCORD` | P11 | Política, 3 |
-| `LOGS_ACESSO` | T04 | Política, 3: "A PIA Server não guarda logs de acesso com endereço IP." (texto do DevBackend, v2.4/v2.5) |
-| `TREINAMENTO_MP3_GERADOS` | P11 | Política, 4 (único trecho sobre MP3 no treinamento na Política) e Termos, "Em resumo" e 5 (licença), por decisão do TechLead **confirmada pelo PO**; chave do DevBackend |
-| `TREINAMENTO_MICROSOFT` | P11 | Política, 4 (texto aprovado pelo Diogo; falta o parecer) |
-| `BASE_LEGAL_TREINAMENTO` | P10 | Política, 5 |
-| `ORIGEM_TREINAMENTO_MIDIA` | P11 | Política, 6 (voz e MP3 no treinamento frente à Limited Use) |
-| `SALVAGUARDAS_TRANSFERENCIA` | P05 | Política, 7 |
-| `REMOCAO_DADOS_TREINADOS` | P10 | Política, 8 |
-| `PRAZO_RESPOSTA_TITULAR` | P10 | Política, 10 |
-| `OPT_OUT_TREINAMENTO` | P10 | Política, 10 (redação da v2.6, com `{{CONTATO_EMAIL}}`) |
-| `DIREITOS_MUSICAS_GERADAS` | P11 | Termos, 6 (direito autoral). Redação **aprovada pelo PO**; aguarda só o parecer do Advogado. Substitui o trecho da 0001 retirado da v1.0 |
-| `LIMITACAO_CDC` | P10 | Termos, 8 |
-| `AVISO_GRAVACAO_DISCORD` | P11 | Só no embed do bot do Discord (F2-10); não aparece nas páginas |
+Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/feature-0002/parecer-juridico.md`, seção 4, Caminho A), copiadas literalmente, e do adendo de 17/11/2026 (23h30) para a 4.8. Todas seguem `revisado:false` até o Advogado conferir o texto renderizado do novo commit e emitir o parecer favorável (RN09, CA25).
+
+| Chave | Pendência | Redação | Onde aparece |
+|---|---|---|---|
+| `ENCARREGADO` | P04 | 4.1 (sem a dispensa de pequeno porte) | Política, 1 |
+| `CONSENTIMENTO_TERCEIROS_DISCORD` | P11 | 4.2 (terceiros fora do treinamento) | Política, 3 |
+| `LOGS_ACESSO` | T04 | Texto da base `f1338f7` ("A PIA Server não guarda logs de acesso com endereço IP."). A 4.3 **não** foi aplicada: **aguarda decisão sobre o access log do Traefik** | Política, 3 |
+| `TREINAMENTO_MP3_GERADOS` | P11 | 4.4, Caminho A (voz e MP3 fora do treinamento) | Política, 4; Termos, "Em resumo" e 5 |
+| `TREINAMENTO_MICROSOFT` | P11 | 4.5 (exclui dados derivados do Google e da Microsoft nas conversas) | Política, 4 |
+| `BASE_LEGAL_TREINAMENTO` | P10 | 4.6 (legítimo interesse com opt-out para conversas e prompts) | Política, 5 |
+| `ORIGEM_TREINAMENTO_MIDIA` | P11 | 4.7 ("criar, treinar ou melhorar modelos") | Política, 6 |
+| `SALVAGUARDAS_TRANSFERENCIA` | P05 | Adendo, nova 4.8 (banco de dados no Brasil; fornecedores nos Estados Unidos; mídias na conta do usuário) | Política, 7 |
+| `REMOCAO_DADOS_TREINADOS` | P10 | 4.9 completa, com a última frase (compromisso) | Política, 8 |
+| `PRAZO_RESPOSTA_TITULAR` | P10 | 4.10 | Política, 10 |
+| `OPT_OUT_TREINAMENTO` | P10 | 4.11 | Política, 10 |
+| `DIREITOS_MUSICAS_GERADAS` | P11 | 4.12, aprovado sem ajuste (redação do PO) | Termos, 6 |
+| `LIMITACAO_CDC` | P10 | 4.13 | Termos, 8 |
+| `AVISO_GRAVACAO_DISCORD` | P11 | 4.14 | Só no embed do bot (`src/recording_panel.js`, `trainingNotice()` via `textoJuridico()`); não aparece nas páginas |
+
+### Ajustes do parecer no HTML fixo
+
+- **5.1 e 5.2 (obrigatórios):** "Em resumo", Dados coletados, Finalidades, Uso aceitável e licença só falam de conteúdos de texto no treinamento; voz, MP3 e terceiros ficam fora.
+- **5.2, 4º item:** "Você declara ter os direitos sobre o que envia e se compromete a avisar os participantes antes de gravar."
+- **5.3 (obrigatório):** o que é apagado e o que não é na exclusão da conta, sem a frase dos backups do banco (não existe backup). Também a troca de "enquanto forem úteis…" pelo texto recomendado.
+- **5.4:** "Agência Nacional de Proteção de Dados (ANPD)".
+- **5.5:** menores e vozes gravadas no Discord excluídos e nunca usados em treinamento.
+- **5.6:** aviso de 15 dias e recusa ou revogação, na Política 13 e nos Termos 11.
+- **5.9:** link da [Google Workspace User Data and Developer Policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy) na seção Limited Use (URL oficial conferida com HTTP 200). A frase "criar, treinar ou melhorar modelos" vem da 4.7.
+- **Não entram na v1.0:** 5.7 (aviso de 30 dias antes de encerrar o serviço, decisão do Diogo) e 5.8 (caixa de aceite no primeiro login).
+
+### Decisões do Diogo sobre o parecer (17/11/2026)
+
+- **Caminho A:** voz e MP3 fora do treinamento, com as redações A. O Caminho B (4.15) exigiria versão nova (RN05) e os pré-requisitos técnicos do parecer.
+- **Terceiros do Discord** fora do treinamento por padrão (4.2 e 4.14).
+- **Encarregado:** o Diogo, pelo e-mail de contato, sem invocar a dispensa de pequeno porte (4.1).
+- **Backups do banco:** não existem; a frase dos 30 dias da 5.3 foi retirada.
+- **Endereço:** não é publicado, só o e-mail. Nenhum trecho do parecer aplicado cita endereço.
+- **Transferência internacional (4.8):** nova redação do Advogado (adendo), com a premissa de que os dados pessoais ficam no banco no Brasil e as mídias podem ficar fora. Sem a terceira frase da 4.8 original (provedor contratado fora do Brasil).
+- **Logs de acesso:** ver "Aguardando decisão" abaixo.
+- **Base legal (4.6):** legítimo interesse com opt-out para conversas e prompts.
+- **Remoção de dados treinados (4.9):** completa, com o compromisso da última frase.
+- **5.7:** não entra.
+
+### Aguardando decisão
+
+- **`LOGS_ACESSO` (T04):** aguarda decisão do Diogo sobre o access log do Traefik da VPS, que guarda IP. O texto atual ("A PIA Server não guarda logs de acesso com endereço IP.") **hoje não bate com a VPS** e não pode ser publicado assim. A redação 4.3 do parecer não foi aplicada, por decisão do TechLead; a redação nova vem depois dessa decisão.
 
 ## Escopo da v1.0
 
