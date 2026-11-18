@@ -19,6 +19,13 @@ import { renderOAuthCallback } from './oauth_callback.js';
 import { authorizationPage } from './auth_page.js';
 import { legalFiles } from './legal.js';
 import { publicResponse, sendPublic } from './public_files.js';
+import { sunoCapabilities, sunoRoute } from './suno_auth.js';
+import { publicError } from './suno_errors.js';
+import { musicGenerationsRoute } from './music_generations.js';
+import { sunoAdminRoute } from './suno_client.js';
+import { recoverSunoJobs, sunoJobsRoute } from './suno_jobs.js';
+import { sunoAudioRoute } from './suno_audio.js';
+import { cleanupOrphanTemp } from './cleanup_tmp.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -202,6 +209,10 @@ async function route(req, res) {
     res.writeHead(result.status, result.headers);
     return res.end(result.body);
   }
+  if (path === '/auth/connectors/suno' || path.startsWith('/device/suno/')) {
+    if (path.startsWith('/device/suno/jobs') && await sunoJobsRoute(req, res, url, { authenticateDevice, readBody: body })) return;
+    if (await sunoRoute(req, res, url, { authenticateDevice, readBody: body })) return;
+  }
   if (req.method === 'POST' && path === '/device/logout') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Sessão do computador inválida.' });
@@ -210,13 +221,16 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/device/account') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
-    return json(res, 200, accountProfile(account));
+    return json(res, 200, { ...accountProfile(account), capabilities: [...sunoCapabilities] });
   }
   if (req.method === 'POST' && path === '/device/media') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
     return json(res, 200, await receiveMedia(account, req));
   }
+  if (path.startsWith('/device/music/generations/') && path.endsWith('/audio') &&
+    await sunoAudioRoute(req, res, url, { authenticateDevice })) return;
+  if (path.startsWith('/device/music/generations') && await musicGenerationsRoute(req, res, url, authenticateDevice)) return;
   if (req.method === 'POST' && ['/device/poll', '/device/complete', '/device/notices/ack',
     '/device/profile/read', '/device/profile/write', '/device/connectors/runtime', '/device/connectors/access'].includes(path)) {
     const account = await authenticateDevice(req.headers.authorization);
@@ -354,6 +368,8 @@ async function route(req, res) {
     await pool.query('INSERT INTO pia_server.accounts(email) VALUES($1) ON CONFLICT(email) DO NOTHING', [email]);
     return json(res, 200, { ok: true });
   }
+  // Spike T10: tools/list de uma conta Suno conectada (só admin; sem tokens).
+  if (path === '/api/admin/suno/spike' && account.admin) return json(res, 200, await sunoAdminRoute(account, path, data));
   return json(res, 404, { error: 'Rota não encontrada.' });
 }
 
@@ -404,9 +420,15 @@ async function reconcile() {
 
 await migrate();
 await migrateConnectorRows();
+// Jobs do Suno que estavam na fila ou rodando viram interrupted; nunca refazem tools/call.
+await recoverSunoJobs();
+// Restos de mídia e de gravações já enviadas; nunca lança nem toca na fila de gravação.
+await cleanupOrphanTemp();
 const server = createServer((req, res) => {
   route(req, res).catch((error) => {
     if (res.headersSent) { res.end(); return; }
+    const known = publicError(error);
+    if (known) return json(res, known.status, known.body);
     const message = error.code || error instanceof TypeError ? 'A operação falhou.' : error.message;
     json(res, 400, { error: message });
   });

@@ -1,0 +1,23 @@
+name: pia-server-stg
+services:
+  pia-server:
+    env_file: !override [.env.stg]
+    environment:
+      PIA_PUBLIC_URL: https://pia-stg.travelrpg.com
+      PGDATABASE: pia_server_stg
+      PGUSER: pia_server_stg
+    ports: !reset []
+    networks: [proxy-publico, postgres]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy-publico
+      traefik.http.routers.pia-server-stg.rule: Host(`pia-stg.travelrpg.com`)
+      traefik.http.routers.pia-server-stg.entrypoints: websecure
+      traefik.http.routers.pia-server-stg.tls.certresolver: letsencrypt
+      traefik.http.routers.pia-server-stg.service: pia-server-stg
+      traefik.http.services.pia-server-stg.loadbalancer.server.port: "8787"
+networks:
+  proxy-publico:
+    external: true
+  postgres:
+    external: true

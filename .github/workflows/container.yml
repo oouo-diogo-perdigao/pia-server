@@ -1,9 +1,12 @@
 name: Container
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     tags: ['v*']
   pull_request:
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
   packages: write
