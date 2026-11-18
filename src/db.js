@@ -121,6 +121,78 @@ export async function migrate() {
       id uuid NOT NULL, mime text NOT NULL, bytes bigint NOT NULL, drive_id text,
       created timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(account_id,id)
     );
+    CREATE TABLE IF NOT EXISTS pia_server.suno_oauth_clients (
+      redirect_uri text PRIMARY KEY, client_id text NOT NULL, created timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS pia_server.suno_accounts (
+      id uuid PRIMARY KEY,
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      suno_subject text NOT NULL CONSTRAINT pia_suno_accounts_subject UNIQUE,
+      suno_email text, suno_name text,
+      label text NOT NULL CHECK (char_length(label) BETWEEN 1 AND 80),
+      client_id text NOT NULL, ciphertext text, expires_at timestamptz, scopes text,
+      state text NOT NULL DEFAULT 'connected' CHECK (state IN ('connected', 'refresh_failed')),
+      last_error_code text, created timestamptz NOT NULL DEFAULT now(), updated timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT pia_suno_accounts_tokens CHECK (state = 'refresh_failed' OR ciphertext IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS pia_suno_accounts_account ON pia_server.suno_accounts(account_id, created);
+    CREATE TABLE IF NOT EXISTS pia_server.suno_connect_attempts (
+      id uuid PRIMARY KEY,
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      device_id uuid REFERENCES pia_server.devices(id) ON DELETE SET NULL,
+      state_digest text NOT NULL CONSTRAINT pia_suno_connect_attempts_state UNIQUE,
+      verifier text NOT NULL, client_id text NOT NULL,
+      replace_account_id uuid REFERENCES pia_server.suno_accounts(id) ON DELETE SET NULL,
+      status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'connected', 'failed')),
+      suno_account_id uuid REFERENCES pia_server.suno_accounts(id) ON DELETE SET NULL, code text,
+      created timestamptz NOT NULL DEFAULT now(), expires timestamptz NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS pia_suno_connect_attempts_expiry ON pia_server.suno_connect_attempts(expires);
+    -- Histórico de gerações de música da conta PIA (T5b, RN13/RN14/RN25/CA24). Suno e locais na mesma tabela.
+    -- Fica DEPOIS das tabelas suno_* (suno_oauth_clients, suno_accounts, suno_connect_attempts).
+    -- suno_account_id: FK para suno_accounts (ON DELETE SET NULL) logo abaixo, idempotente para bases antigas.
+    CREATE TABLE IF NOT EXISTS pia_server.music_generations (
+      id uuid PRIMARY KEY,
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      client_id uuid NOT NULL,
+      source text NOT NULL CONSTRAINT pia_music_generations_source CHECK (source IN ('suno', 'local')),
+      provider text NOT NULL CONSTRAINT pia_music_generations_provider CHECK (provider ~ '^[a-z][a-z0-9_]{0,31}$'),
+      suno_account_id uuid,
+      job_id uuid,
+      device_id uuid REFERENCES pia_server.devices(id) ON DELETE SET NULL,
+      prompt text NOT NULL, lyrics text, title text,
+      count integer NOT NULL DEFAULT 1 CONSTRAINT pia_music_generations_count CHECK (count BETWEEN 1 AND 10),
+      duration integer CONSTRAINT pia_music_generations_duration CHECK (duration BETWEEN 1 AND 3600),
+      instrumental boolean NOT NULL DEFAULT false,
+      state text NOT NULL CONSTRAINT pia_music_generations_state
+        CHECK (state IN ('queued', 'running', 'completed', 'failed', 'interrupted', 'cancelled')),
+      code text, created timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT pia_music_generations_client UNIQUE (account_id, client_id),
+      CONSTRAINT pia_music_generations_local CHECK (source = 'suno' OR (suno_account_id IS NULL AND job_id IS NULL))
+    );
+    DO $music_suno_fk$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='pia_server.music_generations'::regclass
+        AND conname='pia_music_generations_suno_account') THEN
+        ALTER TABLE pia_server.music_generations ADD CONSTRAINT pia_music_generations_suno_account
+          FOREIGN KEY (suno_account_id) REFERENCES pia_server.suno_accounts(id) ON DELETE SET NULL;
+      END IF;
+    END;
+    $music_suno_fk$;
+    CREATE INDEX IF NOT EXISTS pia_music_generations_history
+      ON pia_server.music_generations(account_id, (state IN ('queued', 'running')) DESC, created DESC, id DESC);
+    -- Faixas de cada geração. audio_url é o link do Suno: fica só no servidor e nunca vai ao device (RN19);
+    -- faixa local nunca tem link (RN14). Hard delete da geração apaga as faixas em cascata.
+    CREATE TABLE IF NOT EXISTS pia_server.music_generation_tracks (
+      generation_id uuid NOT NULL REFERENCES pia_server.music_generations(id) ON DELETE CASCADE,
+      n integer NOT NULL CONSTRAINT pia_music_generation_tracks_n CHECK (n BETWEEN 1 AND 20),
+      title text, duration integer CONSTRAINT pia_music_generation_tracks_duration CHECK (duration BETWEEN 0 AND 3600),
+      extra boolean NOT NULL DEFAULT false, audio_url text,
+      PRIMARY KEY (generation_id, n)
+    );
+    -- Nome da conta Suno no momento da criação do job: o histórico continua mostrando
+    -- a conta mesmo depois que ela é apagada (suno_account_id vira NULL pelo SET NULL).
+    ALTER TABLE pia_server.music_generations ADD COLUMN IF NOT EXISTS suno_account_name text;
   `);
   await pool.query('INSERT INTO pia_server.accounts(email,admin) VALUES($1,true) ON CONFLICT(email) DO UPDATE SET admin=true', [email]);
 }
