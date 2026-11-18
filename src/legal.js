@@ -79,6 +79,8 @@
  *   versoesAlteradas(fontes?)  versões publicadas cujo HTML não bate com o sha256 do manifesto.
  * Congelamento: trechos jurídicos são versionados (JURIDICO['1.0']) e cada versão do manifesto
  * aponta seu conjunto; versão publicada leva sha256 e o teste falha se o HTML dela mudar.
+ * Preview local (sem banco nem variáveis PG* e GOOGLE_*), inclusive das versões em rascunho:
+ *   npm run legal:preview   (http://127.0.0.1:8790; ou -- --out <pasta> para gravar os HTML)
  * "fontes" é opcional e serve aos testes: { dados, juridico, versoes, conteudo(documento, versao) }.
  */
 import { createHash } from 'node:crypto';
