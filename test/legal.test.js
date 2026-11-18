@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   DOCUMENTOS, MICROTEXTOS, escapeHtml, formatarData, legalFiles, legalFooter,
-  legalNotFound, legalRedirects, pendencias, redirecionamentosLegais, renderDocumento, renderTokens,
+  legalNotFound, legalRedirects, pendencias, redirecionamentosLegais, renderDocumento, renderTokens, textoJuridico,
 } from '../src/legal.js';
 import { escapeHtml as escapeOAuth } from '../src/oauth_callback.js';
 import { DADOS } from '../src/legal/dados.js';
@@ -68,6 +68,11 @@ test('rascunho por trecho jurídico sem revisão: selo, faixa, no-store e noinde
   assert.match(pagina.html, /<span class=\"legal-pendente\">\[EM REVISÃO JURÍDICA: P10 base legal\]<\/span> Trecho para contato@pia\.example\./);
   assert.match(pagina.html, /RASCUNHO, não publicar/);
   assert.match(pagina.html, /<meta name="robots" content="noindex">/);
+});
+
+test('textoJuridico (embed do Discord): selo de rascunho com revisado:false, texto puro com revisado:true', () => {
+  assert.equal(textoJuridico('TRECHO', 'privacidade', fontes({ revisado: false })), '[EM REVISÃO JURÍDICA: P10 base legal] Trecho para contato@pia.example.');
+  assert.equal(textoJuridico('TRECHO', 'privacidade', fontes()), 'Trecho para contato@pia.example.');
 });
 
 test('rascunho por data nula e por marcador com colchete no texto', () => {
@@ -356,9 +361,9 @@ test('sem nenhuma versão publicada, a atual é a última em rascunho e legalFil
     /ordem crescente/);
 });
 
-test('conteúdo real do repositório renderiza em rascunho, com dados reais e todos os trechos jurídicos', () => {
+test('conteúdo real do repositório renderiza publicado (v1.0 final), com dados reais e todos os trechos jurídicos', () => {
   const entradas = new Map(legalFiles('https://pia.travelrpg.com'));
-  assert.deepEqual([...entradas.keys()], ['/privacidade', '/termos'], 'nada publicado: só as atuais em rascunho');
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0'], 'v1.0 publicada: atuais e cópias congeladas');
   const privacidade = entradas.get('/privacidade')[1];
   const termos = entradas.get('/termos')[1];
   assert.match(privacidade, /<link rel="canonical" href="https:\/\/pia\.travelrpg\.com\/privacidade">/);
@@ -367,11 +372,20 @@ test('conteúdo real do repositório renderiza em rascunho, com dados reais e to
   assert.match(termos, /comarca de Belo Horizonte\/MG/);
   const ambos = privacidade + termos;
   for (const [chave, trecho] of Object.entries(JURIDICO['1.0'])) {
-    assert.equal(trecho.revisado, false, `${chave} nasce com revisado:false`);
+    assert.equal(trecho.revisado, true, `${chave} aprovado no parecer final (release legal v1.0)`);
     if (chave === 'AVISO_GRAVACAO_DISCORD') continue; // só no embed do Discord (F2-10)
-    assert.ok(ambos.includes(`[EM REVISÃO JURÍDICA: ${trecho.pendencia} ${trecho.assunto}]`), `${chave} usado em alguma página`);
+    assert.ok(ambos.includes(escapeHtml(renderTokens(trecho.texto, DADOS))), `${chave} usado em alguma página`);
   }
-  for (const [, , headers] of entradas.values()) assert.equal(headers['Cache-Control'], 'no-store');
+  const corpo = (html) => html.slice(html.indexOf('<h2 id="em-resumo">'), html.indexOf('<h2 id="historico-de-versoes"'));
+  for (const documento of ['privacidade', 'termos']) {
+    const atual = corpo(entradas.get(`/${documento}`)[1]);
+    assert.ok(atual.length > 1000);
+    assert.equal(atual, corpo(entradas.get(`/${documento}/v1.0`)[1]), `/${documento} serve o mesmo texto da cópia congelada v1.0`);
+  }
+  for (const [, html, headers] of entradas.values()) {
+    assert.deepEqual(headers, { 'Cache-Control': 'public, max-age=3600' }, 'publicado: cache público, sem noindex');
+    assert.doesNotMatch(html, /noindex|RASCUNHO|legal-pendente|\[/, 'sem selos nem faixa de rascunho');
+  }
   for (const valor of Object.values(DADOS)) assert.equal(typeof valor, 'string');
   assert.ok(!/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(ambos), 'sem CPF');
 });
@@ -381,7 +395,9 @@ test('legalRedirects mapeia aliases e barra final para o caminho canônico relat
   assert.equal(legalRedirects.get('/privacidade/'), '/privacidade');
   assert.equal(legalRedirects.get('/terms'), '/termos');
   assert.equal(legalRedirects.get('/termos/'), '/termos');
-  assert.equal(legalRedirects.has('/privacidade/v1.0/'), false, 'v1.0 ainda não publicada');
+  assert.equal(legalRedirects.get('/privacidade/v1.0/'), '/privacidade/v1.0', 'v1.0 publicada: barra final redireciona');
+  assert.equal(legalRedirects.get('/termos/v1.0/'), '/termos/v1.0');
+  assert.equal(legalRedirects.has('/privacidade/v1.1/'), false, 'versão inexistente não tem redirect');
   assert.equal(legalRedirects.has('/privacidade'), false);
   for (const destino of legalRedirects.values()) assert.match(destino, /^\/(privacidade|termos)(\/v\d+\.\d+)?$/);
 });
@@ -394,7 +410,10 @@ test('legalNotFound devolve 404 HTML só para /privacidade/* e /termos/* desconh
   assert.match(res.body, /<html lang="pt-BR">/);
   assert.equal((res.body.match(/<meta name="robots" content="noindex">/g) || []).length, 1);
   assert.doesNotMatch(res.body, /rel="canonical"|RASCUNHO/);
-  assert.equal(legalNotFound('/termos/v1.0').status, 404, 'v1.0 em rascunho não tem rota própria');
+  assert.equal(legalNotFound('/termos/v1.0'), null, 'v1.0 publicada tem rota própria (200 no legalFiles)');
+  assert.equal(legalNotFound('/privacidade/v1.0'), null);
+  assert.equal(legalNotFound('/termos/v1.0/'), null, 'barra final da publicada é redirect');
+  assert.match(res.body, /\(versão atual, 1\.0\)/);
   assert.equal((res.body.match(/<h1\b/g) || []).length, 1);
   assert.match(res.body, /<a href="\/privacidade">Política de Privacidade<\/a>/);
   assert.match(res.body, /<a href="\/termos">Termos de Serviço<\/a>/);
@@ -415,7 +434,13 @@ test('legalFooter tem os dois links relativos e o texto de ciência opcional', (
 });
 
 test('pendencias lista trechos sem revisão e datas nulas', () => {
-  const lista = pendencias();
+  assert.deepEqual(pendencias(), [], 'release legal v1.0: nenhum trecho sem revisão nem data nula');
+  // Mesmo conteúdo real em estado de rascunho (fixture): todos os trechos e todas as datas aparecem.
+  const juridicoRascunho = Object.fromEntries(Object.entries(JURIDICO).map(([conjunto, trechos]) =>
+    [conjunto, Object.fromEntries(Object.entries(trechos).map(([chave, t]) => [chave, { ...t, revisado: false }]))]));
+  const versoesRascunho = Object.fromEntries(Object.entries(VERSOES).map(([documento, lista]) =>
+    [documento, lista.map((item) => ({ ...item, vigencia: null, atualizacao: null, sha256: null }))]));
+  const lista = pendencias({ juridico: juridicoRascunho, versoes: versoesRascunho });
   const juridicos = lista.filter((p) => p.tipo === 'juridico').map((p) => p.chave);
   assert.deepEqual(juridicos, Object.keys(JURIDICO['1.0']));
   const datas = lista.filter((p) => p.tipo === 'data');
@@ -444,7 +469,7 @@ test('src/legal.js não importa db.js (nem auth.js), direta ou indiretamente (T0
   const saida = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: new URL('..', import.meta.url), env, encoding: 'utf8',
   });
-  assert.equal(saida, '2');
+  assert.equal(saida, '4', '/privacidade, /privacidade/v1.0, /termos e /termos/v1.0');
 });
 
 // ── F2-02: conteúdo da v1.0 (DevFullstack Time 2) ─────────────────────────────────────────────
@@ -565,7 +590,7 @@ test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () 
   assert.match(retencao, /Não garantimos a retenção nem a disponibilidade dos dados/);
   assert.match(retencao, /A PIA Server não guarda arquivos de áudio nem de imagem/);
   assert.match(retencao, /podem não permitir a remoção individual desses dados/);
-  // Adendo 2, 5.3 (obrigatório): seis itens, nesta ordem; o 2º (prazo de 15 dias, confirmado pelo Diogo) é o trecho EXCLUSAO_CONTA_PRAZO, revisado:false até o release.
+  // Adendo 2, 5.3 (obrigatório): seis itens, nesta ordem; o 2º (prazo de 15 dias, confirmado pelo Diogo) é o trecho EXCLUSAO_CONTA_PRAZO, revisado:true desde o release legal v1.0.
   const itens53 = ["Os dados da sua conta (perfil, conversas e configurações sincronizadas, conectores, computadores pareados, avisos da Secretária e metadados de mídia) ficam guardados enquanto a conta existir.", "Quando você pede a exclusão da conta pelo e-mail contato@travelrpg.com, apagamos esses dados do servidor, inclusive as gravações pendentes de envio, em até 15 dias contados do pedido. Não há cópia de segurança (backup) do banco de dados, então nenhuma cópia desses dados fica guardada depois da exclusão.", "Enquanto a conta existe, o servidor guarda apenas metadados das mídias enviadas ao seu Drive (identificador, tipo, tamanho, data e identificador do arquivo no Drive), para listar e localizar essas cópias. Esses metadados são apagados junto com a conta.", "As cópias na pasta da PIA no seu Google Drive e os dados guardados no seu computador não são apagados pela exclusão da conta: ficam com você, sob o seu controle e as regras da sua conta Google. Apague-os você mesmo, se quiser.", "Os registros de acesso com endereço IP e a lista de endereços bloqueados pela ferramenta de segurança (seção 3) não fazem parte da conta e não são apagados com ela. Eles são mantidos pelo tempo necessário para segurança e prevenção de abuso, com base no legítimo interesse do controlador.", "Dados que já tenham sido usados para treinar um modelo podem não ser removíveis desse modelo (veja o item sobre dados já treinados, abaixo)."];
   let pos = -1;
   for (const item of itens53) {
@@ -574,7 +599,8 @@ test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () 
     pos = i;
   }
   assert.ok(retencao.indexOf(itens53[5]) < retencao.indexOf('Não garantimos a retenção'), 'os três itens fixos e REMOCAO_DADOS_TREINADOS vêm depois');
-  assert.ok(pendencias().some((p) => p.chave === 'EXCLUSAO_CONTA_PRAZO'), 'trecho jurídico com revisado:false até o release');
+  assert.equal(JURIDICO['1.0'].EXCLUSAO_CONTA_PRAZO.revisado, true, 'trecho jurídico aprovado no parecer final (release legal v1.0)');
+  assert.ok(retencao.includes(renderTokens(JURIDICO['1.0'].EXCLUSAO_CONTA_PRAZO.texto, DADOS)), 'EXCLUSAO_CONTA_PRAZO sem selo na Retenção');
   assert.doesNotMatch(retencao, /pelo prazo da frase acima/);
   // Adendo 2, F.2: última frase da 4.9 só com o compromisso de não identificar o titular (v3.1, 0.0, item 3).
   assert.match(retencao, /Nesse caso, não usamos esses modelos para identificar você\. /);
@@ -598,10 +624,10 @@ test('F2-02: Caminho A do parecer: só texto no treinamento; voz, MP3 e terceiro
   const dados = secaoDe(html, 'dados-coletados');
   assert.match(dados, /As gravações de voz de todos os participantes, inclusive de pessoas que não usam a PIA \(terceiros\), servem apenas para entregar a gravação a quem a configurou, na pasta da PIA no Google Drive dessa pessoa\. Nenhuma gravação de voz é usada para treinar modelos de IA\./);
   // TREINAMENTO_MP3_GERADOS: uma vez na Política (Finalidades) e duas nos Termos (Em resumo e licença).
-  const seloMp3 = '[EM REVISÃO JURÍDICA: P11 voz e MP3 fora do treinamento]';
-  assert.equal(html.split(seloMp3).length - 1, 1);
+  const textoMp3 = escapeHtml(renderTokens(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto, DADOS));
+  assert.equal(html.split(textoMp3).length - 1, 1);
   const termos = paginaReal('termos');
-  assert.equal(termos.split(seloMp3).length - 1, 2);
+  assert.equal(termos.split(textoMp3).length - 1, 2);
   assert.doesNotMatch(fragmentoReal('termos').replace(/\{\{[A-Z0-9_]+\}\}/g, ''), /MP3/, 'MP3 nos Termos só pelo token');
   const resumoTermos = textoVisivel(termos.slice(termos.indexOf('<h2 id="em-resumo">'), termos.indexOf('<nav class="legal-sumario"')));
   assert.match(resumoTermos, /seus conteúdos de texto, como conversas e prompts, podem ser usados para treinar modelos de IA e melhorar o serviço ?, e você pode pedir que deixem de ser usados\. Hoje a PIA não guarda cópia/);
@@ -615,7 +641,7 @@ test('F2-02: Caminho A do parecer: só texto no treinamento; voz, MP3 e terceiro
     const texto = textoVisivel(pagina);
     assert.doesNotMatch(texto, /vozes de terceiros, podem ser usadas para treinamento|também são usadas para treinamento|inclusive as gravações de voz do Discord \(também as de terceiros\)|Isso inclui as gravações de voz/);
     assert.doesNotMatch(texto, /músicas que você gera ou envia à PIA podem ser usados/);
-    assert.ok(!pagina.includes('aviso de gravação no Discord'), 'AVISO_GRAVACAO_DISCORD é só do embed');
+    assert.ok(!texto.includes('Este canal está sendo gravado pela PIA'), 'AVISO_GRAVACAO_DISCORD é só do embed');
   }
 });
 
@@ -626,14 +652,14 @@ test('F2-02: compartilhamento, Limited Use e transferência internacional (CA07,
   assert.match(comp, /Não vendemos dados pessoais/);
   assert.match(comp, /Google API Services User Data Policy/);
   assert.match(comp, /Limited Use/);
-  // Adendo 4, 5.9: texto exato (rótulo e lista no HTML, o resto no trecho PROVEDORES_LLM, revisado:false) e sem a frase antiga.
+  // Adendo 4, 5.9: texto exato (rótulo e lista no HTML, o resto no trecho PROVEDORES_LLM, revisado:true desde o release legal v1.0) e sem a frase antiga.
   assert.ok(comp.includes("Provedores de LLM escolhidos por você: Gemini, Groq ou Ollama local. Quando o assistente lê o seu Gmail, Google Drive, Google Agenda ou dados da sua conta Microsoft para atender a um pedido seu, ele envia ao provedor de modelo de linguagem que você escolheu o conteúdo necessário para gerar a resposta. A chave de API e a conta no Gemini ou na Groq são suas: você as cria no site do provedor e as cadastra na PIA. A PIA não usa esse conteúdo para treinar os próprios modelos. O que o provedor faz com o conteúdo depende dos termos da conta que você usa nele, que são aceitos por você diretamente com esse provedor. Na camada gratuita do Gemini, por exemplo, o Google pode usar o conteúdo enviado para melhorar os produtos dele, inclusive com revisão humana. Pelos termos do próprio Google, isso não ocorre na camada paga, e o Ollama roda no seu próprio computador. Antes de usar a PIA com Gmail, Drive, Agenda ou Microsoft, confira os termos do provedor de IA escolhido. Se não quiser que esse conteúdo possa ser usado pelo provedor, use uma camada paga ou o Ollama local. Esse conteúdo não é guardado pela PIA além do histórico da conversa, que fica no seu computador e, se você usar o perfil compartilhado, é sincronizado de forma cifrada com a PIA Server."), '5.9 do Adendo 2');
   assert.doesNotMatch(comp, /Esses provedores podem usar os dados conforme os próprios termos/);
   // CA28 (Adendo 4): a 5.9 renderizada não promete que os provedores não treinam com o conteúdo.
   const item59 = comp.slice(comp.indexOf('Provedores de LLM escolhidos por você'), comp.indexOf('Provedores de LLM escolhidos por você') + 1500);
   assert.doesNotMatch(item59, /não permite que (ele |esse conteúdo )?seja usad|não permite que (o provedor|os provedores)|treinar modelos e não permite|apenas o necessário para gerar a resposta|provedores? não (usa|usam|treina|treinam)/i);
   assert.match(item59, /A PIA não usa esse conteúdo para treinar os próprios modelos\. O que o provedor faz com o conteúdo depende dos termos da conta que você usa nele/);
-  assert.ok(pendencias().some((p) => p.chave === 'PROVEDORES_LLM'));
+  assert.equal(JURIDICO['1.0'].PROVEDORES_LLM.revisado, true, 'PROVEDORES_LLM aprovado no parecer final');
   assert.match(comp, /não são usados para treinar modelos de IA generalizados/);
   // Parecer final, F.4.1: linha fixa da seção 6, com remissão ao item dos provedores de LLM, que vem antes dela na página.
   assert.ok(comp.includes('Dados obtidos pelas APIs do Google (Gmail, Agenda, Drive e perfil) não são usados para treinar modelos de IA generalizados pela PIA. O que o provedor de IA escolhido por você faz com o conteúdo enviado a ele está explicado no item sobre os provedores de LLM, acima.'), 'F.4.1');
@@ -755,7 +781,7 @@ test('F2-02: v1.0 não cita Suno nem histórico de gerações, em lugar nenhum (
   }
 });
 
-test('F2-02: trechos jurídicos da v1.0 com as redações exatas do parecer (Caminho A) e revisado:false', () => {
+test('F2-02: trechos jurídicos da v1.0 com as redações exatas do parecer (Caminho A) e revisado:true (release legal v1.0)', () => {
   const v1 = JURIDICO['1.0'];
   // Seção 4 do parecer jurídico sobre f1338f7, copiada literalmente (4.12 aprovado sem ajuste).
   const PARECER = {
@@ -777,7 +803,7 @@ test('F2-02: trechos jurídicos da v1.0 com as redações exatas do parecer (Cam
   for (const [chave, texto] of Object.entries(PARECER)) {
     assert.equal(v1[chave].texto, texto, `${chave} difere do parecer`);
   }
-  for (const [chave, trecho] of Object.entries(v1)) assert.equal(trecho.revisado, false, `${chave} segue com revisado:false até o parecer favorável`);
+  for (const [chave, trecho] of Object.entries(v1)) assert.equal(trecho.revisado, true, `${chave} aprovado no parecer final (release legal v1.0)`);
   assert.equal(Object.keys(v1).length, 16);
   // LOGS_ACESSO: redação 4.3 do Adendo 2 (frase neutra, sem prazo; prazo e rotação pendentes, P14).
   assert.match(v1.LOGS_ACESSO.texto, /A PIA guarda registros de acesso com o seu endereço IP/);
@@ -788,7 +814,8 @@ test('F2-02: trechos jurídicos da v1.0 com as redações exatas do parecer (Cam
   assert.equal(v1.DIREITOS_MUSICAS_GERADAS.texto, direitosMusicas);
   const termos = paginaReal('termos');
   const secao6 = termos.slice(termos.indexOf('<h2 id="conteudo-gerado-por-ia">'), termos.indexOf('<h2 id="isencao-de-garantias">'));
-  assert.ok(secao6.includes('[EM REVISÃO JURÍDICA: P11 direito autoral das músicas geradas]</span> ' + direitosMusicas), 'texto exato na seção 6 dos Termos');
+  assert.ok(secao6.includes(direitosMusicas), 'texto exato na seção 6 dos Termos');
+  assert.doesNotMatch(secao6, /legal-pendente|EM REVISÃO JURÍDICA/, 'sem selo depois do parecer final');
   for (const trecho of Object.values(v1)) assert.doesNotMatch(trecho.texto + trecho.assunto, /[[\]<>]/, 'texto puro, sem colchetes nem HTML');
   for (const trecho of Object.values(v1)) assert.doesNotMatch(trecho.texto, /\{\{(?!CONTATO_EMAIL|CONTROLADOR_NOME|IDADE_MINIMA)[A-Z_]+\}\}/, 'só tokens de dados');
 });

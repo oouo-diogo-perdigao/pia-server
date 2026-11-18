@@ -107,9 +107,15 @@ test('publicResponse: arquivos existentes mantêm só o Content-Type; páginas l
   const legal = publicResponse('GET', '/privacidade', files);
   assert.equal(legal.status, 200);
   assert.equal(legal.headers['Content-Type'], 'text/html; charset=utf-8');
-  assert.equal(legal.headers['Cache-Control'], 'no-store', 'rascunho enquanto houver pendências');
-  assert.equal(legal.headers['X-Robots-Tag'], 'noindex');
+  assert.equal(legal.headers['Cache-Control'], 'public, max-age=3600', 'v1.0 publicada: cache público');
+  assert.equal(legal.headers['X-Robots-Tag'], undefined, 'publicada: sem noindex');
   assert.match(legal.body, /<h1>Política de Privacidade<\/h1>/);
+  const congelada = publicResponse('GET', '/privacidade/v1.0', files);
+  assert.equal(congelada.status, 200, '/privacidade/v1.0 publicada responde 200');
+  assert.equal(congelada.headers['Cache-Control'], 'public, max-age=3600');
+  assert.match(congelada.body, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade\/v1\.0">/);
+  assert.equal(publicResponse('GET', '/termos/v1.0', files).status, 200);
+  assert.deepEqual(publicResponse('GET', '/termos/v1.0/', files), { status: 301, headers: { Location: '/termos/v1.0' }, body: null });
   assert.equal(publicResponse('HEAD', '/termos', files).body, null);
   assert.equal(publicResponse('HEAD', '/termos', files).status, 200);
   assert.equal(publicResponse('POST', '/termos', files), null);

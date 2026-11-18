@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Release legal v1.0 - 2026-11-17
+- Política de Privacidade e Termos de Serviço v1.0 publicados: `vigencia` e `atualizacao` em 2026-11-17 e `sha256` do HTML congelado em `src/legal/versoes.js` (privacidade `a2ff6c287715…`, termos `9b9b7335fcd2…`). Os 16 trechos de `JURIDICO['1.0']` passam a `revisado:true` (parecer final do Advogado favorável sobre `59a1a82`, correções F.4 aplicadas em `3f1cccf`).
+- As páginas saem do modo rascunho: sem selos, sem faixa, sem `noindex`, com `Cache-Control: public, max-age=3600`; `/privacidade/v1.0` e `/termos/v1.0` respondem 200 com a cópia congelada; o embed do Discord mostra o aviso 4.14 sem selo.
+- Testes do conteúdo real adaptados ao estado publicado; o modo rascunho segue coberto com fontes sintéticas (incluindo `textoJuridico` com e sem revisão). `npm test` e `PIA_LEGAL_RELEASE=1 npm test` passam.
+
 ### Added
 - Textos v1.0 da Política de Privacidade e dos Termos de Serviço em `src/legal/conteudo/` (F2-02), no formato do módulo `src/legal.js` (F2-01): bloco "Em resumo", seções com `h2 id` e tokens `{{NOME}}`. Escopo da v1.0 sem a feature 0001 (requisitos v2.7, CA27); os trechos dela ficam em `docs/legal-v1.1-rascunho.md` para a v1.1.
 - Trechos jurídicos da v1.0 em `src/legal/juridico.js` (`JURIDICO['1.0']`), todos com `revisado:false` até o parecer do Advogado, incluindo `ENCARREGADO`, `SALVAGUARDAS_TRANSFERENCIA`, `ORIGEM_TREINAMENTO_MIDIA` e `TREINAMENTO_MICROSOFT` (antes `TREINAMENTO_MICROSOFT_SUNO`), `DIREITOS_MUSICAS_GERADAS` (Termos, seção 6), ao lado de `TREINAMENTO_MP3_GERADOS` (Política e Termos), `LOGS_ACESSO` e `AVISO_GRAVACAO_DISCORD` da F2-01/F2-10. Ainda em rascunho: não publicar antes do parecer (RN09, CA25).

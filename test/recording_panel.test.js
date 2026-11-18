@@ -51,7 +51,8 @@ test('live panel announces the recording, keeps non-users out of training and li
   // Adendo 3 (O9 do QA): sem a frase ambígua sobre as vozes de terceiros.
   assert.doesNotMatch(notice, /vozes de quem não usa a PIA não são usadas/i);
   assert.doesNotMatch(notice, /\{\{/, 'token de dados expandido no embed');
-  assert.match(notice, /^\[EM REVISÃO JURÍDICA: P11 aviso de gravação no Discord\] /, 'rascunho visível até o parecer');
+  assert.match(notice, /^Este canal está sendo gravado pela PIA\. /, 'aviso aprovado no parecer final: sem selo de rascunho');
+  assert.doesNotMatch(notice, /\[|EM REVISÃO JURÍDICA/);
   assert.match(notice, /\nPolítica de Privacidade: https:\/\/pia\.travelrpg\.com\/privacidade$/);
   assert.doesNotMatch(notice, /MP3/);
   assert.ok(notice.length <= 1024, 'limite de campo do embed');

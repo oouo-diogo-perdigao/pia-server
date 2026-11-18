@@ -2,7 +2,9 @@
 
 Feature 0002. As páginas são públicas, sem login, em `/privacidade` e `/termos` (por exemplo `https://pia.travelrpg.com/privacidade`). Os links são montados a partir de `PIA_PUBLIC_URL`; não há domínio fixo no código.
 
-> Os textos são um rascunho técnico e de produto e não substituem o parecer de um advogado. Nenhuma versão vai para produção sem parecer favorável sobre a mesma versão X.Y (RN09, CA25).
+> **Estado atual:** v1.0 da Política e dos Termos publicada em 17/11/2026 (vigência e atualização 2026-11-17), com parecer final favorável (com ressalvas) do Advogado sobre `59a1a82` e as correções obrigatórias F.4 aplicadas em `3f1cccf`. Os 16 trechos de `JURIDICO['1.0']` estão `revisado:true`, `pendencias()` está vazio e o `sha256` das duas páginas está em `versoes.js` (privacidade `a2ff6c28…`, termos `9b9b7335…`). A v1.0 está congelada: texto novo exige versão nova.
+>
+> O parecer é de uma IA e não substitui a revisão de advogado inscrito na OAB. Nenhuma versão vai para produção sem parecer favorável sobre a mesma versão X.Y (RN09, CA25).
 
 ## Arquivos
 
@@ -28,9 +30,9 @@ Feature 0002. As páginas são públicas, sem login, em `/privacidade` e `/termo
 - Tokens `{{NOME}}`: de dados (`CONTROLADOR_NOME`, `CONTATO_EMAIL`, `ENCARREGADO_NOME`, `ENCARREGADO_EMAIL`, `FORO`, `FORO_RESSALVA`, `DOMINIO_OFICIAL`, `HOSPEDAGEM_TEXTO`, `IDADE_MINIMA`), gerados (`ORIGEM`, `URL_PRIVACIDADE`, `URL_TERMOS`, `VERSAO`, `VIGENCIA`, `ATUALIZACAO`) e jurídicos (chaves do conjunto da versão). Token desconhecido ou vazio é erro.
 - Um trecho jurídico é texto puro (sem HTML), pode usar tokens de dados e gerados (por exemplo `{{CONTATO_EMAIL}}`), mas não outro token jurídico. Use cada um como bloco de frase: `<p>{{LOGS_ACESSO}}</p>`.
 
-### Trechos jurídicos da v1.0 (`JURIDICO['1.0']`, todos `revisado:false`)
+### Trechos jurídicos da v1.0 (`JURIDICO['1.0']`, todos `revisado:true` desde o release de 17/11/2026)
 
-Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/feature-0002/parecer-juridico.md`, seção 4, Caminho A), copiadas literalmente, e dos Adendos 2 (23h40: 4.3, 4.8, 5.3, 5.9, seção 7 e última frase da 4.9) e 3 (23h45: 4.2, 4.13 e 4.14) de 17/11/2026. O Adendo 1 da 4.8 foi substituído pelo Adendo 2. Todas seguem `revisado:false` até o Advogado conferir o texto renderizado do novo commit e emitir o parecer favorável (RN09, CA25).
+Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/feature-0002/parecer-juridico.md`, seção 4, Caminho A), copiadas literalmente, e dos Adendos 2 (23h40: 4.3, 4.8, 5.3, 5.9, seção 7 e última frase da 4.9) e 3 (23h45: 4.2, 4.13 e 4.14) de 17/11/2026. O Adendo 1 da 4.8 foi substituído pelo Adendo 2. O parecer final sobre `59a1a82` foi favorável e, com as correções F.4 aplicadas literalmente, todas passaram a `revisado:true` no commit "release legal v1.0" (RN09, CA25).
 
 | Chave | Pendência | Redação | Onde aparece |
 |---|---|---|---|
@@ -61,10 +63,10 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 - **5.6:** aviso de 15 dias e recusa ou revogação, na Política 13 e nos Termos 11.
 - **5.9:** link da [Google Workspace User Data and Developer Policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy) na seção Limited Use (URL oficial conferida com HTTP 200). A frase "criar, treinar ou melhorar modelos" vem da 4.7.
 - **Adendo 2, tabela D:** Política 4 (Segurança com registros de acesso com IP), 5 (item obrigatório de legítimo interesse e exercício regular de direitos para os registros de acesso), 9 (ferramenta automática de segurança) e runbook de exclusão de conta (`docs/runbooks/exclusao-de-conta.md`, seção 4, item 5, e modelo de resposta).
-- **Adendo 2, 5.3:** Retenção com os seis itens, nesta ordem, antes dos três itens fixos e de `{{REMOCAO_DADOS_TREINADOS}}`. O 2º item (prazo de 15 dias, confirmado pelo Diogo) é o trecho jurídico `EXCLUSAO_CONTA_PRAZO`, com `revisado:false` como os demais até o commit de release.
-- **Adendo 4, 5.9:** a frase "Esses provedores podem usar os dados conforme os próprios termos." foi trocada pelo trecho `PROVEDORES_LLM` com o texto final do Adendo 4 (revisado:false como os demais). O parágrafo da Limited Use e os links do Google ficam como estavam.
+- **Adendo 2, 5.3:** Retenção com os seis itens, nesta ordem, antes dos três itens fixos e de `{{REMOCAO_DADOS_TREINADOS}}`. O 2º item (prazo de 15 dias, confirmado pelo Diogo) é o trecho jurídico `EXCLUSAO_CONTA_PRAZO`, `revisado:true` desde o release legal v1.0.
+- **Adendo 4, 5.9:** a frase "Esses provedores podem usar os dados conforme os próprios termos." foi trocada pelo trecho `PROVEDORES_LLM` com o texto final do Adendo 4 (`revisado:true` desde o release legal v1.0). O parágrafo da Limited Use e os links do Google ficam como estavam.
 - **Adendo 4, seção 7 (substitui a do Adendo 2):** `HOSPEDAGEM_TEXTO` final em `src/legal/dados.js` (servidor e banco no Brasil, decisão do Diogo) e 2º parágrafo fixo final, com o CrowdSec entre os provedores. Sem "principalmente no Brasil". A frase renderizada fica "A hospedagem da PIA Server fica no Brasil, onde ficam o servidor e o banco de dados…".
-- **Parecer final sobre `59a1a82` (favorável com ressalvas):** F.4 (obrigatórias): linha fixa da seção 6 ("…generalizados pela PIA. O que o provedor de IA escolhido por você faz…"), última frase de `ORIGEM_TREINAMENTO_MIDIA` e primeira de `TREINAMENTO_MICROSOFT` com o compromisso da PIA. F.5 (recomendadas): chave e conta do usuário em `PROVEDORES_LLM`, "Os detalhes estão logo abaixo." na seção 7, uma frase só sobre menores na seção 12, Microsoft na seção 5 dos Termos, "podem não ser removíveis" no 6º item da Retenção, runbook sem backups e sem a pendência de prazo. Todos os trechos seguem `revisado:false` até o commit de release do TechLead.
+- **Parecer final sobre `59a1a82` (favorável com ressalvas):** F.4 (obrigatórias): linha fixa da seção 6 ("…generalizados pela PIA. O que o provedor de IA escolhido por você faz…"), última frase de `ORIGEM_TREINAMENTO_MIDIA` e primeira de `TREINAMENTO_MICROSOFT` com o compromisso da PIA. F.5 (recomendadas): chave e conta do usuário em `PROVEDORES_LLM`, "Os detalhes estão logo abaixo." na seção 7, uma frase só sobre menores na seção 12, Microsoft na seção 5 dos Termos, "podem não ser removíveis" no 6º item da Retenção, runbook sem backups e sem a pendência de prazo. No commit "release legal v1.0" (17/11/2026) os 16 trechos passaram a `revisado:true`.
 - **Não entram na v1.0:** 5.7 (aviso de 30 dias antes de encerrar o serviço, decisão do Diogo) e 5.8 (caixa de aceite no primeiro login).
 
 ### Decisões do Diogo sobre o parecer (17/11/2026)
@@ -102,13 +104,14 @@ A v1.0 sai sem a feature 0001 (requisitos v2.7): nenhuma página cita a integra�
   - `[`, `TODO`, `XXX`, `lorem` ou `example.invalid` no HTML servido;
   - versão publicada com HTML diferente do `sha256` do manifesto.
 - Sem a variável, `npm test` passa: o gate valida a si mesmo com fixtures (final passa, rascunho falha), lista as pendências atuais como diagnóstico (`ℹ`) e fica `skipped`.
+- Desde o release da v1.0, os testes do conteúdo real esperam o estado publicado (modo final, `/privacidade/v1.0` e `/termos/v1.0` com 200, `pendencias()` vazio, trechos `revisado:true`). O modo rascunho segue coberto com fontes sintéticas (`fontes()` em `test/legal.test.js`, `fixture()` em `test/legal_release.test.js`).
 - No CI (`.github/workflows/container.yml`), a variável vale `1` em push para `main` e em tags `v*`. Em PRs e outras branches fica vazia. **Consequência esperada:** enquanto houver rascunho, um push para `main` falha no `npm test` e a imagem `:main` não é publicada. Por isso a 0002 só entra na develop depois do parecer (RN10, CA25).
 - Local: `PIA_LEGAL_RELEASE=1 npm test`.
 
 ## Como lançar uma versão nova (X.Y)
 
 1. **Nunca edite** um `*-vX.Y.html` nem um conjunto jurídico de uma versão publicada (o teste de hash falha). Crie `*-vX.Y+1.html` (ou `X+1.0` para mudança relevante de finalidade ou de dado, RN05).
-2. Se o texto jurídico mudar, crie um conjunto novo em `juridico.js` (por exemplo `JURIDICO['1.1']`), com `revisado:false` nos trechos novos.
+2. Se o texto jurídico mudar, crie um conjunto novo em `juridico.js` (por exemplo `JURIDICO['1.1']`), com `revisado:false` nos trechos novos (use um helper próprio: o `trecho()` da v1.0 fixa `revisado:true`).
 3. Acrescente a versão em `src/legal/versoes.js` com `resumo`, `juridico`, `vigencia`/`atualizacao` em `null` e `sha256: null`.
 4. Ajuste `test/legal.test.js` se mudarem seções ou termos obrigatórios.
 5. Registre em `CHANGELOG.md` ("Unreleased") e abra a PR com o checklist do template.

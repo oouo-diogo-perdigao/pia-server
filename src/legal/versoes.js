@@ -24,9 +24,9 @@
 
 export const VERSOES = Object.freeze({
   privacidade: Object.freeze([
-    Object.freeze({ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'Primeira versão.', juridico: '1.0', sha256: null }),
+    Object.freeze({ versao: '1.0', vigencia: '2026-11-17', atualizacao: '2026-11-17', resumo: 'Primeira versão.', juridico: '1.0', sha256: 'a2ff6c287715f4c54d38b7d8796a07a4422537505b559893ed97126a0fcec3ad' }),
   ]),
   termos: Object.freeze([
-    Object.freeze({ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'Primeira versão.', juridico: '1.0', sha256: null }),
+    Object.freeze({ versao: '1.0', vigencia: '2026-11-17', atualizacao: '2026-11-17', resumo: 'Primeira versão.', juridico: '1.0', sha256: '9b9b7335fcd2ea0f138f36932c4b933f99e81a58bdb44c76bc4b862a013ce99f' }),
   ]),
 });

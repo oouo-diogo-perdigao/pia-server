@@ -7,6 +7,8 @@
 //              tokens de dados, como {{CONTATO_EMAIL}}.
 //   revisado:  false até o parecer favorável. Com false, a página mostra o selo
 //              "[EM REVISÃO JURÍDICA: <pendencia> <assunto>]" e entra em modo rascunho.
+//              Na v1.0 (publicada em 2026-11-17) o helper trecho() fixa revisado:true; um conjunto novo
+//              (ex.: '1.1') precisa de um helper próprio com revisado:false até o parecer dele.
 //   pendencia: identificador da pendência nos requisitos (P04, P05, P10, P11, T04).
 //   assunto:   descrição curta usada no selo e em pendencias().
 //
@@ -16,10 +18,12 @@
 // versão nova do documento. O teste de hash (test/legal.test.js) falha se uma versão publicada mudar.
 // Antes da publicação, o parecer só altera este arquivo (texto e revisado:true); nenhuma rota muda.
 // Redação da v1.0: parecer jurídico sobre f1338f7 (seção 4, Caminho A), copiada literalmente; DIREITOS_MUSICAS_GERADAS
-// foi aprovado sem ajuste (4.12). Todos seguem revisado:false até o parecer favorável sobre o texto ajustado.
+// foi aprovado sem ajuste (4.12). Release legal v1.0 (2026-11-17): parecer final do Advogado favorável sobre 59a1a82,
+// com as correções obrigatórias F.4 aplicadas literalmente (3f1cccf); os 16 trechos estão revisado:true e o conjunto
+// '1.0' está congelado (sha256 em versoes.js).
 // A v1.0 não cita a feature 0001: os trechos dela estão em docs/legal-v1.1-rascunho.md (fora do código).
 
-const trecho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado: false, pendencia, assunto });
+const trecho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado: true, pendencia, assunto });
 
 const V1_0 = Object.freeze({
   BASE_LEGAL_TREINAMENTO: trecho('P10', 'base legal do treinamento',
@@ -60,7 +64,7 @@ const V1_0 = Object.freeze({
   ORIGEM_TREINAMENTO_MIDIA: trecho('P11', 'dados do Drive e das APIs do Google fora do treinamento',
     "Gravações de voz, músicas e capturas que a PIA envia ao seu Google Drive não são lidas de volta do Drive para treinar modelos, nem para qualquer outra finalidade além de prestar o serviço que você pediu. A PIA não usa dados obtidos pelas APIs do Google, inclusive os derivados deles, para criar, treinar ou melhorar modelos de IA."),
   // Adendo 2 do parecer, 5.3, 2º item da Retenção (prazo de 15 dias, confirmado pelo Diogo). Trecho jurídico como os
-  // demais: revisado:false até o commit de release.
+  // demais: revisado:true desde o release legal v1.0 (2026-11-17).
   EXCLUSAO_CONTA_PRAZO: trecho('P10', 'prazo de exclusão da conta',
     "Quando você pede a exclusão da conta pelo e-mail {{CONTATO_EMAIL}}, apagamos esses dados do servidor, inclusive as gravações pendentes de envio, em até 15 dias contados do pedido. Não há cópia de segurança (backup) do banco de dados, então nenhuma cópia desses dados fica guardada depois da exclusão."),
   // Adendo 4 do parecer, 5.9 (substitui a do Adendo 2): informa os termos de cada provedor, sem prometer que eles não
