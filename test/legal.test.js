@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  DOCUMENTOS, escapeHtml, formatarData, legalFiles, legalFooter, legalNotFound, legalRedirects,
-  pendencias, renderDocumento, renderTokens,
+  DOCUMENTOS, ORIGEM_SNAPSHOT, escapeHtml, formatarData, hashDocumento, legalFiles, legalFooter,
+  legalNotFound, legalRedirects, pendencias, renderDocumento, renderTokens, versoesAlteradas,
 } from '../src/legal.js';
 import { escapeHtml as escapeOAuth } from '../src/oauth_callback.js';
 import { DADOS } from '../src/legal/dados.js';
@@ -20,10 +20,10 @@ const fragmento = (extra = '') =>
   '<h2 id="foro">Foro</h2><p>{{FORO}}</p><p>{{TRECHO}}</p>' + extra;
 
 function fontes({ revisado = true, datas = true, conteudo = fragmento(), versoes } = {}) {
-  const item = (versao) => ({ versao, vigencia: datas ? '2026-12-01' : null, atualizacao: datas ? '2026-12-05' : null, resumo: 'Primeira versão.' });
+  const item = (versao) => ({ versao, vigencia: datas ? '2026-12-01' : null, atualizacao: datas ? '2026-12-05' : null, resumo: 'Primeira versão.', juridico: '1.0' });
   return {
     dados: { CONTROLADOR_NOME: 'Fulana <Teste> & "Cia"', CONTATO_EMAIL: 'contato@pia.example', FORO: 'comarca X' },
-    juridico: { TRECHO: { texto: 'Trecho para {{CONTATO_EMAIL}}.', revisado, pendencia: 'P10', assunto: 'base legal' } },
+    juridico: { '1.0': { TRECHO: { texto: 'Trecho para {{CONTATO_EMAIL}}.', revisado, pendencia: 'P10', assunto: 'base legal' } } },
     versoes: versoes || { privacidade: [item('1.0')], termos: [item('1.0')] },
     conteudo: typeof conteudo === 'function' ? conteudo : () => conteudo,
   };
@@ -131,13 +131,13 @@ test('fragmento inválido falha no boot', () => {
   assert.throws(() => renderDocumento('privacidade', '9.9', ORIGIN, fontes()), /não existe/);
 });
 
-test('legalFiles serve a versão atual e cada versão congelada com headers por modo', () => {
-  const item = (versao, vigencia) => ({ versao, vigencia, atualizacao: vigencia, resumo: `Versão ${versao}.` });
+test('legalFiles serve a versão atual e só as versões publicadas em /vX.Y, com headers por modo', () => {
+  const item = (versao, vigencia) => ({ versao, vigencia, atualizacao: vigencia, resumo: `Versão ${versao}.`, juridico: '1.0' });
   const versoes = { privacidade: [item('1.0', '2026-12-01'), item('1.1', null)], termos: [item('1.0', '2026-12-01')] };
   const lidos = [];
   const conteudo = (documento, versao) => { lidos.push(`${documento}-v${versao}`); return fragmento(`<p>texto ${versao}</p>`); };
   const entradas = new Map(legalFiles(ORIGIN, { ...fontes(), versoes, conteudo }));
-  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/privacidade/v1.1', '/termos', '/termos/v1.0']);
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0']);
   assert.ok(lidos.includes('privacidade-v1.1') && lidos.includes('termos-v1.0'));
   for (const [type, html, headers] of entradas.values()) {
     assert.equal(type, 'text/html; charset=utf-8');
@@ -151,14 +151,21 @@ test('legalFiles serve a versão atual e cada versão congelada com headers por 
   assert.match(v10, /texto 1\.0/);
   assert.deepEqual(headersV10, { 'Cache-Control': 'public, max-age=3600' });
   assert.doesNotMatch(v10, /privacidade\/v1\.1/, 'a cópia congelada não cita versões posteriores');
-  assert.match(atual, /<a href="\/privacidade\/v1\.0">1\.0<\/a>[\s\S]*<a href="\/privacidade\/v1\.1">1\.1<\/a>/);
+  assert.match(atual, /<a href="\/privacidade\/v1\.0">1\.0<\/a>[\s\S]*<td>1\.1<\/td>/, 'versão em rascunho sem link no histórico');
+  assert.match(atual, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade">/);
+  assert.match(v10, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade\/v1\.0">/);
+  const extra = { ...fontes(), versoes, conteudo };
+  assert.equal(legalNotFound('/privacidade/v1.1', extra).status, 404, 'rascunho não tem /vX.Y');
+  assert.equal(legalNotFound('/privacidade/v1.1/', extra).status, 404);
+  assert.equal(legalNotFound('/privacidade/v1.0', extra), null);
+  assert.equal(legalNotFound('/privacidade/v1.0/', extra), null, 'barra final da publicada é redirect');
   assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [item('1.1', null), item('1.0', null)], termos: [item('1.0', null)] } }),
     /ordem crescente/);
 });
 
 test('conteúdo real do repositório renderiza em rascunho, com dados reais e todos os trechos jurídicos', () => {
   const entradas = new Map(legalFiles('https://pia.travelrpg.com'));
-  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0']);
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/termos'], 'nada publicado: só as atuais em rascunho');
   const privacidade = entradas.get('/privacidade')[1];
   const termos = entradas.get('/termos')[1];
   assert.match(privacidade, /<link rel="canonical" href="https:\/\/pia\.travelrpg\.com\/privacidade">/);
@@ -166,7 +173,7 @@ test('conteúdo real do repositório renderiza em rascunho, com dados reais e to
   assert.match(privacidade, /contato@travelrpg\.com/);
   assert.match(termos, /comarca de Belo Horizonte\/MG/);
   const ambos = privacidade + termos;
-  for (const [chave, trecho] of Object.entries(JURIDICO)) {
+  for (const [chave, trecho] of Object.entries(JURIDICO['1.0'])) {
     assert.equal(trecho.revisado, false, `${chave} nasce com revisado:false`);
     assert.ok(ambos.includes(`[EM REVISÃO JURÍDICA: ${trecho.pendencia} ${trecho.assunto}]`), `${chave} usado em alguma página`);
   }
@@ -180,8 +187,7 @@ test('legalRedirects mapeia aliases e barra final para o caminho canônico relat
   assert.equal(legalRedirects.get('/privacidade/'), '/privacidade');
   assert.equal(legalRedirects.get('/terms'), '/termos');
   assert.equal(legalRedirects.get('/termos/'), '/termos');
-  assert.equal(legalRedirects.get('/privacidade/v1.0/'), '/privacidade/v1.0');
-  assert.equal(legalRedirects.get('/termos/v1.0/'), '/termos/v1.0');
+  assert.equal(legalRedirects.has('/privacidade/v1.0/'), false, 'v1.0 ainda não publicada');
   assert.equal(legalRedirects.has('/privacidade'), false);
   for (const destino of legalRedirects.values()) assert.match(destino, /^\/(privacidade|termos)(\/v\d+\.\d+)?$/);
 });
@@ -192,13 +198,14 @@ test('legalNotFound devolve 404 HTML só para /privacidade/* e /termos/* desconh
   assert.equal(res.headers['Content-Type'], 'text/html; charset=utf-8');
   assert.equal(res.headers['Cache-Control'], 'no-store');
   assert.match(res.body, /<html lang="pt-BR">/);
+  assert.equal(legalNotFound('/termos/v1.0').status, 404, 'v1.0 em rascunho não tem rota própria');
   assert.equal((res.body.match(/<h1\b/g) || []).length, 1);
   assert.match(res.body, /<a href="\/privacidade">Política de Privacidade<\/a>/);
   assert.match(res.body, /<a href="\/termos">Termos de Serviço<\/a>/);
   const xss = legalNotFound('/privacidade/<script>alert(1)</script>');
   assert.equal(xss.status, 404);
   assert.doesNotMatch(xss.body, /alert/);
-  for (const caminho of ['/', '/api/x', '/privacidade', '/termos', '/privacidadex', '/termos/v1.0', '/termos/v1.0/', '/privacy']) {
+  for (const caminho of ['/', '/api/x', '/privacidade', '/termos', '/privacidadex', '/privacy']) {
     assert.equal(legalNotFound(caminho), null, caminho);
   }
 });
@@ -214,12 +221,47 @@ test('legalFooter tem os dois links relativos e o texto de ciência opcional', (
 test('pendencias lista trechos sem revisão e datas nulas', () => {
   const lista = pendencias();
   const juridicos = lista.filter((p) => p.tipo === 'juridico').map((p) => p.chave);
-  assert.deepEqual(juridicos, Object.keys(JURIDICO));
+  assert.deepEqual(juridicos, Object.keys(JURIDICO['1.0']));
   const datas = lista.filter((p) => p.tipo === 'data');
   const esperadas = Object.values(VERSOES).flat().length * 2;
   assert.equal(datas.length, esperadas);
   assert.deepEqual(pendencias(fontes()), []);
   assert.deepEqual(pendencias(fontes({ revisado: false, datas: false })).map((p) => p.tipo), ['juridico', 'data', 'data', 'data', 'data']);
+});
+
+test('versões publicadas ficam congeladas por sha256 do HTML (texto jurídico novo = versão nova)', () => {
+  const publicadas = Object.entries(VERSOES).flatMap(([documento, lista]) =>
+    lista.filter((item) => item.vigencia).map((item) => ({ documento, ...item })));
+  for (const { documento, versao, sha256 } of publicadas) {
+    const atual = hashDocumento(documento, versao);
+    assert.equal(sha256, atual,
+      `${documento} v${versao} está publicada: preencha sha256: '${atual}' em versoes.js no release, ` +
+      'ou, se o texto mudou, crie uma versão nova em vez de alterar a publicada.');
+  }
+  assert.deepEqual(versoesAlteradas(), []);
+
+  const congelada = (juridico, sha256) => ({
+    ...fontes(),
+    juridico,
+    versoes: {
+      privacidade: [{ versao: '1.0', vigencia: '2026-12-01', atualizacao: '2026-12-01', resumo: 'Primeira.', juridico: '1.0', sha256 }],
+      termos: [{ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'Primeira.', juridico: '1.0', sha256: null }],
+    },
+  });
+  const original = fontes().juridico;
+  const hash = hashDocumento('privacidade', '1.0', congelada(original, null));
+  assert.match(hash, /^[0-9a-f]{64}$/);
+  assert.deepEqual(versoesAlteradas(congelada(original, hash)), [], 'termos em rascunho não entra no congelamento');
+  const semHash = versoesAlteradas(congelada(original, null));
+  assert.deepEqual(semHash, [{ documento: 'privacidade', versao: '1.0', esperado: null, atual: hash }]);
+  const alterado = { '1.0': { TRECHO: { ...original['1.0'].TRECHO, texto: 'Outro texto.' } } };
+  assert.equal(versoesAlteradas(congelada(alterado, hash)).length, 1, 'mudar o trecho de uma versão publicada quebra o hash');
+  const novoConjunto = { ...original, '1.1': { TRECHO: { texto: 'Outro texto.', revisado: true } } };
+  assert.deepEqual(versoesAlteradas(congelada(novoConjunto, hash)), [], 'conjunto novo não altera a versão publicada');
+  assert.equal(hashDocumento('privacidade', '1.0', congelada(original, null)), hash, 'hash determinístico');
+  assert.equal(ORIGEM_SNAPSHOT, 'https://pia.travelrpg.com');
+  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [{ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'x', juridico: '9.9' }], termos: fontes().versoes.termos } }),
+    /conjunto jurídico inexistente/);
 });
 
 function importsDe(arquivo, vistos = new Set()) {
@@ -241,5 +283,5 @@ test('src/legal.js não importa db.js (nem auth.js), direta ou indiretamente (T0
   const saida = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: new URL('..', import.meta.url), env, encoding: 'utf8',
   });
-  assert.equal(saida, '4');
+  assert.equal(saida, '2');
 });

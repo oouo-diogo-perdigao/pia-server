@@ -59,16 +59,22 @@
  *   renderTokens(texto, valores) substitui {{NOME}} por valores[NOME] (já em HTML); erro se faltar.
  *   renderDocumento(documento, versao, origin, fontes?) → { html, rascunho, headers, pendencias }.
  *   legalFiles(origin, fontes?) → array de [caminho, [tipo, html, headers]] para espalhar no
- *                                mapa publicFiles: /privacidade, /termos (versão atual) e
- *                                /privacidade/vX.Y, /termos/vX.Y (todas as versões do manifesto).
+ *                                mapa publicFiles: /privacidade, /termos (versão atual, mesmo em
+ *                                rascunho) e /privacidade/vX.Y, /termos/vX.Y só das versões
+ *                                publicadas (vigencia preenchida). /vX.Y em rascunho = 404 legal.
  *   legalRedirects             Map caminho → Location relativo canônico (301; a query é descartada).
  *   legalNotFound(caminho, fontes?) → { status: 404, headers, body } para /privacidade/* e /termos/*
  *                                desconhecidos; null para qualquer outro caminho.
  *   legalFooter({ ciencia })   rodapé HTML com links relativos para /privacidade e /termos;
  *                                ciencia:true acrescenta o texto de ciência do RF05.
  *   pendencias(fontes?)        lista de pendências ativas (trechos sem revisão e datas null).
+ *   hashDocumento(doc, versao) sha256 do HTML da versão renderizada com ORIGEM_SNAPSHOT.
+ *   versoesAlteradas(fontes?)  versões publicadas cujo HTML não bate com o sha256 do manifesto.
+ * Congelamento: trechos jurídicos são versionados (JURIDICO['1.0']) e cada versão do manifesto
+ * aponta seu conjunto; versão publicada leva sha256 e o teste falha se o HTML dela mudar.
  * "fontes" é opcional e serve aos testes: { dados, juridico, versoes, conteudo(documento, versao) }.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DADOS } from './legal/dados.js';
 import { JURIDICO } from './legal/juridico.js';
@@ -78,6 +84,8 @@ const HTML = 'text/html; charset=utf-8';
 const HEADERS_FINAL = Object.freeze({ 'Cache-Control': 'public, max-age=3600' });
 const HEADERS_RASCUNHO = Object.freeze({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
 const RESERVADOS = new Set(['em-resumo', 'sumario', 'historico-de-versoes']);
+/** Origin fixo usado para calcular o hash das versões congeladas (independe de PIA_PUBLIC_URL). */
+export const ORIGEM_SNAPSHOT = 'https://pia.travelrpg.com';
 
 export const DOCUMENTOS = Object.freeze({
   privacidade: Object.freeze({
@@ -148,11 +156,14 @@ function validarFontes({ dados, juridico, versoes }) {
   for (const [nome, valor] of Object.entries(dados)) {
     if (typeof valor !== 'string' || !valor.trim()) throw new Error(`Dado legal ${nome} sem valor.`);
   }
-  for (const [nome, item] of Object.entries(juridico)) {
-    if (Object.hasOwn(dados, nome)) throw new Error(`Chave ${nome} repetida em dados e juridico.`);
-    if (typeof item?.texto !== 'string' || !item.texto.trim()) throw new Error(`Trecho jurídico ${nome} sem texto.`);
-    if (typeof item.revisado !== 'boolean') throw new Error(`Trecho jurídico ${nome} sem revisado:true|false.`);
-    if (!item.revisado && (!item.pendencia || !item.assunto)) throw new Error(`Trecho jurídico ${nome} sem pendencia/assunto.`);
+  for (const [conjunto, trechos] of Object.entries(juridico)) {
+    for (const [nome, item] of Object.entries(trechos)) {
+      const onde = `Trecho jurídico ${conjunto}/${nome}`;
+      if (Object.hasOwn(dados, nome)) throw new Error(`Chave ${nome} repetida em dados e juridico.`);
+      if (typeof item?.texto !== 'string' || !item.texto.trim()) throw new Error(`${onde} sem texto.`);
+      if (typeof item.revisado !== 'boolean') throw new Error(`${onde} sem revisado:true|false.`);
+      if (!item.revisado && (!item.pendencia || !item.assunto)) throw new Error(`${onde} sem pendencia/assunto.`);
+    }
   }
   for (const documento of Object.keys(DOCUMENTOS)) {
     const lista = versoes[documento];
@@ -168,9 +179,13 @@ function validarFontes({ dados, juridico, versoes }) {
       formatarData(item.vigencia);
       formatarData(item.atualizacao);
       if (typeof item.resumo !== 'string' || !item.resumo.trim()) throw new Error(`Versão ${item.versao} de ${documento} sem resumo.`);
+      if (!Object.hasOwn(juridico, item.juridico)) throw new Error(`Versão ${item.versao} de ${documento} aponta conjunto jurídico inexistente: ${item.juridico}.`);
     }
   }
 }
+
+/** Publicada = vigência preenchida. Só versões publicadas têm rota /vX.Y. */
+const publicada = (item) => item.vigencia !== null && item.vigencia !== undefined;
 
 function caminho(documento, versao) {
   return versao ? `/${documento}/v${versao}` : `/${documento}`;
@@ -187,8 +202,8 @@ function valoresTokens(fontes, documento, item, origin, registro) {
   valores.VIGENCIA = data(item.vigencia, 'data de vigência', documento, item, registro);
   valores.ATUALIZACAO = data(item.atualizacao, 'data de atualização', documento, item, registro);
   const dadosHtml = { ...valores };
-  for (const [nome, trecho] of Object.entries(fontes.juridico)) {
-    const texto = renderTokens(escapeHtml(trecho.texto), dadosHtml, `juridico.js (${nome})`);
+  for (const [nome, trecho] of Object.entries(fontes.juridico[item.juridico])) {
+    const texto = renderTokens(escapeHtml(trecho.texto), dadosHtml, `juridico.js (${item.juridico}/${nome})`);
     if (trecho.revisado) { valores[nome] = texto; continue; }
     // Um getter registra a pendência só quando o token é de fato usado na página.
     Object.defineProperty(valores, nome, {
@@ -256,7 +271,9 @@ function cabecaHtml({ titulo, descricao, canonical, rascunho }) {
 function historico(fontes, documento, ate, registro) {
   const lista = fontes.versoes[documento];
   const linhas = lista.slice(0, lista.indexOf(ate) + 1).map((item) =>
-    '<tr><td><a href="' + caminho(documento, item.versao) + '">' + escapeHtml(item.versao) + '</a></td>' +
+    '<tr><td>' + (publicada(item)
+      ? '<a href="' + caminho(documento, item.versao) + '">' + escapeHtml(item.versao) + '</a>'
+      : escapeHtml(item.versao)) + '</td>' +
     '<td>' + data(item.vigencia, 'data de vigência', documento, item, registro) + '</td>' +
     '<td>' + data(item.atualizacao, 'data de atualização', documento, item, registro) + '</td>' +
     '<td>' + escapeHtml(item.resumo) + '</td></tr>').join('');
@@ -332,9 +349,9 @@ export function legalFiles(origin, fontes) {
   for (const documento of Object.keys(DOCUMENTOS)) {
     const atual = renderDocumento(documento, undefined, origin, base);
     entradas.push([caminho(documento), [HTML, atual.html, atual.headers]]);
-    for (const { versao } of base.versoes[documento]) {
-      const pagina = renderDocumento(documento, versao, origin, base);
-      entradas.push([caminho(documento, versao), [HTML, pagina.html, pagina.headers]]);
+    for (const item of base.versoes[documento].filter(publicada)) {
+      const pagina = renderDocumento(documento, item.versao, origin, base);
+      entradas.push([caminho(documento, item.versao), [HTML, pagina.html, pagina.headers]]);
     }
   }
   return entradas;
@@ -348,7 +365,9 @@ function redirecionamentos(versoes) {
     ['/termos/', '/termos'],
   ]);
   for (const documento of Object.keys(DOCUMENTOS)) {
-    for (const { versao } of versoes[documento]) mapa.set(caminho(documento, versao) + '/', caminho(documento, versao));
+    for (const { versao } of versoes[documento].filter(publicada)) {
+      mapa.set(caminho(documento, versao) + '/', caminho(documento, versao));
+    }
   }
   return mapa;
 }
@@ -366,7 +385,7 @@ export function legalNotFound(path, fontes) {
   const base = fontesCom(fontes);
   const conhecidos = new Set([...redirecionamentos(base.versoes).keys()]);
   for (const documento of Object.keys(DOCUMENTOS)) {
-    for (const { versao } of base.versoes[documento]) conhecidos.add(caminho(documento, versao));
+    for (const { versao } of base.versoes[documento].filter(publicada)) conhecidos.add(caminho(documento, versao));
   }
   if (conhecidos.has(path)) return null;
   const links = Object.entries(DOCUMENTOS).map(([documento, meta]) => {
@@ -407,14 +426,38 @@ export function legalFooter({ ciencia = false } = {}) {
 export function pendencias(fontes) {
   const base = fontesCom(fontes);
   const lista = [];
-  for (const [chave, trecho] of Object.entries(base.juridico)) {
-    if (!trecho.revisado) lista.push({ tipo: 'juridico', chave, pendencia: trecho.pendencia, assunto: trecho.assunto });
+  const usados = new Set(Object.values(base.versoes).flat().map((item) => item.juridico));
+  for (const conjunto of usados) {
+    for (const [chave, trecho] of Object.entries(base.juridico[conjunto])) {
+      if (!trecho.revisado) lista.push({ tipo: 'juridico', conjunto, chave, pendencia: trecho.pendencia, assunto: trecho.assunto });
+    }
   }
   for (const documento of Object.keys(DOCUMENTOS)) {
     for (const item of base.versoes[documento]) {
       for (const campo of ['vigencia', 'atualizacao']) {
         if (item[campo] === null || item[campo] === undefined) lista.push({ tipo: 'data', documento, versao: item.versao, campo });
       }
+    }
+  }
+  return lista;
+}
+
+/** sha256 (hex) do HTML de uma versão, renderizado com ORIGEM_SNAPSHOT. */
+export function hashDocumento(documento, versao, fontes) {
+  return createHash('sha256').update(renderDocumento(documento, versao, ORIGEM_SNAPSHOT, fontes).html).digest('hex');
+}
+
+/**
+ * Versões publicadas (vigencia preenchida) cujo HTML não bate com o sha256 do manifesto.
+ * Lista vazia = todas as versões publicadas continuam congeladas. Texto novo exige versão nova.
+ */
+export function versoesAlteradas(fontes) {
+  const base = fontesCom(fontes);
+  const lista = [];
+  for (const documento of Object.keys(DOCUMENTOS)) {
+    for (const item of base.versoes[documento].filter(publicada)) {
+      const atual = hashDocumento(documento, item.versao, base);
+      if (item.sha256 !== atual) lista.push({ documento, versao: item.versao, esperado: item.sha256 ?? null, atual });
     }
   }
   return lista;

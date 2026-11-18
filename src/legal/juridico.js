@@ -8,12 +8,16 @@
 //   pendencia: identificador da pendência nos requisitos (P10, P11, T04).
 //   assunto:   descrição curta usada no selo e em pendencias().
 //
-// O parecer só altera este arquivo (texto e revisado:true); nenhuma rota muda.
+// Os trechos são versionados: JURIDICO['1.0'] é o conjunto usado pelas versões do manifesto
+// (src/legal/versoes.js) que apontam juridico: '1.0'. Depois que uma versão é publicada (vigencia
+// preenchida), o conjunto dela fica congelado: texto jurídico novo = conjunto novo (ex.: '1.1') e
+// versão nova do documento. O teste de hash (test/legal.test.js) falha se uma versão publicada mudar.
+// Antes da publicação, o parecer só altera este arquivo (texto e revisado:true); nenhuma rota muda.
 // A redação inicial é a proposta do PO (requisitos v2.2, seções 6.1 e 6.2) e do plano técnico.
 
 const trecho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado: false, pendencia, assunto });
 
-export const JURIDICO = Object.freeze({
+const V1_0 = Object.freeze({
   BASE_LEGAL_TREINAMENTO: trecho('P10', 'base legal do treinamento',
     'Para o treinamento de modelos e a melhoria do serviço, a base legal é o consentimento (art. 7º, inciso I) e/ou o legítimo interesse (art. 7º, inciso IX) da LGPD.'),
   CONSENTIMENTO_TERCEIROS_DISCORD: trecho('P11', 'consentimento de terceiros no Discord',
@@ -33,3 +37,5 @@ export const JURIDICO = Object.freeze({
   LOGS_ACESSO: trecho('T04', 'logs de acesso do proxy',
     'O servidor e o proxy de hospedagem podem registrar logs técnicos de acesso (como endereço IP, data, hora e caminho acessado) para segurança e diagnóstico.'),
 });
+
+export const JURIDICO = Object.freeze({ '1.0': V1_0 });
