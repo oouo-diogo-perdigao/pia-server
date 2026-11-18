@@ -20,6 +20,7 @@ import { sunoCapabilities, sunoRoute } from './suno_auth.js';
 import { publicError } from './suno_errors.js';
 import { musicGenerationsRoute } from './music_generations.js';
 import { sunoAdminRoute } from './suno_client.js';
+import { recoverSunoJobs, sunoJobsRoute } from './suno_jobs.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -214,6 +215,7 @@ async function route(req, res) {
     return res.end(result.body);
   }
   if (path === '/auth/connectors/suno' || path.startsWith('/device/suno/')) {
+    if (path.startsWith('/device/suno/jobs') && await sunoJobsRoute(req, res, url, { authenticateDevice, readBody: body })) return;
     if (await sunoRoute(req, res, url, { authenticateDevice, readBody: body })) return;
   }
   if (req.method === 'POST' && path === '/device/logout') {
@@ -421,6 +423,8 @@ async function reconcile() {
 
 await migrate();
 await migrateConnectorRows();
+// Jobs do Suno que estavam na fila ou rodando viram interrupted; nunca refazem tools/call.
+await recoverSunoJobs();
 const server = createServer((req, res) => {
   route(req, res).catch((error) => {
     if (res.headersSent) { res.end(); return; }

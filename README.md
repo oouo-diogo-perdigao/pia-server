@@ -120,6 +120,46 @@ conectada à própria conta PIA com `POST /api/admin/suno/spike`
 `{"suno_account_id": "…"}`. A resposta traz nomes, descrições e schemas, sem
 tokens, e não gera música.
 
+### Jobs de geração do Suno
+
+| Rota | Entrada | Resposta |
+|---|---|---|
+| `POST /device/suno/jobs` | `{prompt, lyrics?, duration? (10–180), count? (1–10, padrão 1), instrumental?, client_job_id (uuid), suno_account_id?}` | `202` com o job (`state: "queued"`). Repetir o mesmo `client_job_id` devolve `200` com o job original |
+| `GET /device/suno/jobs/:id` | — | o job |
+| `POST /device/suno/jobs/:id/cancel` | — | o job (normalmente já `cancelled`) |
+
+O job tem este formato: `{job_id, generation_id, client_job_id, state, completed, total, extra_ready,
+ready_text, error, code, suno_account: {id, name}, device_id, from_this_device,
+created, tracks: [{n, title, duration, extra}]}`. Os estados possíveis são `queued`,
+`running`, `completed`, `failed`, `interrupted` e `cancelled`. O `audio_url`, o
+prompt e a letra nunca vão no job. O áudio sai pelo download da T5.
+
+Recusas antes de criar o job:
+- `suno_not_connected` quando não há conta Suno;
+- `400 suno_account_required` quando há duas ou mais contas válidas e nenhuma
+  foi escolhida;
+- `404 suno_account_not_found` para uma conta de outra conta PIA;
+- `suno_credential_expired` (`refresh_failed`) e `502 suno_unavailable`
+  (`unavailable`);
+- `409 suno_job_active` quando já há um job ativo na conta PIA, em qualquer PC;
+- `400 bad_request` para entrada inválida.
+
+Um id de job inexistente ou de outra conta responde `404 suno_job_not_found`.
+
+O job é o próprio item de `music_generations` (`source: "suno"`, `provider:
+"suno_mcp"`, `suno_account_id`, `job_id`, `client_id = client_job_id`), e as
+faixas ficam em `music_generation_tracks` com o `audio_url` do Suno, guardado só
+no servidor. O servidor nunca guarda o áudio. O worker roda no próprio processo:
+faz `ceil(N/2)` gerações em sequência e para no primeiro clip que falhar, sem
+chamada extra. Toda faixa pronta é guardada, inclusive a 2ª da última chamada
+de um N ímpar e a extra pronta numa falha parcial (`extra: true`).
+
+Cancelar aborta a espera, mantém as faixas prontas e não começa outro
+`tools/call`. No boot, os jobs `queued` ou `running` viram `interrupted` e nunca
+repetem o `tools/call`. O `active_job` do `GET /device/suno/status` traz `{job_id,
+generation_id, client_job_id, state, suno_account_id, completed, total,
+extra_ready, device_id, from_this_device}` ou `null`.
+
 ## Histórico de gerações de música
 
 O servidor guarda o histórico de músicas da conta PIA (RN13, RN14, RN25/CA24) na

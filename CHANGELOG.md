@@ -18,6 +18,7 @@
 
 - Cliente MCP do Suno (T3b, `src/suno_mcp.js` e `src/suno_client.js`): Streamable HTTP com `Mcp-Session-Id` e reinitialize, JSON e SSE, timeout por `AbortSignal`, descoberta tolerante das tools (geração, status, conta, créditos), mapeamento de argumentos pelo schema, polling de clips pendentes sem prazo total (backoff de 5 s a 60 s; falha transitória não encerra a geração) e tradução de erros (`suno_credential_expired`, `suno_no_credits`, `suno_timeout`, `suno_unavailable`) sem vazar tokens, corpos ou URLs assinadas.
 - `POST /api/admin/suno/spike` (admin, sessão web): `tools/list` de uma conta Suno conectada, sem tokens.
+- Jobs do Suno (T4, `src/suno_jobs.js`): `POST /device/suno/jobs` (idempotente por `client_job_id`, um job ativo por conta PIA, escolha da conta Suno), `GET /device/suno/jobs/:id` e `POST /device/suno/jobs/:id/cancel`. O worker roda no processo e faz `ceil(N/2)` chamadas, guardando todas as faixas prontas (extras com `extra: true`) em `music_generations`/`music_generation_tracks` com o link do Suno só no servidor; o cancelamento mantém as faixas prontas; no boot, os jobs ativos viram `interrupted` sem refazer `tools/call`; `active_job` aparece no status.
 
 ### Changed
 - `resolveSunoIdentity` usa o cliente MCP e a tool de conta descoberta (`get_account`, `account-me`, `get_profile`…).
