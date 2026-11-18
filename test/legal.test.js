@@ -1,0 +1,245 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import {
+  DOCUMENTOS, escapeHtml, formatarData, legalFiles, legalFooter, legalNotFound, legalRedirects,
+  pendencias, renderDocumento, renderTokens,
+} from '../src/legal.js';
+import { escapeHtml as escapeOAuth } from '../src/oauth_callback.js';
+import { DADOS } from '../src/legal/dados.js';
+import { JURIDICO } from '../src/legal/juridico.js';
+import { VERSOES } from '../src/legal/versoes.js';
+
+const ORIGIN = 'https://pia.example';
+
+const fragmento = (extra = '') =>
+  '<!-- comentário interno -->' +
+  '<!-- legal:resumo --><ul><li>Gratuito.</li><li>Sem garantias.</li><li>Treinamento.</li><li>Sem retenção.</li></ul><!-- /legal:resumo -->' +
+  '<h2 id="contato">Contato</h2><p>{{CONTROLADOR_NOME}}, <a href="mailto:{{CONTATO_EMAIL}}">{{CONTATO_EMAIL}}</a></p>' +
+  '<h2 id="foro">Foro</h2><p>{{FORO}}</p><p>{{TRECHO}}</p>' + extra;
+
+function fontes({ revisado = true, datas = true, conteudo = fragmento(), versoes } = {}) {
+  const item = (versao) => ({ versao, vigencia: datas ? '2026-12-01' : null, atualizacao: datas ? '2026-12-05' : null, resumo: 'Primeira versão.' });
+  return {
+    dados: { CONTROLADOR_NOME: 'Fulana <Teste> & "Cia"', CONTATO_EMAIL: 'contato@pia.example', FORO: 'comarca X' },
+    juridico: { TRECHO: { texto: 'Trecho para {{CONTATO_EMAIL}}.', revisado, pendencia: 'P10', assunto: 'base legal' } },
+    versoes: versoes || { privacidade: [item('1.0')], termos: [item('1.0')] },
+    conteudo: typeof conteudo === 'function' ? conteudo : () => conteudo,
+  };
+}
+
+test('renderTokens substitui tokens e falha em token desconhecido, vazio ou malformado', () => {
+  assert.equal(renderTokens('Oi {{NOME}}!', { NOME: 'Ana' }), 'Oi Ana!');
+  assert.throws(() => renderTokens('{{OUTRO}}', { NOME: 'Ana' }), /Token desconhecido \{\{OUTRO\}\}/);
+  assert.throws(() => renderTokens('{{NOME}}', { NOME: '' }), /sem valor/);
+  assert.throws(() => renderTokens('{{nome}}', { NOME: 'Ana' }), /malformado/);
+  assert.throws(() => renderTokens('{{ NOME }}', { NOME: 'Ana' }), /malformado/);
+  assert.throws(() => renderDocumento('privacidade', undefined, ORIGIN, fontes({ conteudo: fragmento('{{INEXISTENTE}}') })),
+    /Token desconhecido \{\{INEXISTENTE\}\}/);
+});
+
+test('escapeHtml segue o contrato do oauth_callback e os dados são escapados na página', () => {
+  const amostra = `<script>alert("x")</script> & 'y'`;
+  assert.equal(escapeHtml(amostra), escapeOAuth(amostra));
+  const { html } = renderDocumento('privacidade', undefined, ORIGIN, fontes());
+  assert.match(html, /Fulana &lt;Teste&gt; &amp; &quot;Cia&quot;/);
+  assert.doesNotMatch(html, /<Teste>/);
+  assert.match(html, /Trecho para contato@pia\.example\./);
+  assert.doesNotMatch(html, /\{\{|\}\}/);
+  assert.doesNotMatch(html, /comentário interno/);
+});
+
+test('versão final: cache público, sem noindex, sem faixa nem selos', () => {
+  for (const documento of Object.keys(DOCUMENTOS)) {
+    const pagina = renderDocumento(documento, undefined, ORIGIN, fontes());
+    assert.equal(pagina.rascunho, false);
+    assert.deepEqual(pagina.headers, { 'Cache-Control': 'public, max-age=3600' });
+    assert.deepEqual(pagina.pendencias, []);
+    assert.doesNotMatch(pagina.html, /noindex|RASCUNHO|\[/);
+  }
+});
+
+test('rascunho por trecho jurídico sem revisão: selo, faixa, no-store e noindex', () => {
+  const pagina = renderDocumento('privacidade', undefined, ORIGIN, fontes({ revisado: false }));
+  assert.equal(pagina.rascunho, true);
+  assert.deepEqual(pagina.headers, { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+  assert.deepEqual(pagina.pendencias, ['juridico:TRECHO']);
+  assert.match(pagina.html, /<span class=\"legal-pendente\">\[EM REVISÃO JURÍDICA: P10 base legal\]<\/span> Trecho para contato@pia\.example\./);
+  assert.match(pagina.html, /RASCUNHO, não publicar/);
+  assert.match(pagina.html, /<meta name="robots" content="noindex">/);
+});
+
+test('rascunho por data nula e por marcador com colchete no texto', () => {
+  const semData = renderDocumento('termos', undefined, ORIGIN, fontes({ datas: false }));
+  assert.equal(semData.rascunho, true);
+  assert.match(semData.html, /Vigente a partir de <span class="legal-pendente">\[PREENCHER NO RELEASE: data de vigência\]<\/span>/);
+  assert.match(semData.html, /Última atualização: <span class="legal-pendente">\[PREENCHER NO RELEASE: data de atualização\]/);
+  const comColchete = renderDocumento('termos', undefined, ORIGIN, fontes({ conteudo: fragmento('<p>[TEXTO PENDENTE]</p>') }));
+  assert.equal(comColchete.rascunho, true);
+  assert.equal(comColchete.headers['X-Robots-Tag'], 'noindex');
+});
+
+test('datas em DD/MM/AAAA, determinísticas e validadas', () => {
+  assert.equal(formatarData('2026-12-01'), '01/12/2026');
+  assert.equal(formatarData('2028-02-29'), '29/02/2028');
+  assert.equal(formatarData(null), null);
+  assert.throws(() => formatarData('2026-02-29'), /inexistente/);
+  assert.throws(() => formatarData('01/12/2026'), /inválida/);
+  const { html } = renderDocumento('privacidade', undefined, ORIGIN, fontes());
+  assert.match(html, /Versão 1\.0 · Vigente a partir de 01\/12\/2026 · Última atualização: 05\/12\/2026/);
+});
+
+test('layout: lang, title, description, canonical, h1 único, sumário, resumo, histórico e links', () => {
+  const { html } = renderDocumento('privacidade', undefined, ORIGIN + '/qualquer?x=1', fontes());
+  assert.match(html, /^<!doctype html><html lang="pt-BR">/);
+  assert.match(html, /<title>Política de Privacidade · PIA<\/title>/);
+  assert.match(html, /<meta name="description" content="[^"]+">/);
+  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade">/);
+  assert.equal((html.match(/<h1\b/g) || []).length, 1);
+  assert.match(html, /<h1>Política de Privacidade<\/h1>/);
+  for (const id of ['em-resumo', 'contato', 'foro', 'historico-de-versoes']) {
+    assert.match(html, new RegExp(`<a href="#${id}">`));
+    assert.match(html, new RegExp(`<h2 id="${id}">`));
+  }
+  assert.match(html, /<h2 id="em-resumo">Em resumo<\/h2><ul><li>Gratuito/);
+  assert.match(html, /<td><a href="\/privacidade\/v1\.0">1\.0<\/a><\/td><td>01\/12\/2026<\/td><td>05\/12\/2026<\/td><td>Primeira versão\.<\/td>/);
+  assert.match(html, /<a href="\/">Voltar à PIA<\/a>/);
+  assert.match(html, /Veja também: <a href="\/termos">Termos de Serviço<\/a>/);
+  assert.doesNotMatch(html, /<script/i);
+  const termos = renderDocumento('termos', '1.0', ORIGIN, fontes()).html;
+  assert.match(termos, /<link rel="canonical" href="https:\/\/pia\.example\/termos\/v1\.0">/);
+  assert.match(termos, /Veja também: <a href="\/privacidade">Política de Privacidade<\/a>/);
+});
+
+test('fragmento inválido falha no boot', () => {
+  const casos = [
+    [fragmento('<h1>Outro</h1>'), /<h1>/],
+    [fragmento('<script>x</script>'), /<script>/],
+    [fragmento('<a href="/" onclick="x()">a</a>'), /on\*=/],
+    [fragmento('<h2>Sem id</h2>'), /precisa de id/],
+    [fragmento('<h2 id="contato">De novo</h2>'), /repetido ou reservado/],
+    [fragmento('<h2 id="sumario">Reservado</h2>'), /repetido ou reservado/],
+    ['<h2 id="a">A</h2>', /exatamente um bloco/],
+    ['<!-- legal:resumo --><ul><li>1</li><li>2</li></ul><!-- /legal:resumo --><h2 id="a">A</h2>', /3 a 5 itens/],
+  ];
+  for (const [conteudo, erro] of casos) {
+    assert.throws(() => renderDocumento('privacidade', undefined, ORIGIN, fontes({ conteudo })), erro);
+  }
+  assert.throws(() => renderDocumento('outro', undefined, ORIGIN, fontes()), /desconhecido/);
+  assert.throws(() => renderDocumento('privacidade', '9.9', ORIGIN, fontes()), /não existe/);
+});
+
+test('legalFiles serve a versão atual e cada versão congelada com headers por modo', () => {
+  const item = (versao, vigencia) => ({ versao, vigencia, atualizacao: vigencia, resumo: `Versão ${versao}.` });
+  const versoes = { privacidade: [item('1.0', '2026-12-01'), item('1.1', null)], termos: [item('1.0', '2026-12-01')] };
+  const lidos = [];
+  const conteudo = (documento, versao) => { lidos.push(`${documento}-v${versao}`); return fragmento(`<p>texto ${versao}</p>`); };
+  const entradas = new Map(legalFiles(ORIGIN, { ...fontes(), versoes, conteudo }));
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/privacidade/v1.1', '/termos', '/termos/v1.0']);
+  assert.ok(lidos.includes('privacidade-v1.1') && lidos.includes('termos-v1.0'));
+  for (const [type, html, headers] of entradas.values()) {
+    assert.equal(type, 'text/html; charset=utf-8');
+    assert.equal(typeof html, 'string');
+    assert.ok(headers['Cache-Control']);
+  }
+  const [, atual, headersAtual] = entradas.get('/privacidade');
+  assert.match(atual, /texto 1\.1/);
+  assert.equal(headersAtual['X-Robots-Tag'], 'noindex');
+  const [, v10, headersV10] = entradas.get('/privacidade/v1.0');
+  assert.match(v10, /texto 1\.0/);
+  assert.deepEqual(headersV10, { 'Cache-Control': 'public, max-age=3600' });
+  assert.doesNotMatch(v10, /privacidade\/v1\.1/, 'a cópia congelada não cita versões posteriores');
+  assert.match(atual, /<a href="\/privacidade\/v1\.0">1\.0<\/a>[\s\S]*<a href="\/privacidade\/v1\.1">1\.1<\/a>/);
+  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [item('1.1', null), item('1.0', null)], termos: [item('1.0', null)] } }),
+    /ordem crescente/);
+});
+
+test('conteúdo real do repositório renderiza em rascunho, com dados reais e todos os trechos jurídicos', () => {
+  const entradas = new Map(legalFiles('https://pia.travelrpg.com'));
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0']);
+  const privacidade = entradas.get('/privacidade')[1];
+  const termos = entradas.get('/termos')[1];
+  assert.match(privacidade, /<link rel="canonical" href="https:\/\/pia\.travelrpg\.com\/privacidade">/);
+  assert.match(privacidade, /Diogo Passos Perdigão Britto/);
+  assert.match(privacidade, /contato@travelrpg\.com/);
+  assert.match(termos, /comarca de Belo Horizonte\/MG/);
+  const ambos = privacidade + termos;
+  for (const [chave, trecho] of Object.entries(JURIDICO)) {
+    assert.equal(trecho.revisado, false, `${chave} nasce com revisado:false`);
+    assert.ok(ambos.includes(`[EM REVISÃO JURÍDICA: ${trecho.pendencia} ${trecho.assunto}]`), `${chave} usado em alguma página`);
+  }
+  for (const [, , headers] of entradas.values()) assert.equal(headers['Cache-Control'], 'no-store');
+  for (const valor of Object.values(DADOS)) assert.equal(typeof valor, 'string');
+  assert.ok(!/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(ambos), 'sem CPF');
+});
+
+test('legalRedirects mapeia aliases e barra final para o caminho canônico relativo', () => {
+  assert.equal(legalRedirects.get('/privacy'), '/privacidade');
+  assert.equal(legalRedirects.get('/privacidade/'), '/privacidade');
+  assert.equal(legalRedirects.get('/terms'), '/termos');
+  assert.equal(legalRedirects.get('/termos/'), '/termos');
+  assert.equal(legalRedirects.get('/privacidade/v1.0/'), '/privacidade/v1.0');
+  assert.equal(legalRedirects.get('/termos/v1.0/'), '/termos/v1.0');
+  assert.equal(legalRedirects.has('/privacidade'), false);
+  for (const destino of legalRedirects.values()) assert.match(destino, /^\/(privacidade|termos)(\/v\d+\.\d+)?$/);
+});
+
+test('legalNotFound devolve 404 HTML só para /privacidade/* e /termos/* desconhecidos', () => {
+  const res = legalNotFound('/termos/v9.9');
+  assert.equal(res.status, 404);
+  assert.equal(res.headers['Content-Type'], 'text/html; charset=utf-8');
+  assert.equal(res.headers['Cache-Control'], 'no-store');
+  assert.match(res.body, /<html lang="pt-BR">/);
+  assert.equal((res.body.match(/<h1\b/g) || []).length, 1);
+  assert.match(res.body, /<a href="\/privacidade">Política de Privacidade<\/a>/);
+  assert.match(res.body, /<a href="\/termos">Termos de Serviço<\/a>/);
+  const xss = legalNotFound('/privacidade/<script>alert(1)</script>');
+  assert.equal(xss.status, 404);
+  assert.doesNotMatch(xss.body, /alert/);
+  for (const caminho of ['/', '/api/x', '/privacidade', '/termos', '/privacidadex', '/termos/v1.0', '/termos/v1.0/', '/privacy']) {
+    assert.equal(legalNotFound(caminho), null, caminho);
+  }
+});
+
+test('legalFooter tem os dois links relativos e o texto de ciência opcional', () => {
+  const rodape = legalFooter();
+  assert.match(rodape, /<a href="\/privacidade">Política de Privacidade<\/a> · <a href="\/termos">Termos de Serviço<\/a>/);
+  assert.doesNotMatch(rodape, /Ao continuar/);
+  assert.match(legalFooter({ ciencia: true }),
+    /Ao continuar, você concorda com os <a href="\/termos">Termos de Serviço<\/a> e declara ter lido a <a href="\/privacidade">Política de Privacidade<\/a>\./);
+});
+
+test('pendencias lista trechos sem revisão e datas nulas', () => {
+  const lista = pendencias();
+  const juridicos = lista.filter((p) => p.tipo === 'juridico').map((p) => p.chave);
+  assert.deepEqual(juridicos, Object.keys(JURIDICO));
+  const datas = lista.filter((p) => p.tipo === 'data');
+  const esperadas = Object.values(VERSOES).flat().length * 2;
+  assert.equal(datas.length, esperadas);
+  assert.deepEqual(pendencias(fontes()), []);
+  assert.deepEqual(pendencias(fontes({ revisado: false, datas: false })).map((p) => p.tipo), ['juridico', 'data', 'data', 'data', 'data']);
+});
+
+function importsDe(arquivo, vistos = new Set()) {
+  if (vistos.has(arquivo.href)) return vistos;
+  vistos.add(arquivo.href);
+  const fonte = readFileSync(arquivo, 'utf8');
+  for (const [, alvo] of fonte.matchAll(/(?:import|export)\s[^'"]*?from\s+['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+    if (alvo?.startsWith('.')) importsDe(new URL(alvo, arquivo), vistos);
+  }
+  return vistos;
+}
+
+test('src/legal.js não importa db.js (nem auth.js), direta ou indiretamente (T05, CA19)', () => {
+  const grafo = [...importsDe(new URL('../src/legal.js', import.meta.url))];
+  assert.ok(grafo.some((href) => href.endsWith('/src/legal/dados.js')));
+  assert.ok(!grafo.some((href) => /\/src\/(db|auth)\.js$/.test(href)), grafo.join('\n'));
+  const env = { PATH: process.env.PATH };
+  const script = "import('./src/legal.js').then((m) => { const f = m.legalFiles('https://pia.example'); process.stdout.write(String(f.length)); })";
+  const saida = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: new URL('..', import.meta.url), env, encoding: 'utf8',
+  });
+  assert.equal(saida, '4');
+});
