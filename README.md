@@ -56,6 +56,35 @@ pareado recebe tokens de acesso temporários para esses provedores. Quando um ap
 executa uma operação local com S3, Discord ou Taverns, usa a credencial do cadastro
 em memória. O perfil sincronizado não inclui credenciais desses cinco conectores.
 
+## Contas Suno (servidor)
+
+A PIA Server conecta contas Suno por OAuth e guarda os tokens só no servidor,
+na tabela `pia_server.suno_accounts`, selados com `PIA_ENCRYPTION_KEY`. Os tokens
+nunca vão para os computadores pareados nem passam pelo cadastro de conectores.
+Uma conta PIA pode ter várias contas Suno, e cada conta Suno (identificada pelo
+id de usuário que o Suno informa) pertence a uma única conta PIA.
+
+O cliente OAuth é registrado por DCR com o redirect
+`https://pia.travelrpg.com/auth/connectors/suno` (ou `PIA_PUBLIC_URL` +
+`/auth/connectors/suno`). O access token é renovado com lock por conta quando
+faltam menos de 60 s ou quando o Suno responde 401; o refresh token rotacionado
+é gravado na mesma transação. Um `invalid_grant` marca a conta como
+`refresh_failed` e as rotas respondem `suno_credential_expired`.
+
+Rotas do computador pareado (Bearer do dispositivo, mesmo 401 das outras `/device/*`):
+
+| Rota | Resposta |
+|---|---|
+| `POST /device/suno/connect` `{replace_account_id?}` | `{url, attempt_id, expires_in: 600}` |
+| `GET /device/suno/connect/:attempt_id` | `{state: pending\|connected\|failed\|expired, account_id?, code?}` |
+| `GET /auth/connectors/suno?code&state` | callback público do OAuth (página HTML) |
+| `GET /device/suno/status` | `{accounts: [{id, label, email, name, credential_state, available, expires_at, scopes}], default_account_id, active_job, settings}` |
+| `DELETE /device/suno/accounts/:id` | `{ok: true}` (apaga o registro e os tokens; sem revogação remota) |
+
+Erros das rotas Suno saem como `{error, code}`. `GET /device/account` anuncia
+`capabilities: ["suno:3"]`. Segredos `mcp:*` de perfis sincronizados são
+descartados pelo servidor, porque pertencem a cada computador.
+
 ## Comandos de gravação no Discord
 
 A PIA registra os comandos quando o bot conecta ao Discord. Use um bot instalado

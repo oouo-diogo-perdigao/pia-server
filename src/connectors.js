@@ -30,7 +30,9 @@ export function splitProfile(snapshot) {
   const payload = JSON.parse(raw.slice(prefix.length));
   const state = empty();
   for (const [key, value] of Object.entries(payload.secrets || {})) {
-    if (managedSecret(key)) { state.secrets[key] = value; delete payload.secrets[key]; }
+    // Credenciais MCP (mcp:*) são locais de cada PC: descartadas, nunca guardadas.
+    if (key.startsWith('mcp:')) delete payload.secrets[key];
+    else if (managedSecret(key)) { state.secrets[key] = value; delete payload.secrets[key]; }
   }
   payload.settings = (payload.settings || []).filter(([section, key, value, , ref]) => {
     if (!sections.has(section)) return true;

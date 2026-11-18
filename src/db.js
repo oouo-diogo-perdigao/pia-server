@@ -121,6 +121,33 @@ export async function migrate() {
       id uuid NOT NULL, mime text NOT NULL, bytes bigint NOT NULL, drive_id text,
       created timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(account_id,id)
     );
+    CREATE TABLE IF NOT EXISTS pia_server.suno_oauth_clients (
+      redirect_uri text PRIMARY KEY, client_id text NOT NULL, created timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS pia_server.suno_accounts (
+      id uuid PRIMARY KEY,
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      suno_subject text NOT NULL CONSTRAINT pia_suno_accounts_subject UNIQUE,
+      suno_email text, suno_name text,
+      label text NOT NULL CHECK (char_length(label) BETWEEN 1 AND 80),
+      client_id text NOT NULL, ciphertext text, expires_at timestamptz, scopes text,
+      state text NOT NULL DEFAULT 'connected' CHECK (state IN ('connected', 'refresh_failed')),
+      last_error_code text, created timestamptz NOT NULL DEFAULT now(), updated timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT pia_suno_accounts_tokens CHECK (state = 'refresh_failed' OR ciphertext IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS pia_suno_accounts_account ON pia_server.suno_accounts(account_id, created);
+    CREATE TABLE IF NOT EXISTS pia_server.suno_connect_attempts (
+      id uuid PRIMARY KEY,
+      account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      device_id uuid REFERENCES pia_server.devices(id) ON DELETE SET NULL,
+      state_digest text NOT NULL CONSTRAINT pia_suno_connect_attempts_state UNIQUE,
+      verifier text NOT NULL, client_id text NOT NULL,
+      replace_account_id uuid REFERENCES pia_server.suno_accounts(id) ON DELETE SET NULL,
+      status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'connected', 'failed')),
+      suno_account_id uuid REFERENCES pia_server.suno_accounts(id) ON DELETE SET NULL, code text,
+      created timestamptz NOT NULL DEFAULT now(), expires timestamptz NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS pia_suno_connect_attempts_expiry ON pia_server.suno_connect_attempts(expires);
   `);
   await pool.query('INSERT INTO pia_server.accounts(email,admin) VALUES($1,true) ON CONFLICT(email) DO UPDATE SET admin=true', [email]);
 }
