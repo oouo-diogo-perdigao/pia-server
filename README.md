@@ -61,6 +61,10 @@ Traefik, volume e banco PostgreSQL próprios. Começa com o banco vazio.
 
 Cada gravação é um ZIP com faixas FLAC individuais alinhadas ao relógio de recepção e um manifesto de origem. O servidor retenta falhas sem descartar a gravação antes da confirmação do Drive. Rode uma sessão curta com duas pessoas antes de usar o gravador em produção. O recebimento de áudio depende da biblioteca de voz Discord e do protocolo DAVE.
 
+## Páginas legais
+
+A Política de Privacidade e os Termos de Serviço são servidos sem login em `/privacidade` e `/termos`, com links montados a partir de `PIA_PUBLIC_URL`. O módulo `src/legal.js` monta as páginas a partir dos fragmentos `src/legal/conteudo/*-vX.Y.html`, dos dados públicos em `src/legal/dados.js`, dos trechos jurídicos versionados em `src/legal/juridico.js` e do manifesto `src/legal/versoes.js`. Uma versão publicada nunca é editada: cada mudança cria um arquivo e uma versão novos. Enquanto houver trecho com `revisado:false` ou data nula, a página fica em modo rascunho e o gate de release (`PIA_LEGAL_RELEASE=1 npm test`) falha. O CI liga o gate em push para `main` e em tags `v*`. Veja `docs/legal.md`.
+
 ## MCP
 
 Entre com Google e emita um token MCP no painel. Configure no Codex a URL `https://pia.travelrpg.com/mcp` e passe o token via variável de ambiente Bearer. A validade padrão é de 30 dias. Escolha de 1 a 3.650 dias ou sem expiração. Todos os tokens MCP da conta podem ser revogados no painel, inclusive os sem vencimento. A API aceita `expiresInDays` inteiro ou `null` em `POST /api/mcp/token` e informa `expiresAt` na resposta. O MCP consulta o estado do gravador e pode solicitar câmera ou tela a um computador escolhido. Entre com Google na PIA desktop, confirme o código no navegador e habilite as permissões locais desejadas. A autorização expira em dez minutos e a sessão do computador pode ser revogada no painel. O resultado fica na pasta privada da PIA no Drive.

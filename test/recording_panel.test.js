@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { editableRecording, recordingPanel } from '../src/recording_panel.js';
+import { editableRecording, recordingPanel, trainingNotice } from '../src/recording_panel.js';
 
 import { silenceAction } from '../src/recorder.js';
 import { hasRecordingRole } from '../src/discord_guild_links.js';
@@ -38,4 +38,27 @@ test('closing panel expires at the exact deadline while keeping the duration and
   assert.equal(expired.embeds[0].fields.find(field => field.name === 'Duração total').value, '01:00:00');
   assert.equal(expired.embeds[0].fields.find(field => field.name === 'Encerrada por').value, 'Autorecord');
   assert.ok(expired.components[0].components.every(button => button.disabled));
+});
+
+test('live panel announces the recording, keeps non-users out of training and links the privacy policy (RF10, CA26, parecer 4.14)', () => {
+  const field = (result) => result.embeds[0].fields.find(({ name }) => name === 'Privacidade');
+  const live = recordingPanel({ ...meta, state: 'recording' }, null, Date.now(), 'https://pia.travelrpg.com/qualquer');
+  assert.equal(live.embeds[0].title, '🔴 Gravação em andamento');
+  const notice = field(live).value;
+  // Redação 4.14 do parecer jurídico (Caminho A): terceiros fora do treinamento; contato por e-mail.
+  assert.match(notice, /Este canal está sendo gravado pela PIA\. O áudio de cada participante vai para o Google Drive de quem configurou a gravação\. As vozes gravadas não são usadas para treinar modelos\. Se não quiser ser gravado, avise quem configurou a gravação ou saia do canal\. Dúvidas e pedidos: contato@travelrpg\.com\./);
+  assert.doesNotMatch(notice, /pode ser usada para treinar modelos/);
+  // Adendo 3 (O9 do QA): sem a frase ambígua sobre as vozes de terceiros.
+  assert.doesNotMatch(notice, /vozes de quem não usa a PIA não são usadas/i);
+  assert.doesNotMatch(notice, /\{\{/, 'token de dados expandido no embed');
+  assert.match(notice, /^Este canal está sendo gravado pela PIA\. /, 'aviso aprovado no parecer final: sem selo de rascunho');
+  assert.doesNotMatch(notice, /\[|EM REVISÃO JURÍDICA/);
+  assert.match(notice, /\nPolítica de Privacidade: https:\/\/pia\.travelrpg\.com\/privacidade$/);
+  assert.doesNotMatch(notice, /MP3/);
+  assert.ok(notice.length <= 1024, 'limite de campo do embed');
+  assert.match(field(recordingPanel({ ...meta, state: 'recording' }, null, Date.now(), 'https://outro.example')).value,
+    /https:\/\/outro\.example\/privacidade$/);
+  assert.match(trainingNotice(), /\/privacidade$/);
+  assert.equal(field(recordingPanel({ ...meta, state: 'queued', editUntil, durationMs: 1000 }, null, Date.parse(editUntil))), undefined,
+    'painel encerrado não repete o aviso');
 });
