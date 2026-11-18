@@ -397,7 +397,7 @@ test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () 
     /A PIA Server não guarda o arquivo: ele fica numa pasta temporária só durante o envio e é apagado ao final/,
     /O servidor mantém apenas metadados/,
     /não garantimos que o envio aconteça nem que a cópia exista/,
-    /Não guardamos logs de acesso com endereço IP/,
+    /A PIA Server não guarda logs de acesso com endereço IP/,
   ]) assert.match(secao, termo);
   assert.doesNotMatch(secao, /podem registrar logs/);
   const retencao = secaoDe(paginaReal('privacidade'), 'retencao');
@@ -408,7 +408,16 @@ test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () 
 
 test('F2-02: finalidades e licença citam voz do Discord e MP3 no treinamento, e Microsoft fora (RN03a)', () => {
   const finalidades = secaoDe(paginaReal('privacidade'), 'finalidades');
-  assert.match(finalidades, /gravações de voz do Discord \(também as de terceiros\) e as músicas geradas em MP3/);
+  assert.match(finalidades, /gravações de voz do Discord \(também as de terceiros\), podem ser usados para treinar modelos/);
+  assert.match(finalidades, /As músicas geradas \(MP3\) também são usadas para treinamento de modelos e melhoria do serviço\./);
+  // TREINAMENTO_MP3_GERADOS (DevBackend) cobre o MP3 no treinamento: só nas Finalidades da Política, nunca duplicado.
+  const html = paginaReal('privacidade');
+  assert.equal(html.split('[EM REVISÃO JURÍDICA: P11 MP3 gerados no treinamento]').length - 1, 1);
+  assert.equal(html.split(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto).length - 1, 1);
+  assert.doesNotMatch(paginaReal('termos'), /MP3 gerados no treinamento|As músicas geradas \(MP3\) também/, 'TREINAMENTO_MP3_GERADOS fica fora dos Termos (pendente)');
+  for (const documento of ['privacidade', 'termos']) {
+    assert.ok(!paginaReal(documento).includes('aviso de gravação no Discord'), 'AVISO_GRAVACAO_DISCORD é só do embed');
+  }
   assert.match(finalidades, /Dados obtidos da sua conta Microsoft \(e-mails, agenda e arquivos via Microsoft Graph\) não são usados para treinar modelos\. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento\./);
   assert.match(finalidades, /Credenciais e tokens nunca são usados em treinamento/);
   const licenca = secaoDe(paginaReal('termos'), 'conteudo-e-licenca');
@@ -492,7 +501,7 @@ test('F2-02: v1.0 não cita Suno nem histórico de gerações, em lugar nenhum (
 
 test('F2-02: trechos jurídicos da v1.0 em revisão, com as redações exatas do PO', () => {
   const v1 = JURIDICO['1.0'];
-  for (const chave of ['ENCARREGADO', 'SALVAGUARDAS_TRANSFERENCIA', 'ORIGEM_TREINAMENTO_MIDIA', 'TREINAMENTO_MICROSOFT', 'LOGS_ACESSO', 'OPT_OUT_TREINAMENTO', 'PRAZO_RESPOSTA_TITULAR']) {
+  for (const chave of ['ENCARREGADO', 'SALVAGUARDAS_TRANSFERENCIA', 'ORIGEM_TREINAMENTO_MIDIA', 'TREINAMENTO_MICROSOFT', 'TREINAMENTO_MP3_GERADOS', 'LOGS_ACESSO', 'OPT_OUT_TREINAMENTO', 'PRAZO_RESPOSTA_TITULAR']) {
     assert.ok(v1[chave], `chave ausente: ${chave}`);
     assert.equal(v1[chave].revisado, false, `${chave} segue com revisado:false até o parecer`);
   }
@@ -501,6 +510,6 @@ test('F2-02: trechos jurídicos da v1.0 em revisão, com as redações exatas do
   assert.equal(v1.TREINAMENTO_MICROSOFT.texto, 'Dados obtidos da sua conta Microsoft (e-mails, agenda e arquivos via Microsoft Graph) não são usados para treinar modelos. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento.');
   assert.equal(v1.PRAZO_RESPOSTA_TITULAR.texto, 'Respondemos aos pedidos em até 15 dias, contados do recebimento.');
   assert.match(v1.OPT_OUT_TREINAMENTO.texto, /^Você pode pedir, a qualquer momento, que seus dados deixem de ser usados para treinar modelos\. Basta enviar um e-mail para \{\{CONTATO_EMAIL\}\} com o assunto 'Opt-out de treinamento'/);
-  assert.match(v1.LOGS_ACESSO.texto, /^Não guardamos logs de acesso com endereço IP\./);
+  assert.equal(v1.LOGS_ACESSO.texto, 'A PIA Server não guarda logs de acesso com endereço IP.');
   for (const trecho of Object.values(v1)) assert.doesNotMatch(trecho.texto + trecho.assunto, /[[\]<>]/, 'texto puro, sem colchetes nem HTML');
 });
