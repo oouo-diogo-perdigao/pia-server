@@ -85,6 +85,25 @@ Erros das rotas Suno saem como `{error, code}`. `GET /device/account` anuncia
 `capabilities: ["suno:3"]`. Segredos `mcp:*` de perfis sincronizados são
 descartados pelo servidor, porque pertencem a cada computador.
 
+## Histórico de gerações de música
+
+O servidor guarda o histórico de músicas da conta PIA (RN13, RN14, RN25/CA24) na
+tabela `pia_server.music_generations`, com Suno e gerações locais juntas
+(`source`: `suno`|`local`; `provider`: `suno_mcp`, `local`, `gemini`…), e as
+faixas em `pia_server.music_generation_tracks`. O link de áudio do Suno
+(`audio_url`) fica só no servidor e nunca vai ao computador; geração local
+nunca tem link nem arquivo no servidor.
+
+| Rota | Resposta |
+|---|---|
+| `POST /device/music/generations` `{source: "local", client_id, prompt, provider?, lyrics?, title?, duration?, instrumental?, count?, state?, code?, created?, tracks?: [{n, title?, duration?, extra?}]}` | `201` com o item; repetir o mesmo `client_id` devolve `200` com o registro original. `source: "suno"` → `400 music_source_not_allowed`; `audio_url` → `400 audio_url_not_allowed` |
+| `GET /device/music/generations?limit=100&cursor=` | `{items: [{id, client_id, source, provider, device_id, from_this_device, suno_account: {id, name}\|null, prompt, lyrics, count, duration, state, code, created, tracks: [{n, title, duration, extra}]}], next_cursor}`. Todos os PCs da conta; ativos (`queued`/`running`) primeiro, depois do mais novo ao mais antigo |
+| `DELETE /device/music/generations/:id` | `{ok: true}`. Exclusão definitiva do registro, do prompt, da letra e das faixas, feita por qualquer PC da conta. `404 music_generation_not_found` para id de outra conta ou já apagado; `409 music_generation_active` com job em andamento |
+
+O `name` da conta Suno é `label`, depois `suno_name`, depois `suno_email`.
+O cursor é opaco e só posiciona a página dentro da conta do computador; um
+cursor malformado responde `400 invalid_cursor`. Erros saem como `{error, code}`.
+
 ## Comandos de gravação no Discord
 
 A PIA registra os comandos quando o bot conecta ao Discord. Use um bot instalado
