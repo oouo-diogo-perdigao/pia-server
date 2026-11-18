@@ -815,7 +815,10 @@ test('F2-09/0004: v1.1 cita o Suno e o histórico de gerações nas seções do 
   assert.ok(dados.includes('as músicas geradas no PC (MP3/WAV, pelo Gemini, pelo Suno ou localmente)'));
   const finalidades = secaoDe(html, 'finalidades');
   assert.match(finalidades, /Secretária, geração de música, cópia de mídia para o Drive, computadores pareados e MCP\./);
-  assert.match(finalidades, /A PIA não usa os dados da sua conta Suno \(identificador, e-mail, nome e tokens\) para treinar modelos\./);
+  // O1, Alternativa A (parecer da v1.1, seção 3.3), literal.
+  assert.ok(finalidades.includes('A PIA não usa para treinar modelos os dados da sua conta Suno (identificador, e-mail, nome e tokens) nem os prompts, as letras e os títulos guardados no histórico de gerações de música, inclusive os das gerações pelo Suno, pelo Gemini e pelos modelos locais. Se você escrever um prompt ou uma letra numa conversa com o assistente, esse texto segue as regras das conversas descritas acima.'));
+  const resumo = textoVisivel(html.slice(html.indexOf('<h2 id="em-resumo">'), html.indexOf('<nav class="legal-sumario"')));
+  assert.ok(resumo.includes('Dados das APIs do Google e da sua conta Microsoft ficam de fora. O histórico de gerações de música e os dados da conta Suno também ficam de fora.'));
   const comp = secaoDe(html, 'compartilhamento');
   // Parecer da v1.1, R1 (seção 4.4), literal.
   assert.ok(comp.includes('Suno: conta conectada e geração de música. O Suno recebe o prompt e a letra de cada música, as músicas ficam na sua biblioteca no Suno e usam os créditos do seu plano. Pelos termos do Suno, ele pode usar o que você envia para melhorar os próprios serviços e modelos de IA.'));
@@ -836,7 +839,9 @@ test('F2-09/0004: v1.1 cita o Suno e o histórico de gerações nas seções do 
   assert.match(secaoDe(termos, 'uso-aceitavel'), /violar os termos do Google, do Suno, do Discord/);
   const licenca = secaoDe(termos, 'conteudo-e-licenca');
   assert.match(licenca, /prompts, letras, chats, músicas geradas e gravações/);
-  assert.match(licenca, /os dados da sua conta Microsoft, os dados da sua conta Suno e as suas credenciais e tokens/);
+  assert.ok(licenca.includes('Ficam de fora do treinamento os dados obtidos pelas APIs do Google (Gmail, Agenda, Drive e perfil), conforme a Google API Services User Data Policy (Limited Use), os dados da sua conta Microsoft, os dados da sua conta Suno, os prompts, as letras e os títulos do histórico de gerações de música e as suas credenciais e tokens.'), 'O1, Alternativa A: Termos, seção 5');
+  assert.match(licenca, /credenciais e tokens\. Veja a Política de Privacidade ?\./);
+  for (const documento of ['privacidade', 'termos']) assert.equal(VERSOES[documento].find((v) => v.versao === '1.1').resumo, 'Conta Suno, histórico de gerações de música e o Suno como terceiro. Os dados da conta Suno e o histórico de gerações de música ficam fora do treinamento.', 'Op1');
   const secao6 = secaoDe(termos, 'conteudo-gerado-por-ia');
   // Parecer da v1.1, R6 (seção 2, item 7) e R5 (seção 5), literais.
   assert.ok(secao6.includes('Os direitos e limites de uso das músicas geradas pelo Suno, pelo Gemini ou por outros provedores seguem os termos de cada provedor e o plano que você tem nele. No Suno, por exemplo, músicas feitas no plano gratuito só podem ser usadas para fins pessoais e não comerciais, conforme os termos do Suno. A PIA não concede direitos sobre essas músicas. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.'));
@@ -874,9 +879,8 @@ test('F2-09/0004: v1.1 mantém as regras da v1.0 (RN11, CA28, Caminho A, Termos 
   }
 });
 
-// Parecer da v1.1 (feature 0004): trechos com texto literal aprovado (revisado:true). TREINAMENTO_CONTA_SUNO só passa com
-// a Alternativa A do O1 (seção 3.3).
-const APROVADOS_PARECER_V1_1 = ['AUDIO_SUNO', 'DADOS_CONTA_SUNO', 'DESCONEXAO_SUNO', 'DIREITOS_MUSICAS_GERADAS', 'HISTORICO_GERACOES', 'SALVAGUARDAS_TRANSFERENCIA'];
+// Parecer da v1.1 (feature 0004): trechos com texto literal aprovado (revisado:true), inclusive o O1 na Alternativa A.
+const APROVADOS_PARECER_V1_1 = ['AUDIO_SUNO', 'DADOS_CONTA_SUNO', 'DESCONEXAO_SUNO', 'DIREITOS_MUSICAS_GERADAS', 'HISTORICO_GERACOES', 'SALVAGUARDAS_TRANSFERENCIA', 'TREINAMENTO_CONTA_SUNO'];
 
 test('F2-09/0004: JURIDICO[1.1] = conjunto 1.0 final + trechos do parecer da v1.1, texto puro e só tokens de dados', () => {
   const v10 = JURIDICO['1.0'];
@@ -890,7 +894,7 @@ test('F2-09/0004: JURIDICO[1.1] = conjunto 1.0 final + trechos do parecer da v1.
   }
   for (const chave of Object.keys(v10)) assert.ok(Object.hasOwn(v11, chave), `${chave} continua no conjunto 1.1`);
   assert.deepEqual(Object.entries(v11).filter(([, t]) => !t.revisado).map(([c]) => c).sort(),
-    ['TREINAMENTO_CONTA_SUNO']);
+    []);
   // Textos aprovados no parecer da v1.1 (seção 2, itens 1, 3 e 6), sem mudança.
   assert.equal(v11.DADOS_CONTA_SUNO.texto, 'De cada conta Suno que você conecta: o identificador, o e-mail e o nome da conta no Suno, o apelido que você dá a ela, os escopos autorizados e os tokens de acesso, que são guardados cifrados.');
   assert.equal(v11.AUDIO_SUNO.texto, 'O áudio das músicas do Suno não é guardado na PIA Server: quando você baixa uma faixa, o servidor busca o áudio no Suno pelo link guardado no histórico e o repassa ao seu computador, sem gravar o arquivo.');

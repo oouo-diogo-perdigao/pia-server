@@ -23,7 +23,8 @@
 // Data null liga o modo rascunho e aparece como "[PREENCHER NO RELEASE: ...]".
 
 // Resumos da v1.1 para o "Histórico de versões" (rascunho, só com o Suno).
-const RESUMO_V1_1_SUNO = 'Conta Suno, histórico de gerações de música e o Suno como terceiro.';
+// Parecer da v1.1, Op1 (seção 7), na Alternativa A do O1.
+const RESUMO_V1_1_SUNO = 'Conta Suno, histórico de gerações de música e o Suno como terceiro. Os dados da conta Suno e o histórico de gerações de música ficam fora do treinamento.';
 const RESUMO_V1_1 = RESUMO_V1_1_SUNO;
 const RESUMO_V1_1_TERMOS = RESUMO_V1_1_SUNO;
 

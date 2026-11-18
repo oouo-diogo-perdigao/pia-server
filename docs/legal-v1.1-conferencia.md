@@ -82,7 +82,7 @@ Parecer favorável com ressalvas. Decisão do Diogo: publicar com os textos do p
 | R7 (seção 6.1) | Aviso "Conectar sua conta Suno" | **Não aplicado no pia-server.** O parecer põe o aviso "no app, antes de abrir o login do Suno", com os botões "Cancelar · Continuar para o Suno". O pia-server não renderiza nenhuma tela antes do login: `sunoConnect()` (`src/suno_auth.js:196-212`) devolve a URL de autorização do Suno ao app, e a única página do Suno no servidor é o callback (`src/suno_auth.js:429-438`), mostrada **depois** do login. O aviso cabe no app desktop (repositório `pia`) ou numa tela nova no servidor, que exigiria mudar a lógica do fluxo | — |
 | R8 (seção 4.1) | `docs/legal.md` | Reconferir termos e MCP do Suno periodicamente (prazo no doc; não entra nas páginas, CA28) | — |
 | DV2 (requisitos 0004, CA-0406) | Política, seção 3, HTML | "pelo Gemini ou localmente" passa a "pelo Gemini, pelo Suno ou localmente" | HTML |
-| O1, Alternativa A (seção 3.3) | `TREINAMENTO_CONTA_SUNO`, resumo da Política, Termos 5 | Commit separado (o último da branch) | `trecho()` no commit 2 |
+| O1, Alternativa A (seção 3.3) | `TREINAMENTO_CONTA_SUNO`, resumo da Política, Termos 5 | Aplicado em commit separado (o último da branch): dados da conta Suno e prompts, letras e títulos do histórico fora do treino. Decisão do Diogo | `trecho()` |
 | Op1 (seção 7) | Resumo do histórico de versões | Junto com o O1 (Alternativa A) | — |
 | O2 e O3 | Processo de release | Ordem do release e, se já houve deploy com o Suno, e-mail a quem conectou. Com o TechLead | — |
 
