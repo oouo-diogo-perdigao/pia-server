@@ -31,7 +31,7 @@
  *   {{FORO}}               comarca de Belo Horizonte/MG
  *   {{FORO_RESSALVA}}      ressalvado o foro do domicílio do consumidor quando a lei garantir
  *   {{DOMINIO_OFICIAL}}    travelrpg.com
- *   {{HOSPEDAGEM_TEXTO}}   principalmente no Brasil; alguns recursos podem estar em outras localidades
+ *   {{HOSPEDAGEM_TEXTO}}   no Brasil, onde também fica o banco de dados... (Adendo 2 do parecer, seção 7)
  *   {{IDADE_MINIMA}}       18
  * Gerados por página:
  *   {{ORIGEM}}             origin público (ex.: https://pia.travelrpg.com), de PIA_PUBLIC_URL
