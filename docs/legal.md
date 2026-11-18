@@ -30,24 +30,26 @@ Feature 0002. As páginas são públicas, sem login, em `/privacidade` e `/termo
 
 ### Trechos jurídicos da v1.0 (`JURIDICO['1.0']`, todos `revisado:false`)
 
-Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/feature-0002/parecer-juridico.md`, seção 4, Caminho A), copiadas literalmente, e do adendo de 17/11/2026 (23h30) para a 4.8. Todas seguem `revisado:false` até o Advogado conferir o texto renderizado do novo commit e emitir o parecer favorável (RN09, CA25).
+Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/feature-0002/parecer-juridico.md`, seção 4, Caminho A), copiadas literalmente, e dos Adendos 2 (23h40: 4.3, 4.8, 5.3, 5.9, seção 7 e última frase da 4.9) e 3 (23h45: 4.2, 4.13 e 4.14) de 17/11/2026. O Adendo 1 da 4.8 foi substituído pelo Adendo 2. Todas seguem `revisado:false` até o Advogado conferir o texto renderizado do novo commit e emitir o parecer favorável (RN09, CA25).
 
 | Chave | Pendência | Redação | Onde aparece |
 |---|---|---|---|
 | `ENCARREGADO` | P04 | 4.1 (sem a dispensa de pequeno porte) | Política, 1 |
-| `CONSENTIMENTO_TERCEIROS_DISCORD` | P11 | 4.2 (terceiros fora do treinamento) | Política, 3 |
-| `LOGS_ACESSO` | T04 | Texto da base `f1338f7` ("A PIA Server não guarda logs de acesso com endereço IP."). A 4.3 **não** foi aplicada: **aguarda decisão sobre o access log do Traefik** | Política, 3 |
+| `CONSENTIMENTO_TERCEIROS_DISCORD` | P11 | 4.2, com a terceira frase do Adendo 3 (nenhuma gravação de voz no treinamento) | Política, 3 |
+| `LOGS_ACESSO` | T04 | Redação do Adendo 2 do parecer (4.3, frase neutra, sem prazo). Prazo e rotação pendentes (P14, obrigatório) | Política, 3 (base legal na 5, menções na 4, 8 e 9) |
 | `TREINAMENTO_MP3_GERADOS` | P11 | 4.4, Caminho A (voz e MP3 fora do treinamento) | Política, 4; Termos, "Em resumo" e 5 |
 | `TREINAMENTO_MICROSOFT` | P11 | 4.5 (exclui dados derivados do Google e da Microsoft nas conversas) | Política, 4 |
 | `BASE_LEGAL_TREINAMENTO` | P10 | 4.6 (legítimo interesse com opt-out para conversas e prompts) | Política, 5 |
 | `ORIGEM_TREINAMENTO_MIDIA` | P11 | 4.7 ("criar, treinar ou melhorar modelos") | Política, 6 |
-| `SALVAGUARDAS_TRANSFERENCIA` | P05 | Adendo, nova 4.8 (banco de dados no Brasil; fornecedores nos Estados Unidos; mídias na conta do usuário) | Política, 7 |
-| `REMOCAO_DADOS_TREINADOS` | P10 | 4.9 completa, com a última frase (compromisso) | Política, 8 |
+| `SALVAGUARDAS_TRANSFERENCIA` | P05 | Adendo 2, 4.8 nova: sem país, com a transcrição de voz (Gemini e Groq); sem a frase opcional do CrowdSec | Política, 7 |
+| `REMOCAO_DADOS_TREINADOS` | P10 | 4.9, com a última frase do Adendo 2 (F.2): "Nesse caso, não usamos esses modelos para identificar você." | Política, 8 |
+| `EXCLUSAO_CONTA_PRAZO` | P10 | Adendo 2, 5.3, 2º item da Retenção (prazo de 15 dias, proposta do parecer, **aguarda confirmação do Diogo**) | Política, 8 |
+| `PROVEDORES_LLM` | P10 | Adendo 2, 5.9 (o rótulo e a lista "Gemini, Groq ou Ollama local." ficam no HTML) | Política, 6 |
 | `PRAZO_RESPOSTA_TITULAR` | P10 | 4.10 | Política, 10 |
-| `OPT_OUT_TREINAMENTO` | P10 | 4.11 | Política, 10 |
+| `OPT_OUT_TREINAMENTO` | P10 | 4.11, com a última frase do Adendo 3 (4.13 do adendo: terceiros pedem informações, acesso ou eliminação da gravação) | Política, 10 |
 | `DIREITOS_MUSICAS_GERADAS` | P11 | 4.12, aprovado sem ajuste (redação do PO) | Termos, 6 |
 | `LIMITACAO_CDC` | P10 | 4.13 | Termos, 8 |
-| `AVISO_GRAVACAO_DISCORD` | P11 | 4.14 | Só no embed do bot (`src/recording_panel.js`, `trainingNotice()` via `textoJuridico()`); não aparece nas páginas |
+| `AVISO_GRAVACAO_DISCORD` | P11 | 4.14, texto final do Adendo 3 ("As vozes gravadas não são usadas para treinar modelos.") | Só no embed do bot (`src/recording_panel.js`, `trainingNotice()` via `textoJuridico()`); não aparece nas páginas |
 
 ### Ajustes do parecer no HTML fixo
 
@@ -58,6 +60,10 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 - **5.5:** menores e vozes gravadas no Discord excluídos e nunca usados em treinamento.
 - **5.6:** aviso de 15 dias e recusa ou revogação, na Política 13 e nos Termos 11.
 - **5.9:** link da [Google Workspace User Data and Developer Policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy) na seção Limited Use (URL oficial conferida com HTTP 200). A frase "criar, treinar ou melhorar modelos" vem da 4.7.
+- **Adendo 2, tabela D:** Política 4 (Segurança com registros de acesso com IP), 5 (item obrigatório de legítimo interesse e exercício regular de direitos para os registros de acesso), 9 (ferramenta automática de segurança) e runbook de exclusão de conta (`docs/runbooks/exclusao-de-conta.md`, seção 4, item 5, e modelo de resposta).
+- **Adendo 2, 5.3:** Retenção com os seis itens, nesta ordem, antes dos três itens fixos e de `{{REMOCAO_DADOS_TREINADOS}}`. O 2º item (prazo de 15 dias) virou o trecho jurídico `EXCLUSAO_CONTA_PRAZO`, para usar o mecanismo existente: com `revisado:false`, ele mostra o selo e entra em `pendencias()`, então o gate de release bloqueia até o Diogo confirmar.
+- **Adendo 2, 5.9:** a frase "Esses provedores podem usar os dados conforme os próprios termos." foi trocada pelo trecho `PROVEDORES_LLM` (revisado:false).
+- **Adendo 2, seção 7:** `HOSPEDAGEM_TEXTO` novo em `src/legal/dados.js` e 2º parágrafo fixo novo. Sem "principalmente no Brasil".
 - **Não entram na v1.0:** 5.7 (aviso de 30 dias antes de encerrar o serviço, decisão do Diogo) e 5.8 (caixa de aceite no primeiro login).
 
 ### Decisões do Diogo sobre o parecer (17/11/2026)
@@ -67,15 +73,20 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 - **Encarregado:** o Diogo, pelo e-mail de contato, sem invocar a dispensa de pequeno porte (4.1).
 - **Backups do banco:** não existem; a frase dos 30 dias da 5.3 foi retirada.
 - **Endereço:** não é publicado, só o e-mail. Nenhum trecho do parecer aplicado cita endereço.
-- **Transferência internacional (4.8):** nova redação do Advogado (adendo), com a premissa de que os dados pessoais ficam no banco no Brasil e as mídias podem ficar fora. Sem a terceira frase da 4.8 original (provedor contratado fora do Brasil).
-- **Logs de acesso:** ver "Aguardando decisão" abaixo.
+- **Transferência internacional (4.8):** redação do Adendo 2: os dados pessoais guardados no banco ficam no Brasil; imagens e áudios, inclusive gravações de voz, podem ficar ou ser tratados fora; sem citar país (CA28).
+- **Logs de acesso (T04, requisitos v3.1, 0.0, item 1):** a PIA guarda IP no access log do Traefik e no CrowdSec; frase neutra, sem prazo (decisão do CEO, Adendo 2).
 - **Base legal (4.6):** legítimo interesse com opt-out para conversas e prompts.
-- **Remoção de dados treinados (4.9):** completa, com o compromisso da última frase.
+- **Remoção de dados treinados (4.9):** só o compromisso de não usar os modelos para identificar o titular (v3.1, 0.0, item 3; Adendo 2, F.2).
 - **5.7:** não entra.
 
 ### Aguardando decisão
 
-- **`LOGS_ACESSO` (T04):** aguarda decisão do Diogo sobre o access log do Traefik da VPS, que guarda IP. O texto atual ("A PIA Server não guarda logs de acesso com endereço IP.") **hoje não bate com a VPS** e não pode ser publicado assim. A redação 4.3 do parecer não foi aplicada, por decisão do TechLead; a redação nova vem depois dessa decisão.
+- **Prazo de 15 dias para executar a exclusão da conta (`EXCLUSAO_CONTA_PRAZO`, Adendo 2, 5.3 e E.5):** proposta do parecer, alinhada ao `PRAZO_RESPOSTA_TITULAR`. Fica `revisado:false` até o Diogo confirmar.
+- **5.9 (`PROVEDORES_LLM`), bloqueio técnico com o Gemini gratuito (Adendo 2, E.4, obrigatório):** a frase "A PIA não usa esse conteúdo para treinar modelos e não permite que ele seja usado para isso" hoje **não é verdadeira**: o desktop usa por padrão a camada gratuita do Gemini, cujos termos permitem usar o conteúdo para melhorar produtos. Antes de publicar, conteúdo do Google ou da Microsoft precisa ir só à camada paga do Gemini, à Groq (recomendado Zero Data Retention) ou ao Ollama local. O Diogo vai decidir. Também verificar se as saídas das ferramentas entram no histórico sincronizado ou em algum cache.
+- **Prazo e rotação dos registros de acesso (P14, Adendo 2, B e E.1, obrigatório, risco aceito pelo CEO):** o access log do Traefik e o histórico do CrowdSec estão sem prazo e sem rotação; a frase "pelo tempo necessário" só atende provisoriamente ao art. 9º, II. O parecer recomenda rotação com 6 meses como referência (o número não vai para o texto público, CA28).
+- **CrowdSec (Adendo 2, E.2 e E.3, obrigatórios):** verificar se o envio de sinais à Central API está ligado (recomendado desligar) e a retenção da lista de IPs bloqueados. A frase opcional do CrowdSec da 4.8 **não** entrou; só entra se o envio ficar ligado.
+- **Servidor no Brasil (Adendo 2, E.6):** confirmar que o servidor, e não só o banco, fica no Brasil, porque o `HOSPEDAGEM_TEXTO` afirma isso.
+- **Base legal/LIA (4.6):** confirmação do Diogo.
 
 ## Escopo da v1.0
 
