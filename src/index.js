@@ -22,6 +22,7 @@ import { musicGenerationsRoute } from './music_generations.js';
 import { sunoAdminRoute } from './suno_client.js';
 import { recoverSunoJobs, sunoJobsRoute } from './suno_jobs.js';
 import { sunoAudioRoute } from './suno_audio.js';
+import { cleanupOrphanTemp } from './cleanup_tmp.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -428,6 +429,8 @@ await migrate();
 await migrateConnectorRows();
 // Jobs do Suno que estavam na fila ou rodando viram interrupted; nunca refazem tools/call.
 await recoverSunoJobs();
+// Restos de mídia e de gravações já enviadas; nunca lança nem toca na fila de gravação.
+await cleanupOrphanTemp();
 const server = createServer((req, res) => {
   route(req, res).catch((error) => {
     if (res.headersSent) { res.end(); return; }
