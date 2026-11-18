@@ -33,11 +33,11 @@ export function sunoListTools(account, sunoAccountId, options = {}) {
   });
 }
 
-// Uma geração (um tools/call de geração, com polling se vier pendente).
+// Uma geração (um tools/call de geração, com polling sem prazo total se vier pendente).
 // Retorna { tool, clips: [{ id, title, state: 'ready'|'failed', audio_url, duration, mime }] }.
 export function sunoGenerate(account, sunoAccountId, input = {}) {
-  const { signal, deadline } = input;
-  return withClient(account, sunoAccountId, { signal }, (client) => generateOnce(client, { ...input, signal, deadline }));
+  const { signal } = input;
+  return withClient(account, sunoAccountId, { signal }, (client) => generateOnce(client, { ...input, signal }));
 }
 
 export function sunoCredits(account, sunoAccountId, options = {}) {

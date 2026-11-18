@@ -9,10 +9,12 @@ import { SunoError, sunoMessages } from './suno_errors.js';
 export const sunoMcp = {
   url: 'https://api.suno.com/mcp',
   protocolVersion: '2025-11-25',
-  requestTimeoutMs: 60000, // por requisição HTTP (initialize, tools/list, tools/call)
-  generationTimeoutMs: 600000, // total de uma geração, incluindo o polling
-  pollIntervalMs: 5000,
-  maxStatusFailures: 3, // falhas transitórias seguidas toleradas no polling
+  requestTimeoutMs: 60000, // por requisição HTTP (initialize, tools/list, tools/call); o único timeout
+  // Polling sem prazo total (contrato v3.2): backoff de 5 s a 60 s até o estado
+  // terminal dos clips, o cancelamento ou a credencial expirada.
+  pollMinMs: 5000,
+  pollMaxMs: 60000,
+  sleep: null, // (ms, signal) => Promise; injetável nos testes (padrão: setTimeout cancelável)
   generationTool: '', // nome forçado (vazio = descoberta)
 };
 
@@ -363,23 +365,38 @@ function publicClip(clip) {
     mime: typeof clip.mime === 'string' ? clip.mime : null };
 }
 
-const sleep = (ms, signal) => new Promise((resolve, reject) => {
+const realSleep = (ms, signal) => new Promise((resolve, reject) => {
   if (signal?.aborted) return reject(signal.reason);
   const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
   const abort = () => { clearTimeout(timer); reject(signal.reason); };
   signal?.addEventListener('abort', abort, { once: true });
 });
 
+// Próximo intervalo do polling: dobra sem progresso ou em falha transitória,
+// volta ao mínimo quando algum clip muda de estado; sempre entre pollMinMs e pollMaxMs.
+export function nextPollDelay(current, progressed) {
+  const min = sunoMcp.pollMinMs;
+  const max = Math.max(min, sunoMcp.pollMaxMs);
+  if (progressed || !(current >= min)) return min;
+  return Math.min(max, current * 2);
+}
+
+const cancelled = () => new SunoMcpError('suno_cancelled', sunoMcpMessages.cancelled, { detail: 'cancelled' });
+
 // Uma geração (um tools/call; o Suno devolve ~2 clips) com polling dos clips
-// pendentes pela tool de status. Nunca repete o tools/call de geração.
-export async function generateOnce(client, { prompt, lyrics, duration, instrumental, signal, deadline, tools } = {}) {
+// pendentes pela tool de status. Nunca repete o tools/call de geração. Não há
+// prazo total: o polling só termina com todos os clips em estado terminal, com
+// o cancelamento (signal -> suno_cancelled) ou com a credencial expirada depois
+// do refresh (suno_credential_expired). Qualquer outra falha do polling
+// (timeout de uma requisição, 5xx, rede, protocolo) é transitória: backoff e
+// nova tentativa. suno_timeout só sai do timeout de uma requisição HTTP fora
+// do polling (ex.: o tools/call inicial).
+export async function generateOnce(client, { prompt, lyrics, duration, instrumental, signal, tools } = {}) {
   const found = discoverSunoTools(tools || await client.listTools());
   if (!found.generation) throw protocolError(sunoMcpMessages.noTool);
   const args = mapGenerationArguments(found.generation, { prompt, lyrics, duration, instrumental });
-  if (signal?.aborted) throw new SunoMcpError('suno_cancelled', sunoMcpMessages.cancelled, { detail: 'cancelled' });
-  const end = deadline ?? Date.now() + sunoMcp.generationTimeoutMs;
-  const remaining = () => Math.max(1, Math.min(sunoMcp.requestTimeoutMs, end - Date.now()));
-  const data = await client.callTool(found.generation.name, args, { timeoutMs: remaining() });
+  if (signal?.aborted) throw cancelled();
+  const data = await client.callTool(found.generation.name, args, { timeoutMs: sunoMcp.requestTimeoutMs });
   const clips = extractClips(data);
   if (!clips.length) throw protocolError();
   for (const clip of clips) clip.state = clipState(clip);
@@ -389,32 +406,33 @@ export async function generateOnce(client, { prompt, lyrics, duration, instrumen
   const props = properties(found.status);
   const idField = STATUS_ID_FIELDS.find((field) => field in props) || 'id';
   const batch = idField === 'ids' || idField === 'clip_ids';
-  let failures = 0;
+  const wait = sunoMcp.sleep || realSleep;
+  let delay = nextPollDelay(0, true);
   while (pending.length) {
-    if (Date.now() >= end) throw withPartial(timeoutError());
-    try { await sleep(Math.min(sunoMcp.pollIntervalMs, Math.max(0, end - Date.now())), signal); }
-    catch { throw withPartial(new SunoMcpError('suno_cancelled', sunoMcpMessages.cancelled, { detail: 'cancelled' })); }
+    try { await wait(delay, signal); } catch { throw withPartial(cancelled()); }
+    if (signal?.aborted) throw withPartial(cancelled());
+    let progressed = false;
     const calls = batch ? [{ [idField]: pending.map(clipId) }] : pending.map((clip) => ({ [idField]: clipId(clip) }));
     for (const callArgs of calls) {
       let update;
-      try { update = await client.callTool(found.status.name, callArgs, { timeoutMs: remaining() }); }
+      try { update = await client.callTool(found.status.name, callArgs, { timeoutMs: sunoMcp.requestTimeoutMs }); }
       catch (error) {
         const translated = translateSunoError(error, { signal });
-        if (translated.code === 'suno_credential_expired' || translated.code === 'suno_cancelled' || translated.code === 'suno_no_credits')
-          throw withPartial(translated);
-        if (++failures >= sunoMcp.maxStatusFailures || Date.now() >= end) throw withPartial(translated);
-        continue;
+        if (translated.code === 'suno_credential_expired' || translated.code === 'suno_cancelled' || signal?.aborted)
+          throw withPartial(signal?.aborted ? cancelled() : translated);
+        continue; // transitória: backoff e tenta de novo, sem limite de falhas
       }
-      failures = 0;
       const byId = new Map(clips.map((clip) => [clipId(clip), clip]));
       for (const item of extractClips(update)) {
         const target = byId.get(clipId(item)) || (!batch ? byId.get(String(Object.values(callArgs)[0])) : null);
         if (!target || target.state !== 'pending') continue;
         Object.assign(target, Object.fromEntries(Object.entries(item).filter(([, value]) => value !== null && value !== undefined)));
         target.state = clipState(target);
+        if (target.state !== 'pending') progressed = true;
       }
     }
     pending = clips.filter((clip) => clip.state === 'pending');
+    delay = nextPollDelay(delay, progressed);
   }
   return { tool: found.generation.name, clips: clips.map(publicClip) };
 }

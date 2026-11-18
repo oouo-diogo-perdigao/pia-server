@@ -35,7 +35,16 @@ const expectCode = async (promise, code, check) => {
   });
 };
 const methods = (fake) => fake.rpcMethods();
-const fast = () => Object.assign(sunoMcp, { pollIntervalMs: 5, requestTimeoutMs: 2000, generationTimeoutMs: 5000 });
+// Tempo fake do polling: o sleep injetado anota o intervalo pedido e cede só um
+// tick (respeitando o signal), então o backoff de 5 a 60 s roda instantâneo.
+const sleeps = [];
+const fakeSleep = (ms, signal) => new Promise((resolve, reject) => {
+  sleeps.push(ms);
+  if (signal?.aborted) return reject(signal.reason);
+  const timer = setTimeout(resolve, 1);
+  signal?.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+});
+const fast = () => { sleeps.length = 0; Object.assign(sunoMcp, { sleep: fakeSleep, requestTimeoutMs: 2000 }); };
 
 afterEach(() => { Object.assign(sunoMcp, defaults); });
 
@@ -113,11 +122,10 @@ for (const responseMode of ['json', 'sse']) {
 
     test('timeout: suno_timeout from AbortSignal and the paid call is never repeated', async () => {
       fake.setScenarios(['timeout']);
-      sunoMcp.requestTimeoutMs = 150;
       const mcp = open();
       await mcp.listTools();
-      sunoMcp.requestTimeoutMs = 2000;
-      await expectCode(generateOnce(mcp, { prompt: 'x', deadline: Date.now() + 150 }), 'suno_timeout', (error) => {
+      sunoMcp.requestTimeoutMs = 150; // timeout de UMA requisição (o tools/call inicial)
+      await expectCode(generateOnce(mcp, { prompt: 'x' }), 'suno_timeout', (error) => {
         assert.deepEqual(publicError(error), { status: 502, body: { error: error.message, code: 'suno_timeout' } });
       });
       await mcp.close();
@@ -264,43 +272,78 @@ describe('polling and discovery with an inline stub', () => {
     assert.deepEqual(stub.toolCalls('create_song')[0].params.arguments, { gpt_description_prompt: 'samba', make_instrumental: true });
   });
 
-  test('batch status tool, failed state, and partial clips attached when polling gives up', async () => {
+  test('transient polling failures never end the generation: backoff 5 s → 60 s, then it completes (batch tool)', async () => {
+    let polls = 0;
     const stub = await startStub((message, send) => {
       if (message.method === 'tools/list') return send({ result: { tools: [GEN, BATCH] } });
       if (message.params.name === 'create_song') return send(text({ clips: [{ id: 'a', status: 'complete', audio_url: 'https://cdn.test/a.mp3' }, { id: 'b', status: 'queued' }] }));
-      return send({}, 503);
+      polls++;
+      if (polls <= 4) return send({}, 503); // 5xx
+      if (polls === 5) return send({ error: { code: -32603, message: 'boom Bearer t' } }); // erro de protocolo
+      if (polls <= 7) return send(text({ clips: [{ id: 'b', status: 'streaming' }] })); // sem progresso
+      return send(text({ clips: [{ id: 'b', status: 'complete', audio_url: 'https://cdn.test/b.mp3' }] }));
     });
     const mcp = new SunoMcpClient({ token: 't', url: stub.url });
-    await expectCode(generateOnce(mcp, { prompt: 'x' }), 'suno_unavailable', (error) => {
-      assert.deepEqual(error.partial.map((clip) => clip.id), ['a']);
-    });
-    assert.equal(stub.toolCalls('get_clips').length, sunoMcp.maxStatusFailures);
+    const result = await generateOnce(mcp, { prompt: 'x' });
+    assert.deepEqual(result.clips.map((clip) => [clip.id, clip.state]), [['a', 'ready'], ['b', 'ready']]);
     assert.deepEqual(stub.toolCalls('get_clips')[0].params.arguments, { ids: ['b'] });
+    assert.equal(stub.toolCalls('get_clips').length, 8);
+    assert.deepEqual(sleeps, [5000, 10000, 20000, 40000, 60000, 60000, 60000, 60000]);
+    assert.equal(stub.toolCalls('create_song').length, 1);
     await mcp.close();
     await stub.close();
   });
 
-  test('a failed status ends the clip as failed; deadline gives suno_timeout with partial', async () => {
+  test('a request timeout while polling is transient; progress resets the backoff to 5 s', async () => {
+    let polls = 0;
+    const stub = await startStub((message, send) => {
+      if (message.method === 'tools/list') return send({ result: { tools: [GEN, STATUS] } });
+      if (message.params.name === 'create_song') return send(text([{ id: 'a', status: 'queued' }, { id: 'b', status: 'queued' }]));
+      polls++;
+      const id = message.params.arguments.clip_id;
+      if (polls === 1) return; // nunca responde: estoura o requestTimeoutMs dessa requisição
+      if (id === 'a') return send(text({ id, status: 'complete', audio_url: 'https://cdn.test/a.mp3' }));
+      return send(text({ id, status: polls > 5 ? 'complete' : 'queued', audio_url: polls > 5 ? 'https://cdn.test/b.mp3' : null }));
+    });
+    const mcp = new SunoMcpClient({ token: 't', url: stub.url });
+    const tools = await mcp.listTools();
+    sunoMcp.requestTimeoutMs = 100;
+    const result = await generateOnce(mcp, { prompt: 'x', tools });
+    assert.deepEqual(result.clips.map((clip) => clip.state), ['ready', 'ready']);
+    assert.equal(sleeps[0], 5000);
+    assert.ok(sleeps.includes(5000, 1), 'progresso volta ao mínimo');
+    assert.ok(sleeps.every((ms) => ms >= 5000 && ms <= 60000));
+    await mcp.close();
+    await stub.close();
+  });
+
+  test('polling ends only on terminal state, cancel or expired credential', async () => {
     const stub = await startStub((message, send) => {
       if (message.method === 'tools/list') return send({ result: { tools: [GEN, STATUS] } });
       if (message.params.name === 'create_song') return send(text([{ id: 'a', status: 'queued' }, { id: 'b', status: 'queued' }]));
       const id = message.params.arguments.clip_id;
       if (id === 'a') return send(text({ id, status: 'complete', audio_url: 'https://cdn.test/a.mp3' }));
-      return send(text({ id, status: stub.state.failB ? 'failed' : 'queued' }));
+      if (stub.state.mode === 'expired') return send({ error: { code: -32001, message: 'Unauthorized' } }, 401);
+      return send(text({ id, status: stub.state.mode === 'fail' ? 'failed' : 'queued' }));
     });
     let mcp = new SunoMcpClient({ token: 't', url: stub.url });
-    stub.state.failB = true;
+    stub.state.mode = 'fail';
     const done = await generateOnce(mcp, { prompt: 'x' });
     assert.deepEqual(done.clips.map((clip) => clip.state), ['ready', 'failed']);
-    stub.state.failB = false;
-    await expectCode(generateOnce(mcp, { prompt: 'x', deadline: Date.now() + 80 }), 'suno_timeout', (error) => {
+    stub.state.mode = 'expired';
+    await expectCode(generateOnce(mcp, { prompt: 'x' }), 'suno_credential_expired', (error) => {
       assert.deepEqual(error.partial.map((clip) => clip.id), ['a']);
     });
     await mcp.close();
+    stub.state.mode = 'queued';
     const controller = new AbortController();
     mcp = new SunoMcpClient({ token: 't', url: stub.url, signal: controller.signal });
-    setTimeout(() => controller.abort(), 40);
-    await expectCode(generateOnce(mcp, { prompt: 'x', signal: controller.signal }), 'suno_cancelled');
+    setTimeout(() => controller.abort(), 60);
+    await expectCode(generateOnce(mcp, { prompt: 'x', signal: controller.signal }), 'suno_cancelled', (error) => {
+      assert.deepEqual(error.partial.map((clip) => clip.id), ['a'], 'cancelar entrega as faixas prontas');
+    });
+    assert.ok(sleeps.length > 3, 'continua consultando, sem prazo total');
+    assert.ok(!('generationTimeoutMs' in sunoMcp) && !('maxStatusFailures' in sunoMcp));
     await stub.close();
   });
 
