@@ -87,7 +87,7 @@ test('datas em DD/MM/AAAA, determinísticas e validadas', () => {
   assert.throws(() => formatarData('2026-02-29'), /inexistente/);
   assert.throws(() => formatarData('01/12/2026'), /inválida/);
   const { html } = renderDocumento('privacidade', undefined, ORIGIN, fontes());
-  assert.match(html, /Versão 1\.0 · Vigente a partir de 01\/12\/2026 · Última atualização: 05\/12\/2026/);
+  assert.match(html, /<p class="legal-datas">Vigente a partir de <time datetime="2026-12-01">01\/12\/2026<\/time> · Última atualização: <time datetime="2026-12-05">05\/12\/2026<\/time> · Versão <strong>1\.0<\/strong><\/p>/);
 });
 
 test('layout: lang, title, description, canonical, h1 único, sumário, resumo, histórico e links', () => {
@@ -104,7 +104,7 @@ test('layout: lang, title, description, canonical, h1 único, sumário, resumo, 
     assert.match(html, new RegExp(`<h2 id="${id}">`));
   }
   assert.match(html, /<h2 id="em-resumo">Em resumo<\/h2><ul><li>Gratuito/);
-  assert.match(html, /<td><a href="\/privacidade\/v1\.0">1\.0<span [^>]*>, abrir cópia arquivada<\/span><\/a> <span class="legal-current">atual<\/span><\/td><td>01\/12\/2026<\/td><td>Primeira versão\.<\/td>/);
+  assert.match(html, /<tr><th scope="row"><a href="\/privacidade\/v1\.0">1\.0<span [^>]*>, abrir cópia arquivada<\/span><\/a> <span class="legal-current">atual<\/span><\/th><td><time datetime="2026-12-01">01\/12\/2026<\/time><\/td><td>Primeira versão\.<\/td><\/tr>/);
   assert.match(html, /<a href="\/">Voltar à PIA<\/a>/);
   assert.match(html, /Leia também: <a href="\/termos">Termos de Serviço<\/a>\./);
   assert.doesNotMatch(html, /<script/i);
@@ -139,6 +139,8 @@ test('microtextos aprovados pelo PO (spec de UX, seção 5, item 7) aparecem exa
     ABRIR_COPIA_ARQUIVADA: ', abrir cópia arquivada',
     SELO_RASCUNHO: 'RASCUNHO',
     PREFIXO_TITULO_RASCUNHO: 'RASCUNHO · ',
+    DOCUMENTOS_LEGAIS: 'Documentos legais',
+    VOLTAR_A_PIA: 'Voltar à PIA',
   });
   const final = renderDocumento('privacidade', undefined, ORIGIN, fontes()).html;
   assert.ok(final.includes('<p class="legal-eyebrow">PIA · Documento legal</p><h1>Política de Privacidade</h1>'));
@@ -162,7 +164,7 @@ test('microtextos aprovados pelo PO (spec de UX, seção 5, item 7) aparecem exa
 
 test('acessibilidade e rascunho: skip link, legenda e texto ocultos, prefixo e selo só no rascunho', () => {
   const final = renderDocumento('termos', undefined, ORIGIN, fontes()).html;
-  assert.ok(final.includes('<body><a class="skip-link" href="#conteudo">Pular para o conteúdo</a><main class="legal" id="conteudo" tabindex="-1">'),
+  assert.ok(final.includes('<body><a class="skip-link" href="#conteudo">Pular para o conteúdo</a><header class="legal-header">'),
     'skip link é o 1º elemento e aponta para o main');
   const sr = 'class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0"';
   assert.ok(final.includes(`<table><caption ${sr}>Versões publicadas dos Termos de Serviço</caption><thead>`));
@@ -174,7 +176,7 @@ test('acessibilidade e rascunho: skip link, legenda e texto ocultos, prefixo e s
 
   const rascunho = renderDocumento('termos', undefined, ORIGIN, fontes({ datas: false })).html;
   assert.ok(rascunho.includes('<title>RASCUNHO · Termos de Serviço · PIA</title>'));
-  assert.ok(rascunho.includes('<p class="legal-datas"><span class="legal-badge">RASCUNHO</span> Versão 1.0 · Vigente a partir de'));
+  assert.ok(rascunho.includes('<p class="legal-datas"><span class="legal-badge">RASCUNHO</span> Vigente a partir de <span class="legal-pendente">[PREENCHER NO RELEASE: data de vigência]</span> · Última atualização: '));
   assert.equal((rascunho.match(/legal-badge/g) || []).length, 1);
   assert.doesNotMatch(rascunho, /<a href="\/termos\/v1\.0">/, 'versão em rascunho sem link (e sem texto de cópia arquivada)');
   assert.doesNotMatch(rascunho, /\u0000/, 'marcador interno substituído');
@@ -184,6 +186,95 @@ test('acessibilidade e rascunho: skip link, legenda e texto ocultos, prefixo e s
   const notFound = legalNotFound('/termos/v9.9').body;
   assert.ok(notFound.includes('<title>Página não encontrada · PIA</title>'));
   assert.ok(notFound.includes('<main class="legal" id="conteudo" tabindex="-1">'));
+});
+
+// Relatório de QA (D1 a D5) e spec de UX 1.1, 1.4, 1.7, 1.9 e 4.1/4.2.
+const SECOES = { privacidade: 14, termos: 13 };
+const focaveis = (html) => [...html.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>/g)].map(([, href]) => href);
+const NAV = '<nav class="legal-topnav" aria-label="Documentos legais"><ul>' +
+  '<li><a href="/privacidade"%P>Política de Privacidade</a></li><li><a href="/termos"%T>Termos de Serviço</a></li>' +
+  '<li><a href="/">Voltar à PIA</a></li></ul></nav>';
+const nav = (atual) => NAV.replace('%P', atual === 'privacidade' ? ' aria-current="page"' : '')
+  .replace('%T', atual === 'termos' ? ' aria-current="page"' : '');
+const RODAPE = '<footer class="legal-rodape"><address>Controlador e contato: Fulana &lt;Teste&gt; &amp; &quot;Cia&quot;, ' +
+  '<a href="mailto:contato@pia.example">contato@pia.example</a>.</address><p>';
+const RODAPE_REAL = '<footer class="legal-rodape"><address>Controlador e contato: Diogo Passos Perdigão Britto, ' +
+  '<a href="mailto:contato@travelrpg.com">contato@travelrpg.com</a>.</address><p>';
+
+test('D1: header (banner) e footer (contentinfo) fora do main, barra com nav "Documentos legais", faixa dentro do header', () => {
+  const final = renderDocumento('privacidade', undefined, ORIGIN, fontes()).html;
+  const corpo = final.slice(final.indexOf('<body>'));
+  assert.ok(corpo.startsWith('<body><a class="skip-link" href="#conteudo">Pular para o conteúdo</a><header class="legal-header">' +
+    '<div class="legal-topbar"><p class="legal-brand"><img src="/pia.svg" alt="" width="28" height="28"> PIA <small>Server</small></p>' +
+    nav('privacidade') + '</div></header><main class="legal" id="conteudo" tabindex="-1"><div class="legal-cabecalho">'));
+  assert.ok(corpo.endsWith('</main>' + RODAPE + '<a href="/privacidade" aria-current="page">Política de Privacidade</a> · ' +
+    '<a href="/termos">Termos de Serviço</a> · <a href="/">Voltar à PIA</a></p></footer></body></html>'));
+  const main = corpo.slice(corpo.indexOf('<main'), corpo.indexOf('</main>'));
+  assert.doesNotMatch(main, /<header|<footer|legal-voltar/, 'nada de header/footer dentro do main');
+  for (const tag of ['header', 'footer', 'main', 'h1']) assert.equal(final.split('<' + tag).length, 2, 'um ' + tag);
+  assert.equal(final.split('<nav').length, 3, 'duas navs: Documentos legais e Nesta página');
+  assert.doesNotMatch(final, /legal-rascunho/, 'final sem faixa');
+
+  const rascunho = renderDocumento('privacidade', undefined, ORIGIN, fontes({ datas: false })).html;
+  assert.ok(rascunho.includes('<header class="legal-header"><p class="legal-rascunho" role="note"><strong>RASCUNHO, não publicar</strong> ' +
+    'Este texto ainda não tem parecer jurídico e não é a versão oficial.</p><div class="legal-topbar">'), 'faixa = 1º filho do header');
+  assert.equal(rascunho.split('legal-rascunho').length, 2);
+});
+
+test('D2: ordem de Tab da spec 4.1 nas páginas reais (skip, barra, Leia também, e-mail do resumo, sumário … rodapé)', () => {
+  const paginas = new Map(legalFiles('https://pia.travelrpg.com'));
+  for (const [documento, outro, resumo] of [['privacidade', 'termos', ['mailto:contato@travelrpg.com']], ['termos', 'privacidade', []]]) {
+    const ordem = focaveis(paginas.get('/' + documento)[1]);
+    const inicio = ['#conteudo', '/privacidade', '/termos', '/', '/' + outro, ...resumo, '#em-resumo'];
+    assert.deepEqual(ordem.slice(0, inicio.length), inicio, documento);
+    assert.equal(ordem.at(-1 - 3), 'mailto:contato@travelrpg.com', 'rodapé: e-mail');
+    assert.deepEqual(ordem.slice(-3), ['/privacidade', '/termos', '/'], 'rodapé: Política, Termos, Voltar');
+    assert.equal(ordem.indexOf('#historico-de-versoes'), inicio.length - 1 + 1 + SECOES[documento], 'sumário completo antes do corpo');
+  }
+  // Com uma versão publicada, o link da versão vem depois do corpo e antes do rodapé.
+  const ordem = focaveis(renderDocumento('privacidade', undefined, ORIGIN, fontes()).html);
+  assert.deepEqual(ordem.slice(-6), ['/privacidade/v1.0', '#sumario', 'mailto:contato@pia.example', '/privacidade', '/termos', '/']);
+});
+
+test('D3: datas em <time datetime> e metadados na ordem da spec (selo, vigência, atualização, versão), ainda num <p>', () => {
+  const html = renderDocumento('termos', undefined, ORIGIN, fontes()).html;
+  assert.ok(html.includes('<p class="legal-datas">Vigente a partir de <time datetime="2026-12-01">01/12/2026</time> · ' +
+    'Última atualização: <time datetime="2026-12-05">05/12/2026</time> · Versão <strong>1.0</strong></p>'));
+  assert.doesNotMatch(html, /legal-meta|<ul class="legal-datas/, 'metadados não viram lista na v1.0');
+  const semData = renderDocumento('termos', undefined, ORIGIN, fontes({ datas: false })).html;
+  assert.doesNotMatch(semData, /<time/, 'data nula vira selo, sem <time>');
+});
+
+test('D4: versão do histórico em <th scope="row">', () => {
+  const html = renderDocumento('termos', undefined, ORIGIN, fontes()).html;
+  const tbody = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>'));
+  assert.equal(tbody.split('<th scope="row">').length - 1, tbody.split('<tr>').length - 1);
+  assert.match(tbody, /^<tbody><tr><th scope="row"><a href="\/termos\/v1\.0">1\.0<span [^>]*>, abrir cópia arquivada<\/span><\/a> <span class="legal-current">atual<\/span><\/th><td><time datetime="2026-12-01">01\/12\/2026<\/time><\/td><td>Primeira versão\.<\/td><\/tr>$/);
+  assert.match(html, /<thead><tr><th scope="col">Versão<\/th><th scope="col">Publicada em<\/th><th scope="col">O que mudou<\/th><\/tr><\/thead>/);
+});
+
+test('D5: rodapé com <address> e aria-current="page" só no documento atual (barra e rodapé); cópia /vX.Y sem aria-current', () => {
+  for (const documento of ['privacidade', 'termos']) {
+    const html = renderDocumento(documento, undefined, ORIGIN, fontes()).html;
+    const correntes = [...html.matchAll(/<a href="([^"]+)" aria-current="page">/g)].map(([, href]) => href);
+    assert.deepEqual(correntes, ['/' + documento, '/' + documento], documento);
+    assert.ok(html.includes(nav(documento)));
+    assert.ok(html.includes(RODAPE));
+    const congelada = renderDocumento(documento, '1.0', ORIGIN, fontes()).html;
+    assert.doesNotMatch(congelada, /aria-current/, 'cópia congelada não muda quando sai versão nova');
+    assert.ok(congelada.includes(nav(null)) && congelada.includes(RODAPE));
+  }
+});
+
+test('404 legal: mesma estrutura de landmarks (header com a nav, main, footer com address), sem aria-current', () => {
+  const body = legalNotFound('/termos/v9.9').body;
+  const corpo = body.slice(body.indexOf('<body>'));
+  assert.ok(corpo.startsWith('<body><a class="skip-link" href="#conteudo">Pular para o conteúdo</a><header class="legal-header"><div class="legal-topbar">'));
+  assert.ok(corpo.includes('</p>' + nav(null) + '</div></header><main class="legal" id="conteudo" tabindex="-1"><h1>Página não encontrada</h1>'));
+  assert.ok(corpo.includes('</main>' + RODAPE_REAL) && corpo.endsWith('</footer></body></html>'));
+  assert.doesNotMatch(body, /aria-current|legal-rascunho|RASCUNHO/);
+  assert.deepEqual(focaveis(body), ['#conteudo', '/privacidade', '/termos', '/', '/privacidade', '/termos', '/',
+    'mailto:contato@travelrpg.com', '/privacidade', '/termos', '/']);
 });
 
 test('fragmento inválido falha no boot', () => {
@@ -222,11 +313,11 @@ test('versão atual = última publicada; v1.1 em rascunho não aparece nem tem /
   const [, atual] = entradas.get('/privacidade');
   assert.match(atual, /texto privacidade 1\.0/, '/privacidade serve a v1.0 publicada');
   assert.doesNotMatch(atual, /texto privacidade 1\.1|>1\.1</, 'v1.1 em rascunho não aparece na atual');
-  assert.match(atual, /Versão 1\.0 · Vigente a partir de 01\/12\/2026/);
+  assert.match(atual, /Vigente a partir de <time datetime="2026-12-01">01\/12\/2026<\/time> · Última atualização: [\s\S]*? · Versão <strong>1\.0<\/strong>/);
   assert.match(atual, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade">/);
   const [, v10] = entradas.get('/privacidade/v1.0');
   assert.match(v10, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade\/v1\.0">/);
-  assert.match(v10, /<td><a href="\/privacidade\/v1\.0">1\.0<span [^>]*>, abrir cópia arquivada<\/span><\/a><\/td>/);
+  assert.match(v10, /<th scope="row"><a href="\/privacidade\/v1\.0">1\.0<span [^>]*>, abrir cópia arquivada<\/span><\/a><\/th>/);
   assert.equal(renderDocumento('privacidade', undefined, ORIGIN, extra).html, atual);
 
   const naoEncontrada = legalNotFound('/privacidade/v1.1', extra);
@@ -245,7 +336,7 @@ test('versão atual = última publicada; v1.1 em rascunho não aparece nem tem /
   const rascunho = renderDocumento('privacidade', '1.1', ORIGIN, extra);
   assert.equal(rascunho.rascunho, true);
   assert.match(rascunho.html, /texto privacidade 1\.1/);
-  assert.match(rascunho.html, /<a href="\/privacidade\/v1\.0">1\.0<span [^>]*>, abrir cópia arquivada<\/span><\/a>[\s\S]*<td>1\.1<\/td>/, 'rascunho sem link no histórico');
+  assert.match(rascunho.html, /<a href="\/privacidade\/v1\.0">1\.0<span [^>]*>, abrir cópia arquivada<\/span><\/a>[\s\S]*<th scope="row">1\.1<\/th>/, 'rascunho sem link no histórico');
   assert.doesNotMatch(renderDocumento('privacidade', '1.0', ORIGIN, extra).html, /1\.1/, 'cópia congelada não cita versões posteriores');
 });
 

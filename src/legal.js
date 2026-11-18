@@ -113,6 +113,9 @@ export const MICROTEXTOS = Object.freeze({
   ABRIR_COPIA_ARQUIVADA: ', abrir cópia arquivada',
   SELO_RASCUNHO: 'RASCUNHO',
   PREFIXO_TITULO_RASCUNHO: 'RASCUNHO · ',
+  // Barra superior e rodapé (spec 1.1, 1.9 e 4.2; relatório de QA D1 e D5).
+  DOCUMENTOS_LEGAIS: 'Documentos legais',
+  VOLTAR_A_PIA: 'Voltar à PIA',
 });
 
 /**
@@ -274,6 +277,40 @@ function data(iso, rotulo, documento, item, registro) {
   return selo(`PREENCHER NO RELEASE: ${rotulo}`);
 }
 
+/** Data do layout (cabeçalho e histórico) em <time datetime="AAAA-MM-DD">DD/MM/AAAA</time>; nula = selo. */
+function dataHtml(iso, rotulo, documento, item, registro) {
+  const texto = data(iso, rotulo, documento, item, registro);
+  return formatarData(iso) ? '<time datetime="' + escapeHtml(iso) + '">' + texto + '</time>' : texto;
+}
+
+/**
+ * Barra superior (landmark banner, fora do <main>), spec 1.1: faixa de rascunho como 1º filho do
+ * <header>, marca (p, não h1) e nav "Documentos legais". `atual` = documento desta página, com
+ * aria-current="page" (só na página servida em /privacidade e /termos; null na cópia /vX.Y e no 404).
+ */
+function barraSuperior(atual, rascunho) {
+  return '<header class="legal-header">' +
+    (rascunho ? '<p class="legal-rascunho" role="note"><strong>' + M.FAIXA_RASCUNHO_ROTULO + '</strong> ' + M.FAIXA_RASCUNHO_TEXTO + '</p>' : '') +
+    '<div class="legal-topbar"><p class="legal-brand"><img src="/pia.svg" alt="" width="28" height="28"> PIA <small>Server</small></p>' +
+    '<nav class="legal-topnav" aria-label="' + M.DOCUMENTOS_LEGAIS + '"><ul>' +
+    linksDocumentos(atual).map((link) => '<li>' + link + '</li>').join('') + '</ul></nav></div></header>';
+}
+
+function linksDocumentos(atual) {
+  return [
+    ...Object.entries(DOCUMENTOS).map(([documento, meta]) =>
+      '<a href="/' + documento + '"' + (documento === atual ? ' aria-current="page"' : '') + '>' + escapeHtml(meta.titulo) + '</a>'),
+    '<a href="/">' + M.VOLTAR_A_PIA + '</a>',
+  ];
+}
+
+/** Rodapé da página (landmark contentinfo, fora do <main>), spec 1.9: <address> com o contato. */
+function rodape(dados, atual) {
+  return '<footer class="legal-rodape"><address>Controlador e contato: ' + escapeHtml(dados.CONTROLADOR_NOME) +
+    ', <a href="mailto:' + escapeHtml(dados.CONTATO_EMAIL) + '">' + escapeHtml(dados.CONTATO_EMAIL) + '</a>.</address>' +
+    '<p>' + linksDocumentos(atual).join(' · ') + '</p></footer>';
+}
+
 function separarResumo(fragmento, onde) {
   const blocos = fragmento.split('<!-- legal:resumo -->');
   if (blocos.length !== 2) throw new Error(`${onde}: use exatamente um bloco <!-- legal:resumo -->.`);
@@ -318,8 +355,7 @@ function cabecaHtml({ titulo, descricao, canonical, rascunho, noindex = rascunho
     (canonical ? '<link rel="canonical" href="' + escapeHtml(canonical) + '">' : '') +
     (noindex ? '<meta name="robots" content="noindex">' : '') +
     '<link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/legal.css"></head><body>' +
-    '<a class="skip-link" href="#conteudo">' + M.PULAR_PARA_CONTEUDO + '</a>' +
-    (rascunho ? '<p class="legal-rascunho" role="note"><strong>' + M.FAIXA_RASCUNHO_ROTULO + '</strong> ' + M.FAIXA_RASCUNHO_TEXTO + '</p>' : '');
+    '<a class="skip-link" href="#conteudo">' + M.PULAR_PARA_CONTEUDO + '</a>';
 }
 
 /**
@@ -331,11 +367,11 @@ function cabecaHtml({ titulo, descricao, canonical, rascunho, noindex = rascunho
 function historico(fontes, documento, ate, registro, marcarAtual) {
   const lista = fontes.versoes[documento];
   const linhas = lista.slice(0, lista.indexOf(ate) + 1).map((item) =>
-    '<tr><td>' + (publicada(item)
+    '<tr><th scope="row">' + (publicada(item)
       ? '<a href="' + caminho(documento, item.versao) + '">' + escapeHtml(item.versao) + srOnly(M.ABRIR_COPIA_ARQUIVADA) + '</a>'
       : escapeHtml(item.versao)) +
-    (marcarAtual && item === ate ? ' <span class="legal-current">' + M.ATUAL + '</span>' : '') + '</td>' +
-    '<td>' + data(item.vigencia, 'data', documento, item, registro) + '</td>' +
+    (marcarAtual && item === ate ? ' <span class="legal-current">' + M.ATUAL + '</span>' : '') + '</th>' +
+    '<td>' + dataHtml(item.vigencia, 'data', documento, item, registro) + '</td>' +
     '<td>' + escapeHtml(item.resumo) + '</td></tr>').join('');
   return '<section class="legal-historico" aria-labelledby="historico-de-versoes">' +
     '<h2 id="historico-de-versoes">Histórico de versões</h2>' +
@@ -382,30 +418,28 @@ export function renderDocumento(documento, versao, origin, fontes) {
   // O selo RASCUNHO depende do modo, que só é conhecido depois de montar a página: marcador trocado no fim.
   const SELO = '\u0000selo\u0000';
   const montado =
-    '<main class="legal" id="conteudo" tabindex="-1"><header class="legal-cabecalho">' +
-    '<p class="legal-voltar"><a href="/">Voltar à PIA</a></p>' +
+    '<main class="legal" id="conteudo" tabindex="-1"><div class="legal-cabecalho">' +
     '<p class="legal-eyebrow">' + M.EYEBROW + '</p>' +
     '<h1>' + escapeHtml(meta.titulo) + '</h1>' +
+    // Ordem da spec 1.4 (selo, vigência, atualização, versão), ainda num <p> (a lista fica fora da v1.0).
     '<p class="legal-datas">' + SELO +
-    'Versão ' + escapeHtml(item.versao) +
-    ' · Vigente a partir de ' + valores.VIGENCIA + ' · Última atualização: ' + valores.ATUALIZACAO + '</p>' +
+    'Vigente a partir de ' + dataHtml(item.vigencia, 'data de vigência', documento, item, registro) +
+    ' · Última atualização: ' + dataHtml(item.atualizacao, 'data de atualização', documento, item, registro) +
+    ' · Versão <strong>' + escapeHtml(item.versao) + '</strong></p>' +
     '<p class="legal-outro">' + M.LEIA_TAMBEM + ': <a href="/' + meta.outro + '">' + escapeHtml(outro.titulo) + '</a>.</p>' +
-    '</header>' +
+    '</div>' +
     '<section class="legal-resumo" aria-labelledby="em-resumo"><h2 id="em-resumo">Em resumo</h2>' + resumo + '</section>' +
     sumario +
     '<article class="legal-corpo">' + comVoltarAoSumario(corpo) + '</article>' +
     historico(base, documento, item, registro, !versao) +
-    '<footer class="legal-rodape"><p>Controlador e contato: ' + escapeHtml(dados.CONTROLADOR_NOME) +
-    ', <a href="mailto:' + escapeHtml(dados.CONTATO_EMAIL) + '">' + escapeHtml(dados.CONTATO_EMAIL) + '</a>.</p>' +
-    '<p><a href="/privacidade">Política de Privacidade</a> · <a href="/termos">Termos de Serviço</a> · <a href="/">Voltar à PIA</a></p>' +
-    '</footer></main></body></html>';
+    '</main>' + rodape(dados, versao ? null : documento) + '</body></html>';
   const rascunho = registro.size > 0 || montado.replace(/<span class="legal-pendente">\[[^\]]*\]<\/span>/g, '').includes('[');
   const html = cabecaHtml({
     titulo: meta.titulo,
     descricao: meta.descricao,
     canonical: origin + caminho(documento, versao),
     rascunho,
-  }) + montado.replace(SELO, rascunho ? '<span class="legal-badge">' + M.SELO_RASCUNHO + '</span> ' : '');
+  }) + barraSuperior(versao ? null : documento, rascunho) + montado.replace(SELO, rascunho ? '<span class="legal-badge">' + M.SELO_RASCUNHO + '</span> ' : '');
   return {
     html,
     rascunho,
@@ -475,10 +509,10 @@ export function legalNotFound(path, fontes) {
     canonical: null,
     rascunho: false,
     noindex: true,
-  }) +
+  }) + barraSuperior(null, false) +
     '<main class="legal" id="conteudo" tabindex="-1"><h1>Página não encontrada</h1>' +
     '<p>Esta versão ou página não existe. Consulte as versões atuais:</p><ul>' + links + '</ul>' +
-    '<p><a href="/">Voltar à PIA</a></p></main></body></html>';
+    '<p><a href="/">' + M.VOLTAR_A_PIA + '</a></p></main>' + rodape(base.dados, null) + '</body></html>';
   return {
     status: 404,
     headers: { 'Content-Type': HTML, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' },
