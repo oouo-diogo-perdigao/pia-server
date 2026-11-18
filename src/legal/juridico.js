@@ -82,6 +82,32 @@ const rascunho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado:
 
 const V1_1 = Object.freeze({
   ...V1_0,
+  // ── Feature 0001 (Suno), roteiro de docs/legal-v1.1-rascunho.md, conferido contra o código (docs/legal-v1.1-conferencia.md).
+  // Seção 3: dados da conta Suno guardados em pia_server.suno_accounts (src/db.js, src/suno_auth.js). Redação nova, sem rascunho
+  // literal (o rascunho só lista o Suno entre as credenciais); base: requisitos 6.1 e o schema.
+  DADOS_CONTA_SUNO: rascunho('F2-09', 'dados da conta Suno',
+    "De cada conta Suno que você conecta: o identificador, o e-mail e o nome da conta no Suno, o apelido que você dá a ela, os escopos autorizados e os tokens de acesso, que são guardados cifrados."),
+  // Seção 3: frase do rascunho corrigida pelo código: das gerações locais o servidor também guarda prompt e letra
+  // (src/music_generations.js, validateLocalGeneration), não só metadados, e nunca áudio nem link.
+  HISTORICO_GERACOES: rascunho('F2-09', 'histórico de gerações de música',
+    "Prompts, letras, links de música do Suno e o histórico de gerações de música, incluindo as gerações locais e do Gemini, das quais guardamos o prompt, a letra e metadados, sem o áudio e sem link."),
+  // Seção 8: o download da faixa é um proxy em stream, sem gravar em disco (src/suno_audio.js). Redação nova.
+  AUDIO_SUNO: rascunho('F2-09', 'áudio do Suno não guardado',
+    "O áudio das músicas do Suno não é guardado na PIA Server: quando você baixa uma faixa, o servidor busca o áudio no Suno pelo link guardado no histórico e o repassa ao seu computador, sem gravar o arquivo."),
+  // Seção 8: DELETE /device/suno/accounts/:id apaga a linha de suno_accounts sem revogação remota; music_generations
+  // fica com suno_account_id NULL (ON DELETE SET NULL) e guarda suno_account_name (apelido, nome ou e-mail). Redação nova.
+  DESCONEXAO_SUNO: rascunho('F2-09', 'desconexão da conta Suno',
+    "Desconectar uma conta Suno apaga do servidor os tokens e os dados dessa conta, mas não revoga o acesso da PIA no próprio Suno. O histórico de gerações continua na sua conta PIA, com o apelido, o nome ou o e-mail da conta Suno que foi usada."),
+  // Seção 4: parte final do TREINAMENTO_MICROSOFT_SUNO do rascunho (dados da conta Suno fora), no padrão F.4 do parecer
+  // final (compromisso da PIA, sem voz passiva absoluta). Músicas ficam fora pelo Caminho A (TREINAMENTO_MP3_GERADOS).
+  TREINAMENTO_CONTA_SUNO: rascunho('P11', 'dados da conta Suno fora do treinamento',
+    "A PIA não usa os dados da sua conta Suno (identificador, e-mail, nome e tokens) para treinar modelos."),
+  // Seção 7 (4.8): o texto final da v1.0 com o Suno na lista de fornecedores, sem país (CA28). Só acrescenta uma frase.
+  SALVAGUARDAS_TRANSFERENCIA: rascunho('P05', 'salvaguardas da transferência internacional',
+    'Transferência internacional de dados. Os dados pessoais guardados no servidor e no banco de dados da PIA, como a sua conta, as conversas e configurações sincronizadas e os metadados, ficam no Brasil. Outros dados, como imagens e áudios, inclusive gravações de voz, que também são dados pessoais, podem ficar ou ser tratados fora do Brasil. Para que o serviço funcione, alguns dados passam por fornecedores que podem tratá-los no exterior. O Google faz o login, recebe as suas mídias no seu Google Drive e dá acesso ao Gmail e à Agenda quando você conecta essas integrações. A Microsoft dá acesso a e-mail, agenda e arquivos quando você conecta essa integração. O Gemini, do Google, e a Groq processam as mensagens e, quando você usa a transcrição de voz, o áudio a transcrever, por modelos de linguagem. O Discord transmite o áudio das chamadas de voz gravadas pelo bot. O Suno recebe o prompt e a letra quando você gera músicas com a sua conta Suno conectada. As mídias, como imagens e áudios, ficam na conta de armazenamento que você mesmo conecta, como o seu Google Drive ou o Object Storage que você configura, e podem estar fora do Brasil, conforme as regras desse provedor. A PIA não contrata armazenamento de mídia fora do país. Essas transferências acontecem porque são necessárias para prestar o serviço que você pediu, nos termos do art. 33, inciso IX, combinado com o art. 7º, inciso V, da LGPD. Cada fornecedor trata os dados conforme os próprios termos de uso e políticas de privacidade, publicados em seus sites. A ferramenta de segurança do servidor (CrowdSec) envia ao fornecedor dela, que pode tratá-los no exterior, os endereços IP que tentaram abusar do serviço, com a data, a hora e o tipo de ataque, para manter uma lista compartilhada de endereços maliciosos. Esse envio tem como base o legítimo interesse em proteger o serviço e segue as garantias previstas nos termos desse fornecedor. Se quiser saber mais sobre essas transferências, escreva para {{CONTATO_EMAIL}}.'),
+  // Termos, seção 6: texto aprovado da v1.0 com o Suno entre os provedores (rascunho, DIREITOS_MUSICAS_SUNO).
+  DIREITOS_MUSICAS_GERADAS: rascunho('P11', 'direito autoral das músicas geradas',
+    'Os direitos e limites de uso das músicas geradas pelo Suno, pelo Gemini ou por outros provedores seguem os termos de cada provedor. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.'),
 });
 
 export const JURIDICO = Object.freeze({ '1.0': V1_0, '1.1': V1_1 });

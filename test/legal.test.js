@@ -784,9 +784,109 @@ test('F2-02: v1.0 não cita Suno nem histórico de gerações, em lugar nenhum (
     assert.doesNotMatch(`${chave} ${trecho.assunto} ${trecho.texto}`, /suno|histórico de geraç/i, `juridico 1.0: ${chave}`);
   }
   for (const [chave, valor] of Object.entries(DADOS)) assert.doesNotMatch(`${chave} ${valor}`, /suno/i, `dados: ${chave}`);
-  for (const arquivo of ['../src/legal.js', '../src/legal/dados.js', '../src/legal/juridico.js', '../src/legal/versoes.js']) {
+  // Feature 0004: o Suno entra só na v1.1 (conjunto '1.1', fragmentos -v1.1 e entradas 1.1 do manifesto). O motor, os
+  // dados, os fragmentos v1.0 e as entradas 1.0 do manifesto continuam sem ele.
+  for (const arquivo of ['../src/legal.js', '../src/legal/dados.js', '../src/legal/conteudo/privacidade-v1.0.html', '../src/legal/conteudo/termos-v1.0.html']) {
     assert.doesNotMatch(readFileSync(new URL(arquivo, import.meta.url), 'utf8'), /suno/i, arquivo);
   }
+  for (const [documento, lista] of Object.entries(VERSOES)) {
+    for (const item of lista.filter((v) => v.versao === '1.0')) assert.doesNotMatch(JSON.stringify(item), /suno|histórico de geraç/i, `versoes ${documento} 1.0`);
+  }
+});
+
+// CA27 invertido para a v1.1 (requisitos v2.7, 0.1, e roteiro de docs/legal-v1.1-rascunho.md): a v1.1 passa a EXIGIR
+// o Suno e o histórico de gerações, sem quebrar as regras da v1.0 (RN11, CA28, Caminho A, "Termos de Serviço").
+const paginaV11 = (documento) => renderDocumento(documento, '1.1', 'https://pia.travelrpg.com').html;
+const fragmentoV11 = (documento) =>
+  readFileSync(new URL(`../src/legal/conteudo/${documento}-v1.1.html`, import.meta.url), 'utf8');
+
+test('F2-09/0004: v1.1 cita o Suno e o histórico de gerações nas seções do roteiro (CA27 da v1.1, CA06, CA07)', () => {
+  const html = paginaV11('privacidade');
+  const termos = paginaV11('termos');
+  for (const pagina of [html, termos]) assert.match(textoVisivel(pagina), /Suno/);
+  assert.match(textoVisivel(html), /histórico de gerações de música/);
+  const dados = secaoDe(html, 'dados-coletados');
+  assert.ok(dados.includes('Prompts, letras, links de música do Suno e o histórico de gerações de música, incluindo as gerações locais e do Gemini, das quais guardamos o prompt, a letra e metadados, sem o áudio e sem link.'));
+  assert.ok(dados.includes('Credenciais e tokens das integrações que você conecta: Google, Microsoft, Object Storage (S3), Discord, Taverns e Suno. Eles são guardados cifrados.'));
+  assert.ok(dados.includes('De cada conta Suno que você conecta: o identificador, o e-mail e o nome da conta no Suno, o apelido que você dá a ela, os escopos autorizados e os tokens de acesso, que são guardados cifrados.'));
+  assert.doesNotMatch(dados, /das quais guardamos só metadados/, 'divergência D1: o código guarda prompt e letra das gerações locais');
+  const finalidades = secaoDe(html, 'finalidades');
+  assert.match(finalidades, /Secretária, geração de música, cópia de mídia para o Drive, computadores pareados e MCP\./);
+  assert.match(finalidades, /A PIA não usa os dados da sua conta Suno \(identificador, e-mail, nome e tokens\) para treinar modelos\./);
+  const comp = secaoDe(html, 'compartilhamento');
+  assert.match(comp, /Suno: conta conectada e geração de música\./);
+  const transf = secaoDe(html, 'transferencia-internacional');
+  assert.ok(transf.includes('como Google, Microsoft, Discord, Suno, Groq e CrowdSec, podem tratar dados no exterior. Os detalhes estão logo abaixo.'));
+  assert.ok(transf.includes('O Discord transmite o áudio das chamadas de voz gravadas pelo bot. O Suno recebe o prompt e a letra quando você gera músicas com a sua conta Suno conectada.'));
+  assert.doesNotMatch(transf, /tratam dados fora do Brasil|Suno[^.]*fora do Brasil/, 'seção 7 sem afirmar que um provedor específico trata dados fora do Brasil');
+  const retencao = secaoDe(html, 'retencao');
+  for (const frase of [
+    'conectores, contas Suno conectadas, histórico de gerações de música, computadores pareados',
+    'Excluir um item do histórico apaga do servidor o prompt, a letra e os links daquele item. Excluir um item do histórico não apaga a cópia no Drive nem os metadados de mídia.',
+    'Desconectar uma conta Suno apaga do servidor os tokens e os dados dessa conta, mas não revoga o acesso da PIA no próprio Suno.',
+    'Links de música do Suno podem expirar.',
+    'O áudio das músicas do Suno não é guardado na PIA Server',
+  ]) assert.ok(retencao.includes(frase), frase);
+  assert.match(secaoDe(html, 'direitos-do-titular'), /excluir um item do histórico de músicas, desconectar a conta Suno e os demais conectores/);
+  assert.match(secaoDe(termos, 'uso-aceitavel'), /violar os termos do Google, do Suno, do Discord/);
+  const licenca = secaoDe(termos, 'conteudo-e-licenca');
+  assert.match(licenca, /prompts, letras, chats, músicas geradas e gravações/);
+  assert.match(licenca, /os dados da sua conta Microsoft, os dados da sua conta Suno e as suas credenciais e tokens/);
+  assert.match(secaoDe(termos, 'conteudo-gerado-por-ia'), /músicas geradas pelo Suno, pelo Gemini ou por outros provedores seguem os termos de cada provedor/);
+});
+
+test('F2-09/0004: v1.1 mantém as regras da v1.0 (RN11, CA28, Caminho A, Termos de Serviço, seções e ids)', () => {
+  for (const documento of ['privacidade', 'termos']) {
+    const texto = textoVisivel(paginaV11(documento));
+    // CA28
+    assert.doesNotMatch(texto, /não guarda[^.]{0,120}\bIP\b|\bIP\b[^.]{0,120}não guarda/i, `CA28: ${documento}`);
+    assert.doesNotMatch(texto, /Estados Unidos|\bEUA\b|6 meses|seis meses|nenhum dado pessoal sai do Brasil/i, `CA28: ${documento}`);
+    // RN11: nenhuma promessa de backup de áudio no servidor
+    assert.doesNotMatch(texto, /(backup|cópia de segurança)[^.]{0,80}(áudio|músic|MP3)[^.]{0,80}(no servidor|na PIA Server)|PIA Server (guarda|mantém) (o |os )?(áudio|arquivos de áudio|MP3)/i, `RN11: ${documento}`);
+    // Caminho A: músicas e voz fora do treinamento
+    assert.doesNotMatch(texto, /músicas que você gera[^.]*podem ser usad|Prompts, letras e músicas que você gera/i, `Caminho A: ${documento}`);
+    assert.match(texto, /Termos de Serviço/);
+    assert.doesNotMatch(texto, /Termos de Uso/);
+  }
+  // Fragmentos v1.1: sem colchete legítimo, script ou recurso externo, com os mesmos ids de seção da v1.0.
+  for (const documento of ['privacidade', 'termos']) {
+    const bruto = fragmentoV11(documento).replace(/<!--(?!\s*\/?legal:)[\s\S]*?-->/g, '');
+    assert.doesNotMatch(bruto, /\[|TEXTO PENDENTE|TODO|XXX|lorem|example\.invalid/i);
+    assert.doesNotMatch(bruto, /<script|<style|<img|<link|<iframe|\son[a-z]+=/i);
+    const ids = (f) => [...f.matchAll(/<h2 id="([a-z0-9-]+)">([^<]*)<\/h2>/g)].map(([, id, t]) => [id, t]);
+    assert.deepEqual(ids(fragmentoV11(documento)), ids(fragmentoReal(documento)), `${documento}: mesmas seções da v1.0`);
+  }
+  // A v1.1 é rascunho: só aparece em renderDocumento(…, '1.1'); /privacidade e /termos continuam na v1.0.
+  const entradas = new Map(legalFiles('https://pia.travelrpg.com'));
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0']);
+  for (const documento of ['privacidade', 'termos']) {
+    const r = renderDocumento(documento, '1.1', 'https://pia.travelrpg.com');
+    assert.equal(r.rascunho, true);
+    assert.doesNotMatch(entradas.get('/' + documento)[1], /suno/i, 'a atual continua sendo a v1.0');
+  }
+});
+
+test('F2-09/0004: JURIDICO[1.1] = conjunto 1.0 final + trechos novos ou alterados com revisado:false, texto puro e só tokens de dados', () => {
+  const v10 = JURIDICO['1.0'];
+  const v11 = JURIDICO['1.1'];
+  for (const [chave, trecho] of Object.entries(v11)) {
+    const igual = v10[chave] && v10[chave].texto === trecho.texto;
+    assert.equal(trecho.revisado, Boolean(igual), `${chave}: revisado:${trecho.revisado}, ${igual ? 'igual' : 'diferente'} da v1.0`);
+    if (!trecho.revisado) assert.ok(trecho.pendencia && trecho.assunto, chave);
+    assert.doesNotMatch(trecho.texto + trecho.assunto, /[[\]<>]/, `${chave}: texto puro, sem colchetes nem HTML`);
+    assert.doesNotMatch(trecho.texto, /\{\{(?!CONTATO_EMAIL|CONTROLADOR_NOME|IDADE_MINIMA)[A-Z_]+\}\}/, `${chave}: só tokens de dados`);
+  }
+  for (const chave of Object.keys(v10)) assert.ok(Object.hasOwn(v11, chave), `${chave} continua no conjunto 1.1`);
+  assert.deepEqual(Object.entries(v11).filter(([, t]) => !t.revisado).map(([c]) => c).sort(),
+    ['AUDIO_SUNO', 'DADOS_CONTA_SUNO', 'DESCONEXAO_SUNO', 'DIREITOS_MUSICAS_GERADAS', 'HISTORICO_GERACOES', 'SALVAGUARDAS_TRANSFERENCIA', 'TREINAMENTO_CONTA_SUNO']);
+  // Todos os trechos usados em alguma página da v1.1 (AVISO_GRAVACAO_DISCORD é só do embed).
+  const ambos = paginaV11('privacidade') + paginaV11('termos');
+  for (const [chave, trecho] of Object.entries(v11)) {
+    if (chave === 'AVISO_GRAVACAO_DISCORD') continue;
+    assert.ok(ambos.includes(escapeHtml(renderTokens(trecho.texto, DADOS))), `${chave} usado em alguma página da v1.1`);
+  }
+  assert.equal(v11.DIREITOS_MUSICAS_SUNO, undefined, 'a v1.1 reaproveita a chave DIREITOS_MUSICAS_GERADAS');
+  assert.equal(v11.TREINAMENTO_MICROSOFT_SUNO, undefined, 'redação do rascunho superada pelo Caminho A');
 });
 
 test('F2-02: trechos jurídicos da v1.0 com as redações exatas do parecer (Caminho A) e revisado:true (release legal v1.0)', () => {

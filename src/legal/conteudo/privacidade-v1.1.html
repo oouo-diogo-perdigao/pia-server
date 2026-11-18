@@ -28,10 +28,15 @@
 <h3>Conteúdo do usuário guardado no servidor</h3>
 <ul>
 <li>Conversas (chats) sincronizadas, configurações do perfil e segredos do desktop enviados pelo perfil compartilhado.</li>
+<li>{{HISTORICO_GERACOES}}</li>
 </ul>
 <h3>Credenciais de integrações</h3>
 <ul>
-<li>Credenciais e tokens das integrações que você conecta: Google, Microsoft, Object Storage (S3), Discord e Taverns. Eles são guardados cifrados.</li>
+<li>Credenciais e tokens das integrações que você conecta: Google, Microsoft, Object Storage (S3), Discord, Taverns e Suno. Eles são guardados cifrados.</li>
+</ul>
+<h3>Conta Suno</h3>
+<ul>
+<li>{{DADOS_CONTA_SUNO}}</li>
 </ul>
 <h3>Computadores pareados e capturas</h3>
 <ul>
@@ -60,11 +65,12 @@
 
 <h2 id="finalidades">4. Finalidades</h2>
 <ul>
-<li><strong>Prestar o serviço:</strong> login, sincronização do perfil, gravação no Discord, Secretária, cópia de mídia para o Drive, computadores pareados e MCP.</li>
+<li><strong>Prestar o serviço:</strong> login, sincronização do perfil, gravação no Discord, Secretária, geração de música, cópia de mídia para o Drive, computadores pareados e MCP.</li>
 <li><strong>Segurança:</strong> proteger contas, prevenir abuso e diagnosticar falhas, inclusive com registros de acesso que contêm o seu endereço IP (seção 3).</li>
 <li><strong>Treinamento de modelos de IA e melhoria do serviço:</strong> conversas, prompts e outros conteúdos de texto que você envia podem ser usados para treinar modelos e melhorar a PIA, com as exceções da seção 6 sobre dados das APIs do Google. Credenciais e tokens nunca são usados em treinamento. Para pedir que seus dados deixem de ser usados, veja a seção <a href="#direitos-do-titular">Direitos do titular</a>.</li>
 <li>{{TREINAMENTO_MP3_GERADOS}}</li>
 <li>{{TREINAMENTO_MICROSOFT}}</li>
+<li>{{TREINAMENTO_CONTA_SUNO}}</li>
 <li><strong>Comunicação:</strong> responder pedidos e avisar sobre mudanças relevantes.</li>
 </ul>
 
@@ -84,6 +90,7 @@
 <li><strong>Microsoft:</strong> e-mail, agenda e arquivos, quando você conecta a conta.</li>
 <li><strong>Discord:</strong> bot, canais de voz e gravações.</li>
 <li><strong>Taverns:</strong> quando você conecta a conta.</li>
+<li><strong>Suno:</strong> conta conectada e geração de música.</li>
 <li><strong>Provedores de LLM escolhidos por você:</strong> Gemini, Groq ou Ollama local. {{PROVEDORES_LLM}}</li>
 <li><strong>Object Storage (S3)</strong> que você mesmo configura.</li>
 <li><strong>Provedor de hospedagem</strong> do servidor.</li>
@@ -96,20 +103,24 @@
 
 <h2 id="transferencia-internacional">7. Transferência internacional</h2>
 <p>A hospedagem da PIA Server fica {{HOSPEDAGEM_TEXTO}}.</p>
-<p>Os provedores de integração, de inteligência artificial e de segurança, como Google, Microsoft, Discord, Groq e CrowdSec, podem tratar dados no exterior. Os detalhes estão logo abaixo. Não há garantia de hospedagem, de retenção nem de disponibilidade dos dados (veja a seção Retenção).</p>
+<p>Os provedores de integração, de inteligência artificial e de segurança, como Google, Microsoft, Discord, Suno, Groq e CrowdSec, podem tratar dados no exterior. Os detalhes estão logo abaixo. Não há garantia de hospedagem, de retenção nem de disponibilidade dos dados (veja a seção Retenção).</p>
 <p>{{SALVAGUARDAS_TRANSFERENCIA}}</p>
 
 <h2 id="retencao">8. Retenção, sem garantia de hospedagem</h2>
 <ul>
-<li>Os dados da sua conta (perfil, conversas e configurações sincronizadas, conectores, computadores pareados, avisos da Secretária e metadados de mídia) ficam guardados enquanto a conta existir.</li>
+<li>Os dados da sua conta (perfil, conversas e configurações sincronizadas, conectores, contas Suno conectadas, histórico de gerações de música, computadores pareados, avisos da Secretária e metadados de mídia) ficam guardados enquanto a conta existir.</li>
 <li>{{EXCLUSAO_CONTA_PRAZO}}</li>
 <li>Enquanto a conta existe, o servidor guarda apenas metadados das mídias enviadas ao seu Drive (identificador, tipo, tamanho, data e identificador do arquivo no Drive), para listar e localizar essas cópias. Esses metadados são apagados junto com a conta.</li>
 <li>As cópias na pasta da PIA no seu Google Drive e os dados guardados no seu computador não são apagados pela exclusão da conta: ficam com você, sob o seu controle e as regras da sua conta Google. Apague-os você mesmo, se quiser.</li>
 <li>Os registros de acesso com endereço IP e a lista de endereços bloqueados pela ferramenta de segurança (seção 3) não fazem parte da conta e não são apagados com ela. Eles são mantidos pelo tempo necessário para segurança e prevenção de abuso, com base no legítimo interesse do controlador.</li>
 <li>Dados que já tenham sido usados para treinar um modelo podem não ser removíveis desse modelo (veja o item sobre dados já treinados, abaixo).</li>
+<li>Excluir um item do histórico apaga do servidor o prompt, a letra e os links daquele item. <strong>Excluir um item do histórico não apaga a cópia no Drive nem os metadados de mídia.</strong></li>
+<li>{{DESCONEXAO_SUNO}}</li>
+<li>Links de música do Suno podem expirar.</li>
 <li><strong>Não garantimos a retenção nem a disponibilidade dos dados.</strong> Eles podem ser perdidos, apagados ou ficar indisponíveis a qualquer momento, sem aviso.</li>
 <li>Mantenha suas próprias cópias. Os arquivos de música ficam no seu PC, e as cópias de mídia e as gravações ficam no seu Google Drive.</li>
 <li>A PIA Server não guarda arquivos de áudio nem de imagem: músicas, capturas e gravações só passam pelo servidor de forma temporária, a caminho do Drive, e o servidor mantém apenas metadados. A cópia no Drive segue as regras da sua conta Google, e não garantimos que o envio aconteça nem que a cópia exista.</li>
+<li>{{AUDIO_SUNO}}</li>
 <li>{{REMOCAO_DADOS_TREINADOS}}</li>
 </ul>
 
@@ -140,7 +151,7 @@
 <p>{{PRAZO_RESPOSTA_TITULAR}}</p>
 <p>{{OPT_OUT_TREINAMENTO}}</p>
 <p>Você também pode reclamar à Agência Nacional de Proteção de Dados (ANPD).</p>
-<p><strong>Controles disponíveis no app:</strong> desconectar os conectores, revogar computadores pareados e tokens MCP, e sair da conta.</p>
+<p><strong>Controles disponíveis no app:</strong> excluir um item do histórico de músicas, desconectar a conta Suno e os demais conectores, revogar computadores pareados e tokens MCP, e sair da conta.</p>
 
 <h2 id="cookies">11. Cookies e armazenamento local</h2>
 <ul>

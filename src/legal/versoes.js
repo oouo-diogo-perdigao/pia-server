@@ -22,9 +22,11 @@
 //
 // Data null liga o modo rascunho e aparece como "[PREENCHER NO RELEASE: ...]".
 
-// Resumos da v1.1 para o "Histórico de versões" (rascunho).
-const RESUMO_V1_1 = 'Rascunho da versão 1.1.';
-const RESUMO_V1_1_TERMOS = 'Rascunho da versão 1.1.';
+// Resumos da v1.1 para o "Histórico de versões" (rascunho). A parte do Suno (feature 0001) fica separada para que os
+// trechos da feature 0003 (parecer da 0003, 6.6) possam sair num commit próprio, com revert limpo.
+const RESUMO_V1_1_SUNO = 'Conta Suno, histórico de gerações de música e o Suno como terceiro.';
+const RESUMO_V1_1 = RESUMO_V1_1_SUNO;
+const RESUMO_V1_1_TERMOS = RESUMO_V1_1_SUNO;
 
 export const VERSOES = Object.freeze({
   privacidade: Object.freeze([
