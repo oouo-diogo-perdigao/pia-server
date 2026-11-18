@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Páginas legais v1.1 (rascunho, feature 0004)
+- Política de Privacidade e Termos de Serviço v1.1 com a feature 0001 (Suno), sobre o texto final da v1.0: conta Suno, histórico de gerações de música, Suno como terceiro e na transferência internacional (sem país), exclusão de item do histórico, desconexão da conta Suno, links que expiram e áudio do Suno repassado sem ser guardado. Novos `privacidade-v1.1.html`, `termos-v1.1.html` e `JURIDICO['1.1']` (trechos novos ou alterados com `revisado:false`); entradas 1.1 em `versoes.js` com datas e `sha256` nulos. A v1.0 continua congelada em `/privacidade/v1.0` e `/termos/v1.0`, com o mesmo `sha256`.
+- Conferência de cada afirmação contra o código e divergências com o rascunho em `docs/legal-v1.1-conferencia.md`; runbook de exclusão de conta com as tabelas do Suno.
+- Testes: CA27 vale para a v1.0 e exige o Suno na v1.1; regras da v1.0 (RN11, CA28, Caminho A) conferidas na v1.1; `sha256` da v1.0 repetido no teste de snapshot; preview com a v1.1 em rascunho. `PIA_LEGAL_RELEASE=1 npm test` falha de propósito até o release da v1.1.
+
 ### Release legal v1.0 - 2026-11-17
 - Política de Privacidade e Termos de Serviço v1.0 publicados: `vigencia` e `atualizacao` em 2026-11-17 e `sha256` do HTML congelado em `src/legal/versoes.js` (privacidade `a2ff6c287715…`, termos `9b9b7335fcd2…`). Os 16 trechos de `JURIDICO['1.0']` passam a `revisado:true` (parecer final do Advogado favorável sobre `59a1a82`, correções F.4 aplicadas em `3f1cccf`).
 - As páginas saem do modo rascunho: sem selos, sem faixa, sem `noindex`, com `Cache-Control: public, max-age=3600`; `/privacidade/v1.0` e `/termos/v1.0` respondem 200 com a cópia congelada; o embed do Discord mostra o aviso 4.14 sem selo.
