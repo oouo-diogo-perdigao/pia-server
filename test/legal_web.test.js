@@ -53,3 +53,15 @@ test('F2-05: #login usa o mesmo componente do legalFooter() e login.css tem um �
   assert.match(login, /\.pia-legal-footer a \{[^}]*text-decoration: underline/);
   assert.match(login, /\.pia-legal-footer a:focus-visible \{ outline: 2px solid #b6a2ff;/);
 });
+
+test('F2-05: links legais sempre sublinhados e foco #b6a2ff (login, autorização e menu da conta)', () => {
+  const style = read('web/style.css');
+  for (const [, selector, body] of login.matchAll(/([^{}]*pia-legal-footer[^{}]*)\{([^}]*)\}/g)) {
+    assert.doesNotMatch(body, /text-decoration:\s*none/, selector.trim());
+    if (/focus-visible/.test(selector)) assert.match(body, /outline: 2px solid #b6a2ff/);
+  }
+  assert.match(style, /\.account-link:focus-visible \{ outline: 2px solid #b6a2ff;/);
+  for (const html of [block(indexHtml, '<main id="login"', '</main>'), block(indexHtml, '<details id="account-menu">', '</details>')]) {
+    assert.doesNotMatch(html, /target="_blank"/, 'no web os links abrem na mesma aba');
+  }
+});
