@@ -1,0 +1,198 @@
+/* Páginas legais públicas (/privacidade, /termos, /vX.Y e 404 legal). Feature 0002, F2-03.
+   Folha autônoma: as páginas carregam só /legal.css (sem style.css, Mantine ou JS).
+   Contrato de classes: src/legal.js (F2-01). Cores do UX (ux/contraste.md), todas AA:
+   corpo #edeaf6/#11121b 15,72:1; metadados #c6bed8 10,44:1; link #d4c4ff 11,67:1;
+   foco #8f9eff 7,55:1; faixa de rascunho #ffe08a/#3d2c05 10,43:1; selo #ffd666/#2b2210 11,25:1.
+   Sem recursos externos: só fontes do sistema, sem imagens nem importações. */
+
+/* 1. Base --------------------------------------------------------------- */
+html {
+  color-scheme: dark;
+  background: #11121b;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+body {
+  margin: 0;
+  background: #11121b;
+  color: #edeaf6;
+  font: 1rem/1.6 Inter, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-wrap: break-word;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+a { color: #d4c4ff; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; }
+a:visited { color: #d4c4ff; }
+a:hover { color: #f3edff; text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid #8f9eff; outline-offset: 2px; border-radius: 2px; }
+
+/* 2. Faixa de rascunho e selos de pendência ---------------------------- */
+.legal-rascunho {
+  margin: 0;
+  padding: .75rem clamp(1rem, 4vw, 3rem);
+  background-color: #3d2c05;
+  background-image: repeating-linear-gradient(135deg, transparent 0 14px, #f0b4291a 14px 28px);
+  border-bottom: 3px solid #f0b429;
+  color: #ffe08a;
+  font-size: .9375rem;
+  line-height: 1.5;
+  text-align: center;
+}
+.legal-rascunho strong {
+  display: inline-block;
+  margin-right: .5rem;
+  padding: .05rem .5rem;
+  border-radius: .3rem;
+  background: #f0b429;
+  color: #3d2c05;
+  font-size: .8125rem;
+  letter-spacing: .06em;
+}
+.legal-pendente {
+  padding: .1rem .4rem;
+  border: 1px dashed #f0b429;
+  border-radius: .3rem;
+  background: #2b2210;
+  color: #ffd666;
+  font: 600 .875rem/1.9 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  overflow-wrap: anywhere;
+}
+
+/* 3. Layout: coluna de leitura (até 68ch) + sumário ---------------------- */
+.legal {
+  display: block;
+  width: 100%;
+  max-width: calc(68ch + 2 * clamp(1rem, 4vw, 3rem));
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 4vw, 3rem) 3rem;
+}
+.legal > * { min-width: 0; }
+
+@media (min-width: 64rem) {
+  .legal:has(> .legal-sumario) {
+    display: grid;
+    max-width: calc(16rem + 3rem + 68ch + 2 * clamp(1rem, 4vw, 3rem));
+    grid-template-columns: 16rem minmax(0, 68ch);
+    column-gap: 3rem;
+    justify-content: center;
+    align-items: start;
+  }
+  .legal:has(> .legal-sumario) > * { grid-column: 2; }
+  .legal > .legal-sumario {
+    grid-column: 1;
+    grid-row: 1 / span 5;
+    position: sticky;
+    top: 1.5rem;
+    max-height: calc(100vh - 3rem);
+    overflow: auto;
+    margin: 0;
+    padding: .25rem 0 .25rem 1rem;
+    border: 0;
+    border-left: 1px solid #373250;
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
+/* 4. Tipografia ---------------------------------------------------------- */
+.legal h1 { margin: 0 0 .75rem; font-size: clamp(1.75rem, 1.35rem + 1.6vw, 2.4rem); line-height: 1.15; letter-spacing: -.01em; }
+.legal h2 { margin: 2.5rem 0 .75rem; font-size: 1.375rem; line-height: 1.25; }
+.legal h3 { margin: 1.75rem 0 .5rem; font-size: 1.125rem; line-height: 1.3; }
+.legal p { margin: 0 0 1rem; }
+.legal ul, .legal ol { margin: 0 0 1rem; padding-left: 1.25rem; }
+.legal li + li { margin-top: .35rem; }
+.legal [id] { scroll-margin-top: 1.5rem; }
+.legal-corpo h2:target, .legal h2:target { color: #f3edff; }
+
+/* 5. Cabeçalho do documento --------------------------------------------- */
+.legal-cabecalho { margin-bottom: 1.5rem; }
+.legal-voltar { margin: 0 0 1rem; font-size: .9375rem; }
+.legal-voltar a::before { content: "← "; }
+.legal-datas, .legal-outro { color: #c6bed8; font-size: .9375rem; }
+.legal-datas { margin: 0 0 .5rem; }
+.legal-outro { margin: 0; }
+
+/* 6. Em resumo ----------------------------------------------------------- */
+.legal-resumo {
+  margin: 0 0 2rem;
+  padding: 1.1rem 1.25rem 1.1rem 1.4rem;
+  border: 1px solid #373250;
+  border-left: 4px solid #a58ce9;
+  border-radius: .8rem;
+  background: #1b1b2b;
+}
+.legal-resumo h2 { margin: 0 0 .6rem; font-size: 1.125rem; }
+.legal-resumo ul { margin: 0; padding-left: 1.15rem; }
+.legal-resumo li { line-height: 1.55; }
+.legal-resumo li + li { margin-top: .45rem; }
+.legal-resumo li::marker { color: #a58ce9; }
+
+/* 7. Sumário ------------------------------------------------------------- */
+.legal-sumario {
+  margin: 0 0 2rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #373250;
+  border-radius: .8rem;
+  background: #191928;
+}
+.legal-sumario h2 {
+  margin: 0 0 .5rem;
+  color: #bcadf2;
+  font-size: .875rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.legal-sumario ol { margin: 0; padding: 0; list-style: none; }
+.legal-sumario li + li { margin-top: 0; }
+.legal-sumario a {
+  display: block;
+  padding: .4rem .25rem;          /* alvo de toque >= 24 px */
+  border-radius: .35rem;
+  font-size: .9375rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.legal-sumario a:hover { background: #352957; color: #f3edff; text-decoration: underline; }
+@media (min-width: 64rem) {
+  .legal-sumario a { padding-block: .3rem; }
+}
+
+/* 8. Corpo --------------------------------------------------------------- */
+.legal-corpo > h2:first-child { margin-top: 0; }
+.legal-corpo table { display: block; max-width: 100%; overflow-x: auto; }
+
+/* 9. Histórico de versões ------------------------------------------------- */
+.legal-historico { margin-top: 2.5rem; max-width: 100%; overflow-x: auto; }
+.legal table { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+.legal th, .legal td { padding: .6rem .7rem; border-bottom: 1px solid #373250; text-align: left; vertical-align: top; }
+.legal thead th { background: #191928; color: #c6bed8; font-weight: 600; }
+.legal-historico td:nth-child(-n + 3) { white-space: nowrap; }
+@media (max-width: 30rem) {
+  .legal th, .legal td { padding: .55rem .45rem; }
+  .legal-historico td:nth-child(-n + 3) { white-space: normal; }
+}
+
+/* 10. Rodapé -------------------------------------------------------------- */
+.legal-rodape, .legal-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #373250;
+  color: #c6bed8;
+  font-size: .9375rem;
+}
+.legal-rodape p:last-child, .legal-footer p:last-child { margin-bottom: 0; }
+.legal-rodape a, .legal-footer a { display: inline-block; padding-block: .2rem; }
+
+/* 11. Impressão ------------------------------------------------------------ */
+@media print {
+  html, body { background: #fff; color: #000; }
+  a, a:visited { color: #000; }
+  .legal { display: block; max-width: none; padding: 0; }
+  .legal-sumario, .legal-voltar { display: none; }
+  .legal-resumo, .legal-rascunho { background: none; color: #000; border-color: #000; }
+}

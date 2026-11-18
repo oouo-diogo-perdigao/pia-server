@@ -30,6 +30,7 @@ const publicFiles = new Map([
   ['/pia.svg', ['image/svg+xml', readFileSync(new URL('../web/pia.svg', import.meta.url))]],
   ['/secretary.svg', ['image/svg+xml', readFileSync(new URL('../web/secretary.svg', import.meta.url))]],
   ['/login.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/login.css', import.meta.url))]],
+  ['/legal.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/legal.css', import.meta.url))]],
   ['/google-signin.png', ['image/png', readFileSync(new URL('../web/google-signin.png', import.meta.url))]],
   ['/mantine.css', ['text/css; charset=utf-8', mantineCss]],
   ['/style.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/style.css', import.meta.url))]],
