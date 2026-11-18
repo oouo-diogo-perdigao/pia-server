@@ -104,10 +104,17 @@ descartados pelo servidor, porque pertencem a cada computador.
 renova o token uma vez e repete só aquela requisição. A geração faz um único
 `tools/call` (nunca repetido depois de enviado) e acompanha clips pendentes pela
 tool de status, sem prazo total: o intervalo começa em 5 s e dobra até 60 s
-enquanto nada muda, e volta a 5 s quando um clip fica pronto. Falhas
-transitórias do polling (timeout de uma requisição, 5xx, rede) não encerram a
-geração. Ela termina só quando todos os clips chegam a um estado final, quando é
-cancelada ou quando a credencial expira mesmo depois do refresh. Os erros saem
+enquanto nada muda, e volta a 5 s quando um clip fica pronto. Só falhas
+transitórias do polling fazem backoff e nova tentativa, sem limite: rede,
+timeout de uma requisição, 5xx, 408 e 429 (ou `isError` com texto de rate
+limit). Erro permanente encerra o polling: 402 (ou texto de créditos) vira
+`suno_no_credits`; erro de protocolo (JSON-RPC inválido ou com `error`, resposta
+ilegível, `isError` genérico) ou outro 4xx vira `suno_unavailable`. Um 401
+continua renovando o token e repetindo a consulta; se repetir, vira
+`suno_credential_expired`. Em todos os casos as faixas já prontas vêm em
+`partial`, e o job guarda essas faixas (com `extra` quando cabe). Fora isso, a
+geração termina quando todos os clips chegam a um estado final ou quando é
+cancelada. Os erros saem
 com o `code` do contrato: `suno_credential_expired` e `suno_no_credits` (400),
 `suno_timeout` (só o timeout de uma requisição, como o `tools/call` inicial) e
 `suno_unavailable` (502). Uma conta em

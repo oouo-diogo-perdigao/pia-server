@@ -28,6 +28,7 @@
 - `splitProfile` descarta segredos `mcp:*` dos perfis sincronizados.
 - `credential_state` não tem mais `expired`: só `configured`, `unavailable` e `refresh_failed`.
 - Tentativa de connect inexistente: code `suno_connect_not_found` (antes `not_found`).
+- Polling da geração Suno: erro permanente encerra o polling, mantendo as faixas prontas em `partial` (402 → `suno_no_credits`; protocolo ou 4xx não transitório → `suno_unavailable`; 401 repetido depois do refresh → `suno_credential_expired`). Só rede, timeout, 5xx, 408 e 429 fazem backoff. `transientSunoError()` exportada; 429 e texto de rate limit agora são `detail: "rate_limited"` e outros 4xx `detail: "http_4xx"`.
 
 ## v0.2.1 - 2026-11-15
 
