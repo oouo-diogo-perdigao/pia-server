@@ -273,6 +273,9 @@ for (const mode of modes) {
 
     test('redirects: up to 3 hops revalidated one by one; a 4th hop, a private target or another scheme is refused', async () => {
       const [fakeRedirect] = await fakeClips(['redirect']); // fake: 302 para http://example.invalid (não loopback)
+      // DNS determinístico: o destino do fake resolve para um IP público, que um http:// recusa.
+      // Sem isso o resultado dependia da rede (ENOTFOUND no runner do GitHub virava suno_unavailable).
+      audio.sunoAudio.lookup = (host, options, callback) => callback(null, [{ address: '93.184.216.34', family: 4 }]);
       const id = await generation('a', [upstream.base + '/hop/2', upstream.base + '/hop/3', upstream.base + '/to-private',
         upstream.base + '/to-ftp', fakeRedirect]);
       const ok = await call(path(id, 1), { device: pia.a.token });
