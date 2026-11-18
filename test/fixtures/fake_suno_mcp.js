@@ -88,7 +88,7 @@
  *     com o seu `account` (portas independentes).
  *   - Conta já ligada a outro PIA: dois bearers (dois OAuth de PIAs diferentes) que
  *     resolvem para a MESMA conta, ex. `accounts: { tokPia1: conta, tokPia2: conta }`;
- *     quem decide o 409 `suno_account_owned_elsewhere` é a pia-server (UNIQUE no id).
+ *     quem responde `suno_account_taken` (RN08) é a pia-server (UNIQUE no id).
  *   - setAccount(account, token?) troca a conta de um bearer em runtime (ex.: o usuário
  *     reconectou com outra conta Suno); addAccount(token, account) aceita mais um bearer.
  *   - O fake não implementa o OAuth (DCR/token/refresh); isso é o fake OAuth da T2.

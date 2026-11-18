@@ -421,7 +421,7 @@ test('same Suno account behind two bearers simulates an account already linked t
   await using suno = await startFakeSunoMcp({ accounts: { 'tok-pia-1': ACCOUNT_A, 'tok-pia-2': ACCOUNT_A } });
   const first = await accountOf(suno, 'tok-pia-1');
   const second = await accountOf(suno, 'tok-pia-2');
-  assert.equal(first.id, second.id, 'stable id collides, so pia-server must answer suno_account_owned_elsewhere');
+  assert.equal(first.id, second.id, 'stable id collides, so pia-server must answer suno_account_taken (RN08)');
 });
 
 test('two fake instances run in parallel, each with its own account, port and clips', async () => {
