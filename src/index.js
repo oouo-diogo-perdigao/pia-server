@@ -16,6 +16,9 @@ import { acknowledge, configure, monitor, pendingNotices, preferences } from './
 import { receiveMedia } from './media.js';
 import { accessToken, botCredential, enableDiscordLink, isConnectorCallback, migrateConnectorRows, oauthFinish, oauthStart, publicConnectors, registry, removeConnector, runtime, saveConnector, splitProfile, storageCredential, testConnector } from './connectors.js';
 import { renderOAuthCallback } from './oauth_callback.js';
+import { authorizationPage } from './auth_page.js';
+import { legalFiles } from './legal.js';
+import { publicResponse, sendPublic } from './public_files.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -30,6 +33,7 @@ const publicFiles = new Map([
   ['/google-signin.png', ['image/png', readFileSync(new URL('../web/google-signin.png', import.meta.url))]],
   ['/mantine.css', ['text/css; charset=utf-8', mantineCss]],
   ['/style.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/style.css', import.meta.url))]],
+  ...legalFiles(origin),
 ]);
 
 function json(res, status, body) {
@@ -39,17 +43,6 @@ function json(res, status, body) {
 
 function googleSignIn(path) {
   return '<a href="' + path + '" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>';
-}
-
-function authorizationPage(res, title, content) {
-  // Keep the Origin header on same-origin form submissions without sending
-  // the authorization URL as a referrer to Google or other sites.
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Referrer-Policy': 'same-origin' });
-  return res.end('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>' + title + '</title><link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/style.css">' +
-    '<link rel="stylesheet" href="/login.css"><main class="pia-login"><section class="pia-login-card">' +
-    '<img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64"><h2>' + title + '</h2>' +
-    content + '</section></main></html>');
 }
 
 async function body(req, limit = 65536) {
@@ -132,11 +125,8 @@ async function route(req, res) {
   }
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.googleusercontent.com; frame-ancestors 'none'; base-uri 'none'");
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, googleLogin: oauthReady() });
-  if (req.method === 'GET' && publicFiles.has(path)) {
-    const [type, data] = publicFiles.get(path);
-    res.writeHead(200, { 'Content-Type': type });
-    return res.end(data);
-  }
+  const publicPage = publicResponse(req.method, path, publicFiles);
+  if (publicPage) return sendPublic(res, publicPage);
   const blessing = /^\/discord\/bless\/([A-Za-z0-9_-]{43})(\/login)?$/.exec(path);
   if (blessing) {
     const [, token, login] = blessing;

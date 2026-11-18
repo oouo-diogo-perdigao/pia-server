@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "legal:preview": "node scripts/legal-preview.js"
   },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
