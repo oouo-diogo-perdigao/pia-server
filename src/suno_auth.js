@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { pool, seal, unseal } from './db.js';
 import { origin } from './auth.js';
+import { legalFooter } from './legal.js';
 import { SunoError, publicError, sunoMessages } from './suno_errors.js';
 import { resolveSunoIdentity } from './suno_identity.js';
 
@@ -432,7 +433,7 @@ export function sunoCallbackPage(title, message, status) {
       '<title>' + escape(title) + '</title><link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/style.css">' +
       '<link rel="stylesheet" href="/login.css"><main class="pia-login"><section class="pia-login-card">' +
       '<img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64"><h2>' + escape(title) + '</h2>' +
-      '<p>' + escape(message) + '</p></section></main></html>',
+      '<p>' + escape(message) + '</p>' + legalFooter() + '</section></main></html>',
   };
 }
 
