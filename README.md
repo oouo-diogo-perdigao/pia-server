@@ -132,7 +132,7 @@ O job tem este formato: `{job_id, generation_id, client_job_id, state, completed
 ready_text, error, code, suno_account: {id, name}, device_id, from_this_device,
 created, tracks: [{n, title, duration, extra}]}`. Os estados possíveis são `queued`,
 `running`, `completed`, `failed`, `interrupted` e `cancelled`. O `audio_url`, o
-prompt e a letra nunca vão no job. O áudio sai pelo download da T5.
+prompt e a letra nunca vão no job. O áudio sai pelo download abaixo.
 
 Recusas antes de criar o job:
 - `suno_not_connected` quando não há conta Suno;
@@ -159,6 +159,42 @@ Cancelar aborta a espera, mantém as faixas prontas e não começa outro
 repetem o `tools/call`. O `active_job` do `GET /device/suno/status` traz `{job_id,
 generation_id, client_job_id, state, suno_account_id, completed, total,
 extra_ready, device_id, from_this_device}` ou `null`.
+
+### Download do áudio de uma faixa Suno
+
+`GET /device/music/generations/:id/tracks/:n/audio` faz proxy em streaming do
+`audio_url` guardado no servidor. Nada é gravado em disco e o link (ou a query
+dele) nunca aparece em headers, erros ou logs. Qualquer PC pareado da mesma
+conta PIA pode baixar (o que vale é a conta, não o PC de origem).
+
+| Situação | Resposta |
+|---|---|
+| sucesso | `200` com o corpo do áudio; repassa `Content-Type` e `Content-Length`, mais `Cache-Control: no-store` e `X-Content-Type-Options: nosniff` |
+| `Range: bytes=a-b` simples | repassado ao Suno; `206` com `Content-Range`. Outros formatos de Range são ignorados (`200` inteiro); Range fora do arquivo → `416 bad_request` |
+| PC não pareado | `401 {"error":"Pareamento inválido."}` |
+| geração de outra conta, inexistente ou id malformado | `404 music_generation_not_found` |
+| faixa inexistente ou geração local (sem link do Suno) | `404 suno_track_not_found` |
+| Suno respondeu 401/403/404/410 | `410 suno_track_unavailable` ("Esta música não está mais disponível no Suno.") |
+| Suno 5xx ou falha de rede/DNS | `502 suno_unavailable` |
+| timeout (headers ou ociosidade), 408/504 | `502 suno_timeout` |
+| `Content-Length` acima de 100 MiB | `502 suno_track_too_large` (sem baixar o corpo) |
+| destino inseguro, mais de 3 redirects, `Content-Type` que não é áudio | `502 download_failed` |
+
+Depois que os headers saíram, qualquer falha (corpo truncado, passou de 100 MiB
+sem `Content-Length`, timeout de ociosidade) derruba a conexão, e o cliente vê o
+corpo incompleto. Se o cliente desconectar, o download no Suno é abortado.
+
+Regras do download seguro (`sunoAudio` em `src/suno_audio.js`):
+- só `https://`, sem usuário/senha na URL;
+- até 3 redirects (301/302/303/307/308), cada salto revalidado;
+- IPs privados, loopback, link-local, multicast e reservados (v4, v6 e
+  IPv4-mapped) são bloqueados depois da resolução DNS, e também em IP literal;
+- timeout de 30 s para os headers e de 30 s de ociosidade no corpo;
+- `Content-Type` precisa ser `audio/*` ou `application/octet-stream`
+  (`text/html` é recusado).
+
+Nos testes, `sunoAudio.allowLoopbackForTests = true` aceita `http://` apenas
+para destino loopback, e `sunoAudio.lookup` troca o DNS.
 
 ## Histórico de gerações de música
 
