@@ -1,8 +1,11 @@
 // Manifesto de versões das páginas legais (plano técnico, T01 e seção 3.4).
 //
-// Cada documento lista suas versões em ordem crescente; a última é a atual (/privacidade, /termos).
-// Toda versão também é servida congelada em /privacidade/vX.Y e /termos/vX.Y, a partir do
-// arquivo src/legal/conteudo/<documento>-vX.Y.html, que nunca muda depois de publicado.
+// Cada documento lista suas versões em ordem crescente. A versão atual (/privacidade, /termos) é a
+// ÚLTIMA PUBLICADA (vigencia preenchida); se nenhuma estiver publicada, é a última em rascunho.
+// Uma versão nova em rascunho (ex.: 1.1 com vigencia null) não substitui a publicada até o release.
+// Toda versão PUBLICADA também é servida congelada em /privacidade/vX.Y e /termos/vX.Y (e o alias
+// com barra final), a partir de src/legal/conteudo/<documento>-vX.Y.html, que nunca muda depois de
+// publicado. Versão em rascunho não tem /vX.Y (404 legal); veja-a com npm run legal:preview.
 //
 //   versao:      'X.Y' (RN05: X para mudança relevante de finalidade ou dado).
 //   vigencia:    'AAAA-MM-DD' ou null. Preenchida só no commit "release legal vX.Y" com a data

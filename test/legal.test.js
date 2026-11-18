@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   DOCUMENTOS, ORIGEM_SNAPSHOT, escapeHtml, formatarData, hashDocumento, legalFiles, legalFooter,
-  legalNotFound, legalRedirects, pendencias, renderDocumento, renderTokens, versoesAlteradas,
+  legalNotFound, legalRedirects, pendencias, redirecionamentosLegais, renderDocumento, renderTokens, versoesAlteradas,
 } from '../src/legal.js';
 import { escapeHtml as escapeOAuth } from '../src/oauth_callback.js';
 import { DADOS } from '../src/legal/dados.js';
@@ -131,35 +131,61 @@ test('fragmento inválido falha no boot', () => {
   assert.throws(() => renderDocumento('privacidade', '9.9', ORIGIN, fontes()), /não existe/);
 });
 
-test('legalFiles serve a versão atual e só as versões publicadas em /vX.Y, com headers por modo', () => {
+test('versão atual = última publicada; v1.1 em rascunho não aparece nem tem /vX.Y (C1)', () => {
   const item = (versao, vigencia) => ({ versao, vigencia, atualizacao: vigencia, resumo: `Versão ${versao}.`, juridico: '1.0' });
   const versoes = { privacidade: [item('1.0', '2026-12-01'), item('1.1', null)], termos: [item('1.0', '2026-12-01')] };
-  const lidos = [];
-  const conteudo = (documento, versao) => { lidos.push(`${documento}-v${versao}`); return fragmento(`<p>texto ${versao}</p>`); };
-  const entradas = new Map(legalFiles(ORIGIN, { ...fontes(), versoes, conteudo }));
+  const conteudo = (documento, versao) => fragmento(`<p>texto ${documento} ${versao}</p>`);
+  const extra = { ...fontes(), versoes, conteudo };
+  const entradas = new Map(legalFiles(ORIGIN, extra));
   assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0']);
-  assert.ok(lidos.includes('privacidade-v1.1') && lidos.includes('termos-v1.0'));
   for (const [type, html, headers] of entradas.values()) {
     assert.equal(type, 'text/html; charset=utf-8');
     assert.equal(typeof html, 'string');
-    assert.ok(headers['Cache-Control']);
+    assert.deepEqual(headers, { 'Cache-Control': 'public, max-age=3600' }, 'v1.0 publicada e final');
   }
-  const [, atual, headersAtual] = entradas.get('/privacidade');
-  assert.match(atual, /texto 1\.1/);
-  assert.equal(headersAtual['X-Robots-Tag'], 'noindex');
-  const [, v10, headersV10] = entradas.get('/privacidade/v1.0');
-  assert.match(v10, /texto 1\.0/);
-  assert.deepEqual(headersV10, { 'Cache-Control': 'public, max-age=3600' });
-  assert.doesNotMatch(v10, /privacidade\/v1\.1/, 'a cópia congelada não cita versões posteriores');
-  assert.match(atual, /<a href="\/privacidade\/v1\.0">1\.0<\/a>[\s\S]*<td>1\.1<\/td>/, 'versão em rascunho sem link no histórico');
+  const [, atual] = entradas.get('/privacidade');
+  assert.match(atual, /texto privacidade 1\.0/, '/privacidade serve a v1.0 publicada');
+  assert.doesNotMatch(atual, /texto privacidade 1\.1|>1\.1</, 'v1.1 em rascunho não aparece na atual');
+  assert.match(atual, /Versão 1\.0 · Vigente a partir de 01\/12\/2026/);
   assert.match(atual, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade">/);
+  const [, v10] = entradas.get('/privacidade/v1.0');
   assert.match(v10, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade\/v1\.0">/);
-  const extra = { ...fontes(), versoes, conteudo };
-  assert.equal(legalNotFound('/privacidade/v1.1', extra).status, 404, 'rascunho não tem /vX.Y');
+  assert.match(v10, /<td><a href="\/privacidade\/v1\.0">1\.0<\/a><\/td>/);
+  assert.equal(renderDocumento('privacidade', undefined, ORIGIN, extra).html, atual);
+
+  const naoEncontrada = legalNotFound('/privacidade/v1.1', extra);
+  assert.equal(naoEncontrada.status, 404, '/privacidade/v1.1 em rascunho: 404 legal');
+  assert.match(naoEncontrada.body, /<a href="\/privacidade">Política de Privacidade<\/a> \(versão atual, 1\.0\)/, '404 lista a publicada atual');
   assert.equal(legalNotFound('/privacidade/v1.1/', extra).status, 404);
   assert.equal(legalNotFound('/privacidade/v1.0', extra), null);
   assert.equal(legalNotFound('/privacidade/v1.0/', extra), null, 'barra final da publicada é redirect');
-  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [item('1.1', null), item('1.0', null)], termos: [item('1.0', null)] } }),
+
+  const redirects = redirecionamentosLegais(extra);
+  assert.equal(redirects.get('/privacidade/v1.0/'), '/privacidade/v1.0');
+  assert.equal(redirects.get('/termos/v1.0/'), '/termos/v1.0');
+  assert.equal(redirects.has('/privacidade/v1.1/'), false, 'barra final só para publicadas');
+
+  // A versão em rascunho só é renderizada explicitamente (preview).
+  const rascunho = renderDocumento('privacidade', '1.1', ORIGIN, extra);
+  assert.equal(rascunho.rascunho, true);
+  assert.match(rascunho.html, /texto privacidade 1\.1/);
+  assert.match(rascunho.html, /<a href="\/privacidade\/v1\.0">1\.0<\/a>[\s\S]*<td>1\.1<\/td>/, 'rascunho sem link no histórico');
+  assert.doesNotMatch(renderDocumento('privacidade', '1.0', ORIGIN, extra).html, /1\.1/, 'cópia congelada não cita versões posteriores');
+});
+
+test('sem nenhuma versão publicada, a atual é a última em rascunho e legalFiles tem 2 entradas (C1)', () => {
+  const item = (versao) => ({ versao, vigencia: null, atualizacao: null, resumo: `Versão ${versao}.`, juridico: '1.0' });
+  const versoes = { privacidade: [item('1.0'), item('1.1')], termos: [item('1.0')] };
+  const extra = { ...fontes(), versoes, conteudo: (documento, versao) => fragmento(`<p>texto ${versao}</p>`) };
+  const entradas = new Map(legalFiles(ORIGIN, extra));
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/termos']);
+  assert.match(entradas.get('/privacidade')[1], /texto 1\.1/, 'última em rascunho');
+  assert.equal(entradas.get('/privacidade')[2]['X-Robots-Tag'], 'noindex');
+  assert.equal(legalNotFound('/privacidade/v1.0', extra).status, 404);
+  assert.match(legalNotFound('/privacidade/v1.0', extra).body, /\(versão atual, 1\.1\)/);
+  assert.deepEqual([...redirecionamentosLegais(extra).keys()], ['/privacy', '/privacidade/', '/terms', '/termos/']);
+  const item2 = (versao, vigencia) => ({ ...item(versao), vigencia });
+  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [item2('1.1', null), item2('1.0', null)], termos: [item('1.0')] } }),
     /ordem crescente/);
 });
 

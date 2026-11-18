@@ -61,8 +61,8 @@
  *   renderTokens(texto, valores) substitui {{NOME}} por valores[NOME] (já em HTML); erro se faltar.
  *   renderDocumento(documento, versao, origin, fontes?) → { html, rascunho, headers, pendencias }.
  *   legalFiles(origin, fontes?) → array de [caminho, [tipo, html, headers]] para espalhar no
- *                                mapa publicFiles: /privacidade, /termos (versão atual, mesmo em
- *                                rascunho) e /privacidade/vX.Y, /termos/vX.Y só das versões
+ *                                mapa publicFiles: /privacidade, /termos (versão atual = última
+ *                                publicada; sem nenhuma publicada, a última em rascunho) e /privacidade/vX.Y, /termos/vX.Y só das versões
  *                                publicadas (vigencia preenchida). /vX.Y em rascunho = 404 legal.
  *   legalRedirects             Map caminho → Location relativo canônico (301; a query é descartada).
  *   legalNotFound(caminho, fontes?) → { status: 404, headers, body } para /privacidade/* e /termos/*
@@ -192,6 +192,14 @@ function validarFontes({ dados, juridico, versoes }) {
 /** Publicada = vigência preenchida. Só versões publicadas têm rota /vX.Y. */
 const publicada = (item) => item.vigencia !== null && item.vigencia !== undefined;
 
+/**
+ * Versão atual de um documento (a servida em /privacidade e /termos): a última publicada; se
+ * nenhuma estiver publicada, a última do manifesto (rascunho, só nessas duas rotas).
+ */
+export function versaoAtual(lista) {
+  return lista.filter(publicada).at(-1) || lista.at(-1);
+}
+
 function caminho(documento, versao) {
   return versao ? `/${documento}/v${versao}` : `/${documento}`;
 }
@@ -290,7 +298,8 @@ function historico(fontes, documento, ate, registro) {
 }
 
 /**
- * Renderiza uma versão de um documento. Sem `versao`, usa a atual (última do manifesto).
+ * Renderiza uma versão de um documento. Sem `versao`, usa a atual (versaoAtual: última publicada,
+ * ou a última em rascunho se nada estiver publicado).
  * Retorna { html, rascunho, headers, pendencias } e lança erro em qualquer problema de conteúdo.
  */
 export function renderDocumento(documento, versao, origin, fontes) {
@@ -299,7 +308,7 @@ export function renderDocumento(documento, versao, origin, fontes) {
   const base = fontesCom(fontes);
   origin = new URL(origin).origin;
   const lista = base.versoes[documento];
-  const item = versao ? lista.find((v) => v.versao === versao) : lista.at(-1);
+  const item = versao ? lista.find((v) => v.versao === versao) : versaoAtual(lista);
   if (!item) throw new Error(`Versão ${versao} de ${documento} não existe no manifesto.`);
   const onde = `${documento}-v${item.versao}.html`;
   const registro = new Set();
@@ -380,6 +389,11 @@ function redirecionamentos(versoes) {
 /** Aliases (301) para o caminho canônico relativo. A query string deve ser descartada pelo chamador. */
 export const legalRedirects = redirecionamentos(VERSOES);
 
+/** Mesmo mapa de legalRedirects, calculado a partir de outras fontes (testes e preview). */
+export function redirecionamentosLegais(fontes) {
+  return redirecionamentos(fontesCom(fontes).versoes);
+}
+
 /**
  * 404 em HTML para /privacidade/* e /termos/* desconhecidos (ex.: /termos/v9.9), com links para as
  * versões atuais. Retorna null para qualquer outro caminho (o 404 global continua JSON).
@@ -394,7 +408,7 @@ export function legalNotFound(path, fontes) {
   }
   if (conhecidos.has(path)) return null;
   const links = Object.entries(DOCUMENTOS).map(([documento, meta]) => {
-    const atual = base.versoes[documento].at(-1).versao;
+    const atual = versaoAtual(base.versoes[documento]).versao;
     return '<li><a href="/' + documento + '">' + escapeHtml(meta.titulo) + '</a> (versão atual, ' + escapeHtml(atual) + ')</li>';
   }).join('');
   const body = cabecaHtml({
@@ -477,7 +491,7 @@ export function textoJuridico(chave, documento = 'privacidade', fontes) {
   const base = fontesCom(fontes);
   const lista = base.versoes[documento];
   if (!lista) throw new Error(`Documento legal desconhecido: ${documento}.`);
-  const conjunto = lista.at(-1).juridico;
+  const conjunto = versaoAtual(lista).juridico;
   const trecho = base.juridico[conjunto][chave];
   if (!trecho) throw new Error(`Trecho jurídico desconhecido: ${chave} (conjunto ${conjunto}).`);
   const texto = renderTokens(trecho.texto, base.dados, `juridico.js (${conjunto}/${chave})`);
