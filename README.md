@@ -229,6 +229,17 @@ job continuam mostrando `suno_account: {id: null, name}`.
 O cursor é opaco e só posiciona a página dentro da conta do computador; um
 cursor malformado responde `400 invalid_cursor`. Erros saem como `{error, code}`.
 
+## Limpeza de temporários no boot
+
+No boot, `cleanupOrphanTemp()` (`src/cleanup_tmp.js`) apaga os diretórios
+órfãos `pia-media-*` e `pia-artifact-*` do tmpdir (no boot não há upload ativo;
+isso supõe uma instância só). Nas gravações do Discord, apaga os `*.partial.zip`
+e, só nas gravações já `uploaded`, os arquivos que o unlink depois do envio não
+conseguiu apagar (zip, `pia.aup`, `.pcm` e `pia_data/*.flac`). Gravações
+pendentes, em retry ou em andamento ficam intactas (são a fila); o
+`recording.json` e o `pia-session.json` ficam sempre. O log traz só contagens, e
+qualquer erro é ignorado sem derrubar o boot.
+
 ## Comandos de gravação no Discord
 
 A PIA registra os comandos quando o bot conecta ao Discord. Use um bot instalado
