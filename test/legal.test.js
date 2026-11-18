@@ -382,6 +382,12 @@ test('F2-02: Em resumo traz as quatro premissas nos dois documentos (RN01, CA05)
   }
 });
 
+test('F2-02: Em resumo da Política exclui do treinamento os dados do Google e da Microsoft', () => {
+  const html = paginaReal('privacidade');
+  const resumo = textoVisivel(html.slice(html.indexOf('<h2 id="em-resumo">'), html.indexOf('<nav class="legal-sumario"')));
+  assert.match(resumo, /Dados das APIs do Google e da sua conta Microsoft ficam de fora\./);
+});
+
 test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () => {
   const secao = secaoDe(paginaReal('privacidade'), 'dados-coletados');
   for (const termo of [
