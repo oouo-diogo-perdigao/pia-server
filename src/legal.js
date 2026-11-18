@@ -46,8 +46,9 @@
  * vêm precedidos do selo [EM REVISÃO JURÍDICA: <pendência> <assunto>]:
  *   {{BASE_LEGAL_TREINAMENTO}} {{CONSENTIMENTO_TERCEIROS_DISCORD}} {{LIMITACAO_CDC}}
  *   {{OPT_OUT_TREINAMENTO}} {{REMOCAO_DADOS_TREINADOS}} {{PRAZO_RESPOSTA_TITULAR}}
- *   {{TREINAMENTO_MICROSOFT_SUNO}} {{TREINAMENTO_MP3_GERADOS}} {{LOGS_ACESSO}}
- *   (DIREITOS_MUSICAS_SUNO e os trechos da feature 0001 ficam para a v1.1.)
+ *   {{TREINAMENTO_MICROSOFT}} {{TREINAMENTO_MP3_GERADOS}} {{LOGS_ACESSO}} {{ENCARREGADO}}
+ *   {{SALVAGUARDAS_TRANSFERENCIA}} {{ORIGEM_TREINAMENTO_MIDIA}}   (conjunto '1.0')
+ *   (Os trechos da feature 0001 ficam para a v1.1: docs/legal-v1.1-rascunho.md.)
  *   {{AVISO_GRAVACAO_DISCORD}} existe para o embed do bot (textoJuridico); as páginas não o usam.
  *   Use cada um como um bloco de frase, por exemplo: <p>{{LOGS_ACESSO}}</p>.
  *
