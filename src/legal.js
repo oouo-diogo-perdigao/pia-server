@@ -47,7 +47,8 @@
  *   {{BASE_LEGAL_TREINAMENTO}} {{CONSENTIMENTO_TERCEIROS_DISCORD}} {{LIMITACAO_CDC}}
  *   {{OPT_OUT_TREINAMENTO}} {{REMOCAO_DADOS_TREINADOS}} {{PRAZO_RESPOSTA_TITULAR}}
  *   {{TREINAMENTO_MICROSOFT}} {{TREINAMENTO_MP3_GERADOS}} {{LOGS_ACESSO}} {{ENCARREGADO}}
- *   {{SALVAGUARDAS_TRANSFERENCIA}} {{ORIGEM_TREINAMENTO_MIDIA}} {{EXCLUSAO_CONTA_PRAZO}}   (conjunto '1.0')
+ *   {{SALVAGUARDAS_TRANSFERENCIA}} {{ORIGEM_TREINAMENTO_MIDIA}} {{EXCLUSAO_CONTA_PRAZO}}
+ *   {{PROVEDORES_LLM}}   (conjunto '1.0')
  *   (Os trechos da feature 0001 ficam para a v1.1: docs/legal-v1.1-rascunho.md.)
  *   {{AVISO_GRAVACAO_DISCORD}} existe para o embed do bot (textoJuridico); as páginas não o usam.
  *   Use cada um como um bloco de frase, por exemplo: <p>{{LOGS_ACESSO}}</p>.

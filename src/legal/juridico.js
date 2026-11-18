@@ -62,6 +62,11 @@ const V1_0 = Object.freeze({
   // o definem. Fica como trecho jurídico (revisado:false) para o gate de release bloquear até o Diogo confirmar.
   EXCLUSAO_CONTA_PRAZO: trecho('P10', 'prazo de exclusão da conta (confirmação do Diogo)',
     "Quando você pede a exclusão da conta pelo e-mail {{CONTATO_EMAIL}}, apagamos esses dados do servidor, inclusive as gravações pendentes de envio, em até 15 dias contados do pedido. Não há cópia de segurança (backup) do banco de dados, então nenhuma cópia desses dados fica guardada depois da exclusão."),
+  // Adendo 2 do parecer, 5.9: a frase "não permite que ele seja usado para isso" hoje NÃO é verdadeira (o desktop usa por
+  // padrão a camada gratuita do Gemini, que usa os dados para melhorar produtos). Não publicar antes da decisão do Diogo
+  // sobre o bloqueio técnico (pendência E.4 do Adendo 2). Rótulo "Provedores de LLM escolhidos por você" e a lista ficam no HTML.
+  PROVEDORES_LLM: trecho('P10', 'provedores de LLM e Limited Use (camada gratuita do Gemini)',
+    "Quando o assistente lê o seu Gmail, Google Drive, Google Agenda ou dados da sua conta Microsoft para atender a um pedido seu, ele envia ao provedor de modelo de linguagem escolhido apenas o necessário para gerar a resposta. A PIA não usa esse conteúdo para treinar modelos e não permite que ele seja usado para isso. Esse conteúdo não é guardado pela PIA além do histórico da conversa, que fica no seu computador e, se você usar o perfil compartilhado, é sincronizado de forma cifrada com a PIA Server. O Ollama roda no seu próprio computador."),
 });
 
 export const JURIDICO = Object.freeze({ '1.0': V1_0 });
