@@ -41,9 +41,9 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 | `TREINAMENTO_MICROSOFT` | P11 | 4.5 (exclui dados derivados do Google e da Microsoft nas conversas) | Política, 4 |
 | `BASE_LEGAL_TREINAMENTO` | P10 | 4.6 (legítimo interesse com opt-out para conversas e prompts) | Política, 5 |
 | `ORIGEM_TREINAMENTO_MIDIA` | P11 | 4.7 ("criar, treinar ou melhorar modelos") | Política, 6 |
-| `SALVAGUARDAS_TRANSFERENCIA` | P05 | Adendo 2, 4.8 nova: sem país, com a transcrição de voz (Gemini e Groq); sem a frase opcional do CrowdSec | Política, 7 |
+| `SALVAGUARDAS_TRANSFERENCIA` | P05 | Adendo 2, 4.8 nova: sem país, com a transcrição de voz (Gemini e Groq) e, no fim, a frase opcional do CrowdSec (CrowdSec ligado, decisão do Diogo) | Política, 7 |
 | `REMOCAO_DADOS_TREINADOS` | P10 | 4.9, com a última frase do Adendo 2 (F.2): "Nesse caso, não usamos esses modelos para identificar você." | Política, 8 |
-| `EXCLUSAO_CONTA_PRAZO` | P10 | Adendo 2, 5.3, 2º item da Retenção (prazo de 15 dias, proposta do parecer, **aguarda confirmação do Diogo**) | Política, 8 |
+| `EXCLUSAO_CONTA_PRAZO` | P10 | Adendo 2, 5.3, 2º item da Retenção (prazo de 15 dias, confirmado pelo Diogo) | Política, 8 |
 | `PROVEDORES_LLM` | P10 | Adendo 2, 5.9 (o rótulo e a lista "Gemini, Groq ou Ollama local." ficam no HTML) | Política, 6 |
 | `PRAZO_RESPOSTA_TITULAR` | P10 | 4.10 | Política, 10 |
 | `OPT_OUT_TREINAMENTO` | P10 | 4.11, com a última frase do Adendo 3 (4.13 do adendo: terceiros pedem informações, acesso ou eliminação da gravação) | Política, 10 |
@@ -61,7 +61,7 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 - **5.6:** aviso de 15 dias e recusa ou revogação, na Política 13 e nos Termos 11.
 - **5.9:** link da [Google Workspace User Data and Developer Policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy) na seção Limited Use (URL oficial conferida com HTTP 200). A frase "criar, treinar ou melhorar modelos" vem da 4.7.
 - **Adendo 2, tabela D:** Política 4 (Segurança com registros de acesso com IP), 5 (item obrigatório de legítimo interesse e exercício regular de direitos para os registros de acesso), 9 (ferramenta automática de segurança) e runbook de exclusão de conta (`docs/runbooks/exclusao-de-conta.md`, seção 4, item 5, e modelo de resposta).
-- **Adendo 2, 5.3:** Retenção com os seis itens, nesta ordem, antes dos três itens fixos e de `{{REMOCAO_DADOS_TREINADOS}}`. O 2º item (prazo de 15 dias) virou o trecho jurídico `EXCLUSAO_CONTA_PRAZO`, para usar o mecanismo existente: com `revisado:false`, ele mostra o selo e entra em `pendencias()`, então o gate de release bloqueia até o Diogo confirmar.
+- **Adendo 2, 5.3:** Retenção com os seis itens, nesta ordem, antes dos três itens fixos e de `{{REMOCAO_DADOS_TREINADOS}}`. O 2º item (prazo de 15 dias, confirmado pelo Diogo) é o trecho jurídico `EXCLUSAO_CONTA_PRAZO`, com `revisado:false` como os demais até o commit de release.
 - **Adendo 2, 5.9:** a frase "Esses provedores podem usar os dados conforme os próprios termos." foi trocada pelo trecho `PROVEDORES_LLM` (revisado:false).
 - **Adendo 2, seção 7:** `HOSPEDAGEM_TEXTO` novo em `src/legal/dados.js` e 2º parágrafo fixo novo. Sem "principalmente no Brasil".
 - **Não entram na v1.0:** 5.7 (aviso de 30 dias antes de encerrar o serviço, decisão do Diogo) e 5.8 (caixa de aceite no primeiro login).
@@ -81,11 +81,10 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 
 ### Aguardando decisão
 
-- **Prazo de 15 dias para executar a exclusão da conta (`EXCLUSAO_CONTA_PRAZO`, Adendo 2, 5.3 e E.5):** proposta do parecer, alinhada ao `PRAZO_RESPOSTA_TITULAR`. Fica `revisado:false` até o Diogo confirmar.
-- **5.9 (`PROVEDORES_LLM`), bloqueio técnico com o Gemini gratuito (Adendo 2, E.4, obrigatório):** a frase "A PIA não usa esse conteúdo para treinar modelos e não permite que ele seja usado para isso" hoje **não é verdadeira**: o desktop usa por padrão a camada gratuita do Gemini, cujos termos permitem usar o conteúdo para melhorar produtos. Antes de publicar, conteúdo do Google ou da Microsoft precisa ir só à camada paga do Gemini, à Groq (recomendado Zero Data Retention) ou ao Ollama local. O Diogo vai decidir. Também verificar se as saídas das ferramentas entram no histórico sincronizado ou em algum cache.
+- **5.9 (`PROVEDORES_LLM`), bloqueio técnico com o Gemini gratuito (Adendo 2, E.4, obrigatório):** a frase "A PIA não usa esse conteúdo para treinar modelos e não permite que ele seja usado para isso" hoje **não é verdadeira**: o desktop usa por padrão a camada gratuita do Gemini, cujos termos permitem usar o conteúdo para melhorar produtos. **Decisão do Diogo:** a versão atual fica, com `revisado:false`, e o Advogado vai reescrevê-la sem prometer que os provedores não treinam. Não publicar antes dessa nova redação. Também verificar se as saídas das ferramentas entram no histórico sincronizado ou em algum cache.
 - **Prazo e rotação dos registros de acesso (P14, Adendo 2, B e E.1, obrigatório, risco aceito pelo CEO):** o access log do Traefik e o histórico do CrowdSec estão sem prazo e sem rotação; a frase "pelo tempo necessário" só atende provisoriamente ao art. 9º, II. O parecer recomenda rotação com 6 meses como referência (o número não vai para o texto público, CA28).
-- **CrowdSec (Adendo 2, E.2 e E.3, obrigatórios):** verificar se o envio de sinais à Central API está ligado (recomendado desligar) e a retenção da lista de IPs bloqueados. A frase opcional do CrowdSec da 4.8 **não** entrou; só entra se o envio ficar ligado.
-- **Servidor no Brasil (Adendo 2, E.6):** confirmar que o servidor, e não só o banco, fica no Brasil, porque o `HOSPEDAGEM_TEXTO` afirma isso.
+- **CrowdSec (Adendo 2, E.3, obrigatório):** retenção da lista de IPs bloqueados (sem número no texto). O envio de sinais fica ligado por decisão do Diogo, com a frase opcional da 4.8 aplicada e o risco residual do art. 33 aceito (Adendo 2, C, 4.8).
+- **Seção 7 (`HOSPEDAGEM_TEXTO` e 2º parágrafo):** o Diogo confirmou que o servidor (VPS) e o banco ficam no Brasil (Adendo 2, E.6). O texto do Adendo 2 está aplicado por enquanto; o Advogado vai mandar um ajuste depois.
 - **Base legal/LIA (4.6):** confirmação do Diogo.
 
 ## Escopo da v1.0
