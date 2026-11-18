@@ -210,8 +210,9 @@ describe('redact and leaky fake', () => {
     const { clips } = await generateOnce(mcp, { prompt: 'x' });
     await mcp.close();
     assert.match(clips[0].audio_url, /X-Amz-Signature/);
-    const red = redactSuno('falhou ' + clips[0].audio_url + ' Authorization: Bearer ' + fake.token + ' token=abc sig=1', [fake.token]);
-    assert.ok(!red.includes(fake.token) && !red.includes('fake-suno-signature') && !red.includes('abc'));
+    const red = redactSuno('falhou ' + clips[0].audio_url + ' Authorization: Bearer ' + fake.token + ' token=pia-redact-marker sig=1', [fake.token]);
+    // Marcador fixo: um trecho curto ('abc') podia aparecer no id aleatório clip-<hex> e quebrar o teste.
+    assert.ok(!red.includes(fake.token) && !red.includes('fake-suno-signature') && !red.includes('pia-redact-marker'));
     assert.match(red, /\[redacted\]/);
     assert.ok(!logged.some((line) => line.includes(fake.token) || line.includes('fake-suno-signature')));
   });
