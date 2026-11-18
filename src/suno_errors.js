@@ -7,6 +7,7 @@ export const publicCodes = new Set([
   'suno_account_taken', 'suno_account_mismatch', 'suno_account_not_found', 'suno_oauth_denied', 'suno_oauth_invalid',
   'suno_account_required', 'suno_job_active', 'suno_no_credits', 'suno_timeout', 'suno_track_unavailable',
   'incomplete_batch', 'download_failed', 'suno_job_not_found',
+  'music_generation_not_found', 'suno_track_not_found', 'suno_track_too_large',
 ]);
 
 export class SunoError extends Error {

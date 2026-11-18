@@ -60,6 +60,15 @@ export function createMemorySunoJobsStore(sunoStore) {
       for (const row of generations.values()) if (active(row) && (accountId === null || String(row.account_id) === String(accountId))) { Object.assign(row, { state: 'interrupted', code: null }); ids.push(row.job_id); }
       return ids;
     },
+    // Mesma interface do pgTrackStore (src/suno_audio.js).
+    async findTrack(accountId, generationId, n) {
+      const row = generations.get(generationId);
+      if (!row || String(row.account_id) !== String(accountId)) return { generation: false };
+      const track = (tracks.get(generationId) || []).find((item) => item.n === n);
+      return { generation: true, audio_url: row.source === 'suno' && track?.audio_url ? track.audio_url : null };
+    },
+    // Geração local (T5b) para os testes: sem link de áudio.
+    insertLocal(row) { generations.set(row.id, { source: 'local', provider: 'local', state: 'completed', ...row }); tracks.set(row.id, [{ n: 1, title: 'Local', duration: 30, extra: false, audio_url: null }]); },
     // Hard delete como o da T5b (para os testes): 409 se ativa.
     deleteGeneration(id) {
       const row = generations.get(id);
