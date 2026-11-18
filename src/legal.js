@@ -107,7 +107,20 @@ export const MICROTEXTOS = Object.freeze({
   FAIXA_RASCUNHO_TEXTO: 'Este texto ainda não tem parecer jurídico e não é a versão oficial.',
   CIENCIA_ANTES: 'Ao continuar, você concorda com os ',
   CIENCIA_MEIO: ' e declara ter lido a ',
+  // Textos da spec de UX aprovados pelo TechLead (1.1, 1.7, 1.8 e seção 4).
+  PULAR_PARA_CONTEUDO: 'Pular para o conteúdo',
+  ABRIR_COPIA_ARQUIVADA: ', abrir cópia arquivada',
+  SELO_RASCUNHO: 'RASCUNHO',
+  PREFIXO_TITULO_RASCUNHO: 'RASCUNHO · ',
 });
+
+/**
+ * Texto oculto acessível (visually-hidden): classe sr-only da spec mais estilo inline mínimo, para
+ * funcionar sem web/legal.css (F2-03). O CSP do servidor permite style inline (style-src 'unsafe-inline').
+ */
+const SR_ONLY = 'class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;' +
+  'overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0"';
+const srOnly = (texto, tag = 'span') => '<' + tag + ' ' + SR_ONLY + '>' + texto + '</' + tag + '>';
 const M = MICROTEXTOS;
 const VOLTAR_SUMARIO = '<p class="legal-backtop"><a href="#sumario"><span aria-hidden="true">↑ </span>' + M.VOLTAR_AO_SUMARIO + '</a></p>';
 /** Origin fixo usado para calcular o hash das versões congeladas (independe de PIA_PUBLIC_URL). */
@@ -118,11 +131,13 @@ export const DOCUMENTOS = Object.freeze({
     titulo: 'Política de Privacidade',
     descricao: 'Política de Privacidade da PIA: quais dados são coletados, para que são usados, com quem são compartilhados e como exercer seus direitos.',
     outro: 'termos',
+    legenda: 'Versões publicadas da Política de Privacidade',
   }),
   termos: Object.freeze({
     titulo: 'Termos de Serviço',
     descricao: 'Termos de Serviço da PIA: regras de uso, isenção de garantias, limitação de responsabilidade e foro.',
     outro: 'privacidade',
+    legenda: 'Versões publicadas dos Termos de Serviço',
   }),
 });
 
@@ -297,11 +312,12 @@ function verificarFragmento(fragmento, onde) {
 function cabecaHtml({ titulo, descricao, canonical, rascunho, noindex = rascunho }) {
   return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>' + escapeHtml(titulo) + ' · PIA</title>' +
+    '<title>' + (rascunho ? M.PREFIXO_TITULO_RASCUNHO : '') + escapeHtml(titulo) + ' · PIA</title>' +
     '<meta name="description" content="' + escapeHtml(descricao) + '">' +
     (canonical ? '<link rel="canonical" href="' + escapeHtml(canonical) + '">' : '') +
     (noindex ? '<meta name="robots" content="noindex">' : '') +
     '<link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/legal.css"></head><body>' +
+    '<a class="skip-link" href="#conteudo">' + M.PULAR_PARA_CONTEUDO + '</a>' +
     (rascunho ? '<p class="legal-rascunho" role="note"><strong>' + M.FAIXA_RASCUNHO_ROTULO + '</strong> ' + M.FAIXA_RASCUNHO_TEXTO + '</p>' : '');
 }
 
@@ -315,14 +331,14 @@ function historico(fontes, documento, ate, registro, marcarAtual) {
   const lista = fontes.versoes[documento];
   const linhas = lista.slice(0, lista.indexOf(ate) + 1).map((item) =>
     '<tr><td>' + (publicada(item)
-      ? '<a href="' + caminho(documento, item.versao) + '">' + escapeHtml(item.versao) + '</a>'
+      ? '<a href="' + caminho(documento, item.versao) + '">' + escapeHtml(item.versao) + srOnly(M.ABRIR_COPIA_ARQUIVADA) + '</a>'
       : escapeHtml(item.versao)) +
     (marcarAtual && item === ate ? ' <span class="legal-current">' + M.ATUAL + '</span>' : '') + '</td>' +
     '<td>' + data(item.vigencia, 'data', documento, item, registro) + '</td>' +
     '<td>' + escapeHtml(item.resumo) + '</td></tr>').join('');
   return '<section class="legal-historico" aria-labelledby="historico-de-versoes">' +
     '<h2 id="historico-de-versoes">Histórico de versões</h2>' +
-    '<table><thead><tr><th scope="col">Versão</th><th scope="col">' + M.PUBLICADA_EM + '</th>' +
+    '<table>' + srOnly(escapeHtml(DOCUMENTOS[documento].legenda), 'caption') + '<thead><tr><th scope="col">Versão</th><th scope="col">' + M.PUBLICADA_EM + '</th>' +
     '<th scope="col">' + M.O_QUE_MUDOU + '</th></tr></thead>' +
     '<tbody>' + linhas + '</tbody></table>' + VOLTAR_SUMARIO + '</section>';
 }
@@ -362,12 +378,15 @@ export function renderDocumento(documento, versao, origin, fontes) {
     [{ id: 'em-resumo', titulo: 'Em resumo' }, ...lista_secoes, { id: 'historico-de-versoes', titulo: 'Histórico de versões' }]
       .map(({ id, titulo }) => '<li><a href="#' + id + '">' + escapeHtml(titulo) + '</a></li>').join('') +
     '</ol></nav>';
-  const conteudo =
-    '<main class="legal"><header class="legal-cabecalho">' +
+  // O selo RASCUNHO depende do modo, que só é conhecido depois de montar a página: marcador trocado no fim.
+  const SELO = '\u0000selo\u0000';
+  const montado =
+    '<main class="legal" id="conteudo" tabindex="-1"><header class="legal-cabecalho">' +
     '<p class="legal-voltar"><a href="/">Voltar à PIA</a></p>' +
     '<p class="legal-eyebrow">' + M.EYEBROW + '</p>' +
     '<h1>' + escapeHtml(meta.titulo) + '</h1>' +
-    '<p class="legal-datas">Versão ' + escapeHtml(item.versao) +
+    '<p class="legal-datas">' + SELO +
+    'Versão ' + escapeHtml(item.versao) +
     ' · Vigente a partir de ' + valores.VIGENCIA + ' · Última atualização: ' + valores.ATUALIZACAO + '</p>' +
     '<p class="legal-outro">' + M.LEIA_TAMBEM + ': <a href="/' + meta.outro + '">' + escapeHtml(outro.titulo) + '</a>.</p>' +
     '</header>' +
@@ -379,13 +398,13 @@ export function renderDocumento(documento, versao, origin, fontes) {
     ', <a href="mailto:' + escapeHtml(dados.CONTATO_EMAIL) + '">' + escapeHtml(dados.CONTATO_EMAIL) + '</a>.</p>' +
     '<p><a href="/privacidade">Política de Privacidade</a> · <a href="/termos">Termos de Serviço</a> · <a href="/">Voltar à PIA</a></p>' +
     '</footer></main></body></html>';
-  const rascunho = registro.size > 0 || conteudo.replace(/<span class="legal-pendente">\[[^\]]*\]<\/span>/g, '').includes('[');
+  const rascunho = registro.size > 0 || montado.replace(/<span class="legal-pendente">\[[^\]]*\]<\/span>/g, '').includes('[');
   const html = cabecaHtml({
     titulo: meta.titulo,
     descricao: meta.descricao,
     canonical: origin + caminho(documento, versao),
     rascunho,
-  }) + conteudo;
+  }) + montado.replace(SELO, rascunho ? '<span class="legal-badge">' + M.SELO_RASCUNHO + '</span> ' : '');
   return {
     html,
     rascunho,
@@ -456,7 +475,7 @@ export function legalNotFound(path, fontes) {
     rascunho: false,
     noindex: true,
   }) +
-    '<main class="legal"><h1>Página não encontrada</h1>' +
+    '<main class="legal" id="conteudo" tabindex="-1"><h1>Página não encontrada</h1>' +
     '<p>Esta versão ou página não existe. Consulte as versões atuais:</p><ul>' + links + '</ul>' +
     '<p><a href="/">Voltar à PIA</a></p></main></body></html>';
   return {
