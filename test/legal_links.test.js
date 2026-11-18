@@ -7,14 +7,23 @@ import { legalFiles, legalFooter } from '../src/legal.js';
 import { renderOAuthCallback } from '../src/oauth_callback.js';
 import { publicResponse, sendPublic } from '../src/public_files.js';
 
-const LINKS = /<a href="\/privacidade">Política de Privacidade<\/a> · <a href="\/termos">Termos de Serviço<\/a>/;
+// Especificação de UX, seção 2.1: variante "aceite" (frase do RF05) e variante "links".
+const ACEITE = '<p class="pia-legal-footer pia-legal-footer--server">Ao continuar, você concorda com os ' +
+  '<a href="/termos">Termos de Serviço</a> e declara ter lido a <a href="/privacidade">Política de Privacidade</a>.</p>';
+const LINKS = '<p class="pia-legal-footer pia-legal-footer--server pia-legal-footer--links">' +
+  '<a href="/privacidade">Política de Privacidade</a> <a href="/termos">Termos de Serviço</a></p>';
 
-function footerInsideCard(html) {
-  assert.match(html, LINKS);
-  const card = html.indexOf('<section class="pia-login-card">');
-  const footer = html.indexOf('<footer class="legal-footer">');
-  const end = html.indexOf('</section></main>');
-  assert.ok(card >= 0 && card < footer && footer < end, 'rodapé legal dentro do card');
+/** Confere a variante esperada como ÚLTIMO elemento do card, sem target nem links absolutos. */
+function rodape(html, esperado) {
+  const fim = '</section></main>';
+  if (esperado === null) {
+    assert.doesNotMatch(html, /pia-legal-footer|\/privacidade|\/termos/, 'sem rodapé legal');
+    return;
+  }
+  assert.ok(html.includes(esperado + fim), 'rodapé é o último elemento do .pia-login-card');
+  assert.equal((html.match(/pia-legal-footer"|pia-legal-footer /g) || []).length, 1, 'um único rodapé');
+  const footer = html.slice(html.indexOf('<p class="pia-legal-footer'), html.indexOf(fim));
+  assert.doesNotMatch(footer, /target=|_blank|https?:/, 'mesma aba e links relativos');
 }
 
 function fakeResponse() {
@@ -25,41 +34,66 @@ function fakeResponse() {
   };
 }
 
-test('/auth/device/:id: "Entrar na PIA" via authorizationPage tem o rodapé legal e mantém headers', () => {
+test('legalFooter: variante aceite (ciencia/aceite) e variante links, sem target=_blank', () => {
+  assert.equal(legalFooter({ ciencia: true }), ACEITE);
+  assert.equal(legalFooter({ aceite: true }), ACEITE);
+  assert.equal(legalFooter(), LINKS);
+  for (const html of [legalFooter(), legalFooter({ ciencia: true })]) {
+    assert.doesNotMatch(html, /target=|_blank|https?:|·/);
+  }
+});
+
+test('/auth/device/:id formulário "Entrar na PIA": rodapé aceite e headers mantidos', () => {
   const res = fakeResponse();
-  authorizationPage(res, 'Entrar na PIA', '<p>Confira o código.</p>');
+  authorizationPage(res, 'Entrar na PIA', '<p>Confira o código.</p><form method="post"><button>Autorizar computador</button></form>', 'aceite');
   assert.equal(res.status, 200);
   assert.deepEqual(res.headers, { 'Content-Type': 'text/html; charset=utf-8', 'Referrer-Policy': 'same-origin' });
   assert.match(res.body, /^<!doctype html><html lang="pt-BR">/);
-  assert.match(res.body, /<h2>Entrar na PIA<\/h2><p>Confira o código\.<\/p><footer class="legal-footer">/);
-  footerInsideCard(res.body);
+  rodape(res.body, ACEITE);
+  rodape(authorizationHtml('Entrar na PIA', '<p>x</p>'), ACEITE); // padrão = aceite
 });
 
-test('/discord/bless/:token: "Vincular Discord à PIA" via authorizationPage tem o rodapé legal', () => {
-  const html = authorizationHtml('Vincular Discord à PIA', '<p>Servidor Discord: <strong>Mesa</strong></p>');
-  assert.match(html, /<title>Vincular Discord à PIA<\/title>/);
-  footerInsideCard(html);
+test('/auth/device/:id resultado "Computador autorizado": só os links', () => {
+  rodape(authorizationHtml('Entrar na PIA', '<p>Computador autorizado. Você pode fechar esta aba e voltar à PIA.</p>', 'links'), LINKS);
 });
 
-test('index.js usa authorizationPage de src/auth_page.js nas duas rotas de autorização', () => {
-  const index = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(index, /import \{ authorizationPage \} from '\.\/auth_page\.js';/);
-  assert.doesNotMatch(index, /function authorizationPage/);
-  assert.match(index, /return authorizationPage\(res, 'Vincular Discord à PIA', content\);/);
-  assert.match(index, /return authorizationPage\(res, 'Entrar na PIA', content\);/);
-  assert.match(index, /\.\.\.legalFiles\(origin\),/);
+test('/discord/bless/:token formulário e resultado: aceite e links', () => {
+  rodape(authorizationHtml('Vincular Discord à PIA', '<form method="post"><button>Confirmar vínculo</button></form>', 'aceite'), ACEITE);
+  rodape(authorizationHtml('Vincular Discord à PIA', '<p>Servidor <strong>Mesa</strong> abençoado e vinculado à sua conta PIA.</p>', 'links'), LINKS);
 });
 
-test('/oauth/callback tem o rodapé legal no sucesso e nos erros', () => {
-  for (const query of ['?code=abc&state=xyz', '?error=access_denied', '']) {
+test('estado de espera ("Aguardando autorização…"): sem rodapé', () => {
+  rodape(authorizationHtml('Entrar na PIA', '<p>Aguardando autorização…</p>', 'nenhum'), null);
+  assert.throws(() => authorizationHtml('Entrar na PIA', '<p>x</p>', 'outro'), /Rodapé legal inválido/);
+});
+
+test('/oauth/callback: só os links no sucesso e nos erros', () => {
+  for (const query of ['?code=abc&state=xyz', '?error=access_denied', '', `?code=${'a'.repeat(3000)}&state=s`]) {
     const res = renderOAuthCallback(new URL(`https://pia.example/oauth/callback${query}`));
-    footerInsideCard(res.body);
+    assert.ok(res.body.includes(LINKS + '</section></main>'), query);
+    assert.doesNotMatch(res.body, /Ao continuar|target=/);
     assert.equal(res.headers['Cache-Control'], 'no-store');
   }
 });
 
-test('legalFooter só usa links relativos (mesma origem do servidor configurado)', () => {
-  assert.doesNotMatch(legalFooter(), /https?:/);
+test('index.js: formulário (GET) com aceite e resultado (POST) com links nas duas rotas', () => {
+  const index = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  assert.match(index, /import \{ authorizationPage \} from '\.\/auth_page\.js';/);
+  assert.doesNotMatch(index, /function authorizationPage/);
+  for (const title of ['Vincular Discord à PIA', 'Entrar na PIA']) {
+    assert.ok(index.includes(`return authorizationPage(res, '${title}', content, req.method === 'GET' ? 'aceite' : 'links');`), title);
+  }
+  assert.match(index, /\.\.\.legalFiles\(origin\),/);
+  assert.doesNotMatch(index, /_blank/);
+});
+
+test('web/login.css tem o estilo do rodapé da spec: links sempre sublinhados e foco visível', () => {
+  const css = readFileSync(new URL('../web/login.css', import.meta.url), 'utf8');
+  assert.match(css, /\.pia-login-card \.pia-legal-footer \{/);
+  assert.match(css, /\.pia-legal-footer a \{[^}]*text-decoration: underline;/);
+  assert.match(css, /\.pia-legal-footer a:hover \{[^}]*text-decoration-thickness: 2px;/);
+  assert.match(css, /\.pia-legal-footer a:focus-visible \{[^}]*outline: 2px solid #b6a2ff;/);
+  assert.match(css, /\.pia-login-card \.pia-legal-footer--server \{ font-size: \.8667rem; \}/);
 });
 
 const files = new Map([

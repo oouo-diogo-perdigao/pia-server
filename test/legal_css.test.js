@@ -42,7 +42,7 @@ test('F2-03: leitura confortável e responsiva de 320 a 1920 px', () => {
   assert.match(css, /position: sticky/);
   assert.match(css, /overflow-wrap: (break-word|anywhere)/, 'palavras longas não causam rolagem horizontal');
   assert.match(css, /\.legal-historico[^{]*\{[^}]*overflow-x: auto/, 'tabela rola dentro do bloco em 320 px');
-  assert.match(css, /:focus-visible \{[^}]*outline: 2px solid #8f9eff/, 'foco visível');
+  assert.match(css, /:focus-visible \{[^}]*outline: 2px solid #b6a2ff/, 'foco visível #b6a2ff');
   for (const fixo of css.matchAll(/(?:^|[\s;{])(?:min-)?width:\s*(\d+)px/g)) assert.ok(Number(fixo[1]) <= 320, 'largura fixa maior que 320 px');
 });
 
@@ -67,5 +67,32 @@ test('F2-03: cores de texto têm contraste AA sobre os fundos da página', () =>
   for (const [fg, bg] of pares) {
     assert.ok(css.includes(fg) && css.includes(bg), `par ${fg}/${bg} não está mais em legal.css`);
     assert.ok(ratio(fg, bg) >= 4.5, `${fg} sobre ${bg}: ${ratio(fg, bg).toFixed(2)}:1`);
+  }
+});
+
+test('F2-03: foco #b6a2ff em tudo e nenhum outline: none sem substituto', () => {
+  assert.doesNotMatch(css, /#8f9eff/, 'foco antigo do style.css');
+  for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^}]*outline:\s*(?:none|0)[^}]*)\}/g)) {
+    assert.match(selector, /\[tabindex="-1"\]:focus|main\.legal:focus/, 'outline removido em ' + selector.trim());
+    assert.doesNotMatch(selector, /focus-visible/);
+    void body;
+  }
+  assert.match(css, /\.legal \.legal-sumario a:focus-visible \{ outline-offset: -2px; \}/);
+});
+
+test('F2-03: neutraliza as armadilhas do style.css global (spec UX 1.10)', () => {
+  assert.match(css, /\.legal section \{ padding: 0; margin: 0; background: none; border: 0; border-radius: 0; \}/);
+  assert.match(css, /\.legal nav \{ display: block; gap: 0; justify-items: normal; \}/);
+  assert.match(css, /\.legal \.skip-link \{[^}]*color: #11121b/);
+  assert.match(css, /\.legal h2 \{/);
+  // as caixas que são <section> precisam vencer o reset (0,1,1) com 0,2,0
+  assert.match(css, /\.legal \.legal-resumo, \.legal \.legal-summary \{/);
+  assert.match(css, /\.legal \.legal-historico \{/);
+});
+
+test('F2-03: links do corpo e do rodapé da página sempre sublinhados', () => {
+  assert.match(css, /^a \{[^}]*text-decoration: underline/m);
+  for (const [, selector] of css.matchAll(/([^{}]+)\{[^}]*text-decoration:\s*none/g)) {
+    assert.match(selector, /skip-link|nav a|legal-sumario a/, 'sublinhado removido em ' + selector.trim());
   }
 });

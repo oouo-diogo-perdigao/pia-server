@@ -2,7 +2,8 @@
    Folha autônoma: as páginas carregam só /legal.css (sem style.css, Mantine ou JS).
    Contrato de classes: src/legal.js (F2-01). Cores do UX (ux/contraste.md), todas AA:
    corpo #edeaf6/#11121b 15,72:1; metadados #c6bed8 10,44:1; link #d4c4ff 11,67:1;
-   foco #8f9eff 7,55:1; faixa de rascunho #ffe08a/#3d2c05 10,43:1; selo #ffd666/#2b2210 11,25:1.
+   foco #b6a2ff (decisão do TechLead para todos os elementos novos; 8,53:1 na página e
+   7,75:1 no Em resumo); faixa de rascunho #ffe08a/#3d2c05 10,43:1; selo #ffd666/#2b2210 11,25:1.
    Sem recursos externos: só fontes do sistema, sem imagens nem importações. */
 
 /* 1. Base --------------------------------------------------------------- */
@@ -27,10 +28,35 @@ body {
 a { color: #d4c4ff; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; }
 a:visited { color: #d4c4ff; }
 a:hover { color: #f3edff; text-decoration-thickness: 2px; }
-:focus-visible { outline: 2px solid #8f9eff; outline-offset: 2px; border-radius: 2px; }
+:focus-visible { outline: 2px solid #b6a2ff; outline-offset: 2px; border-radius: 2px; }
+
+/* 1b. Neutraliza o style.css global caso ele venha a ser carregado antes (spec UX 1.10) */
+.legal section { padding: 0; margin: 0; background: none; border: 0; border-radius: 0; }
+.legal nav { display: block; gap: 0; justify-items: normal; }
+.legal nav a { text-decoration: none; }
+
+/* Pular para o conteúdo (spec UX 4.2). .legal .skip-link vence .legal a (spec 1.10, item 3) */
+.skip-link, .legal .skip-link {
+  position: absolute;
+  top: -10rem;
+  left: .75rem;
+  z-index: 10;
+  padding: .6rem 1rem;
+  border-radius: .5rem;
+  background: #d4c4ff;
+  color: #11121b;
+  font-weight: 600;
+  text-decoration: none;
+}
+.skip-link:focus, .legal .skip-link:focus { top: .75rem; outline: 2px solid #b6a2ff; outline-offset: 2px; }
+.legal [tabindex="-1"]:focus, main.legal:focus { outline: none; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 
 /* 2. Faixa de rascunho e selos de pendência ---------------------------- */
-.legal-rascunho {
+.legal-rascunho, .legal-draft {
   margin: 0;
   padding: .75rem clamp(1rem, 4vw, 3rem);
   background-color: #3d2c05;
@@ -41,7 +67,7 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
   line-height: 1.5;
   text-align: center;
 }
-.legal-rascunho strong {
+.legal-rascunho strong, .legal-draft strong {
   display: inline-block;
   margin-right: .5rem;
   padding: .05rem .5rem;
@@ -51,7 +77,7 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
   font-size: .8125rem;
   letter-spacing: .06em;
 }
-.legal-pendente {
+.legal-pendente, .legal-pending {
   padding: .1rem .4rem;
   border: 1px dashed #f0b429;
   border-radius: .3rem;
@@ -83,7 +109,7 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
     align-items: start;
   }
   .legal:has(> .legal-sumario) > * { grid-column: 2; }
-  .legal > .legal-sumario {
+  .legal:has(> .legal-sumario) > .legal-sumario {
     grid-column: 1;
     grid-row: 1 / span 5;
     position: sticky;
@@ -107,7 +133,7 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
 .legal ul, .legal ol { margin: 0 0 1rem; padding-left: 1.25rem; }
 .legal li + li { margin-top: .35rem; }
 .legal [id] { scroll-margin-top: 1.5rem; }
-.legal-corpo h2:target, .legal h2:target { color: #f3edff; }
+.legal h2:target, .legal section:target > h2 { color: #f3edff; box-shadow: -.75rem 0 0 -.5625rem #a58ce9; }
 
 /* 5. Cabeçalho do documento --------------------------------------------- */
 .legal-cabecalho { margin-bottom: 1.5rem; }
@@ -117,8 +143,15 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
 .legal-datas { margin: 0 0 .5rem; }
 .legal-outro { margin: 0; }
 
+/* Eyebrow, "Voltar ao sumário" e etiqueta "atual" (markup da F2-04, spec UX 1.2, 1.3 e 1.7) */
+.legal-eyebrow { margin: 0 0 .35rem; color: #bcadf2; font-size: .8667rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.legal-backtop { margin: 1.25rem 0 0; font-size: .9375rem; }
+@media (min-width: 64rem) { .legal-backtop { display: none; } }
+.legal-current { display: inline-block; margin-left: .35rem; padding: 0 .4rem; border-radius: .3rem; background: #352957; color: #e4d9ff; font-size: .8rem; font-weight: 600; }
+@media (max-width: 30rem) { .legal-current { display: table; margin: .25rem 0 0; } }
+
 /* 6. Em resumo ----------------------------------------------------------- */
-.legal-resumo {
+.legal .legal-resumo, .legal .legal-summary {
   margin: 0 0 2rem;
   padding: 1.1rem 1.25rem 1.1rem 1.4rem;
   border: 1px solid #373250;
@@ -126,21 +159,21 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
   border-radius: .8rem;
   background: #1b1b2b;
 }
-.legal-resumo h2 { margin: 0 0 .6rem; font-size: 1.125rem; }
+.legal .legal-resumo h2 { margin: 0 0 .6rem; font-size: 1.125rem; }
 .legal-resumo ul { margin: 0; padding-left: 1.15rem; }
 .legal-resumo li { line-height: 1.55; }
 .legal-resumo li + li { margin-top: .45rem; }
 .legal-resumo li::marker { color: #a58ce9; }
 
 /* 7. Sumário ------------------------------------------------------------- */
-.legal-sumario {
+.legal .legal-sumario, .legal .legal-toc {
   margin: 0 0 2rem;
   padding: 1rem 1.1rem;
   border: 1px solid #373250;
   border-radius: .8rem;
   background: #191928;
 }
-.legal-sumario h2 {
+.legal .legal-sumario h2 {
   margin: 0 0 .5rem;
   color: #bcadf2;
   font-size: .875rem;
@@ -149,7 +182,7 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
 }
 .legal-sumario ol { margin: 0; padding: 0; list-style: none; }
 .legal-sumario li + li { margin-top: 0; }
-.legal-sumario a {
+.legal .legal-sumario a {
   display: block;
   padding: .4rem .25rem;          /* alvo de toque >= 24 px */
   border-radius: .35rem;
@@ -157,9 +190,10 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
   line-height: 1.35;
   text-decoration: none;
 }
-.legal-sumario a:hover { background: #352957; color: #f3edff; text-decoration: underline; }
+.legal .legal-sumario a:hover { background: #352957; color: #f3edff; text-decoration: underline; }
+.legal .legal-sumario a:focus-visible { outline-offset: -2px; }   /* o overflow do sticky cortaria o anel (spec 1.6) */
 @media (min-width: 64rem) {
-  .legal-sumario a { padding-block: .3rem; }
+  .legal .legal-sumario a { padding-block: .3rem; }
 }
 
 /* 8. Corpo --------------------------------------------------------------- */
@@ -167,7 +201,10 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
 .legal-corpo table { display: block; max-width: 100%; overflow-x: auto; }
 
 /* 9. Histórico de versões ------------------------------------------------- */
-.legal-historico { margin-top: 2.5rem; max-width: 100%; overflow-x: auto; }
+.legal .legal-historico { margin-top: 2.5rem; max-width: 100%; overflow-x: auto; }
+.legal caption { text-align: left; }
+.legal time { white-space: nowrap; }
+.legal tbody th { font-weight: 600; white-space: nowrap; }
 .legal table { width: 100%; border-collapse: collapse; font-size: .9375rem; }
 .legal th, .legal td { padding: .6rem .7rem; border-bottom: 1px solid #373250; text-align: left; vertical-align: top; }
 .legal thead th { background: #191928; color: #c6bed8; font-weight: 600; }

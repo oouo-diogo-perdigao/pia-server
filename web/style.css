@@ -87,7 +87,7 @@ nav .rail-icon { padding: 0; }
 .account-link { display: flex; align-items: center; gap: .5rem; min-height: 2rem; margin-inline: -.4rem; padding: .25rem .4rem; border-radius: .45rem; color: #d4c4ff; text-decoration: none; white-space: nowrap; }
 .account-link svg { flex: none; width: 16px; height: 16px; color: #bcadf2; }
 .account-link:hover { background: #352957; color: #f3edff; text-decoration: underline; }
-.account-link:focus-visible { outline: 2px solid #8f9eff; outline-offset: 0; }
+.account-link:focus-visible { outline: 2px solid #b6a2ff; outline-offset: 0; }
 .account-actions .account-logout { width: 100%; margin-top: .45rem; padding-top: .45rem; border: 0; border-top: 1px solid #373250; border-radius: 0; }
 .account-logout { display: flex; align-items: center; gap: .5rem; margin: .4rem 0 0; background: transparent; color: #ff9eae; }
 @media (max-width: 620px) {
