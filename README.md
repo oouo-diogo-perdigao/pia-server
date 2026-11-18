@@ -79,9 +79,17 @@ Rotas do computador pareado (Bearer do dispositivo, mesmo 401 das outras `/devic
 | `GET /device/suno/connect/:attempt_id` | `{state: pending\|connected\|failed\|expired, account_id?, code?}` |
 | `GET /auth/connectors/suno?code&state` | callback público do OAuth (página HTML) |
 | `GET /device/suno/status` | `{accounts: [{id, label, email, name, credential_state, available, expires_at, scopes}], default_account_id, active_job, settings}` |
+| `PATCH /device/suno/accounts/:id` `{label}` | a conta no formato de `accounts[]` (apelido com trim, 1 a 80 caracteres; senão `400 bad_request`) |
 | `DELETE /device/suno/accounts/:id` | `{ok: true}` (apaga o registro e os tokens; sem revogação remota) |
 
-Erros das rotas Suno saem como `{error, code}`. `GET /device/account` anuncia
+`credential_state` de cada conta: `configured` (token válido), `unavailable`
+(token vencido ou perto de vencer e o refresh falhou por 5xx, timeout ou rede;
+os tokens são mantidos e um job recebe `suno_unavailable`) ou `refresh_failed`
+(`invalid_grant`/401 no refresh; reconectar, e um job recebe
+`suno_credential_expired`). Reconectar a mesma conta mantém o apelido.
+
+Erros das rotas Suno saem como `{error, code}`; uma tentativa de connect
+inexistente responde `404 suno_connect_not_found`. `GET /device/account` anuncia
 `capabilities: ["suno:3"]`. Segredos `mcp:*` de perfis sincronizados são
 descartados pelo servidor, porque pertencem a cada computador.
 
