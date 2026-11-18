@@ -19,6 +19,7 @@ import { renderOAuthCallback } from './oauth_callback.js';
 import { sunoCapabilities, sunoRoute } from './suno_auth.js';
 import { publicError } from './suno_errors.js';
 import { musicGenerationsRoute } from './music_generations.js';
+import { sunoAdminRoute } from './suno_client.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -368,6 +369,8 @@ async function route(req, res) {
     await pool.query('INSERT INTO pia_server.accounts(email) VALUES($1) ON CONFLICT(email) DO NOTHING', [email]);
     return json(res, 200, { ok: true });
   }
+  // Spike T10: tools/list de uma conta Suno conectada (só admin; sem tokens).
+  if (path === '/api/admin/suno/spike' && account.admin) return json(res, 200, await sunoAdminRoute(account, path, data));
   return json(res, 404, { error: 'Rota não encontrada.' });
 }
 

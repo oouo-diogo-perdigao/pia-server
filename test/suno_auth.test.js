@@ -13,6 +13,7 @@ const { splitProfile } = await import('../src/connectors.js');
 const { startFakeSunoOAuth } = await import('./fixtures/fake_suno_oauth.js');
 const { startFakeSunoMcp } = await import('./fixtures/fake_suno_mcp.js');
 const { createMemorySunoStore } = await import('./fixtures/memory_suno_store.js');
+const { lockSunoTables } = await import('./fixtures/pg_suno_lock.js');
 
 const REDIRECT = 'https://pia.travelrpg.com/auth/connectors/suno';
 const SUNO_A = { id: 'suno-user-a', email: 'a@suno.test', label: 'Suno A' };
@@ -32,7 +33,7 @@ if (process.env.PIA_TEST_PG === '1') modes.push({ name: 'postgres store', pg: tr
 
 for (const mode of modes) {
   describe('Suno auth (' + mode.name + ')', () => {
-    let oauth, mcp, server, base, memory;
+    let oauth, mcp, server, base, memory, unlock;
     const devices = new Map();
     const pia = {};
 
@@ -87,6 +88,7 @@ for (const mode of modes) {
       Object.assign(auth.sunoOAuth, { registerUrl: oauth.base + '/register', authorizeUrl: oauth.base + '/authorize', tokenUrl: oauth.base + '/token' });
       sunoIdentity.mcpUrl = mcp.url;
       if (mode.pg) {
+        unlock = await lockSunoTables(pool);
         await migrate();
         auth.useSunoStore(auth.pgStore);
       }
@@ -136,6 +138,7 @@ for (const mode of modes) {
       Object.assign(auth.sunoOAuth, original);
       Object.assign(sunoIdentity, originalIdentity);
       auth.useSunoStore(null);
+      await unlock?.();
     });
 
     test('connect registers the OAuth client once (DCR) and returns an async attempt with PKCE', async () => {

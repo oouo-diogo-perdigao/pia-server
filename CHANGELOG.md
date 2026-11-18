@@ -16,7 +16,12 @@
 - `PATCH /device/suno/accounts/:id` `{label}` para o apelido da conta Suno (RN07); reconectar a mesma conta mantém o apelido.
 - `credential_state: "unavailable"` (refresh com 5xx/timeout; tokens mantidos, `available: false`) e `sunoCredentialRefusal()`/`sunoAccountStatus()` para a T4 (`unavailable` → `suno_unavailable`, `refresh_failed` → `suno_credential_expired`).
 
+- Cliente MCP do Suno (T3b, `src/suno_mcp.js` e `src/suno_client.js`): Streamable HTTP com `Mcp-Session-Id` e reinitialize, JSON e SSE, timeout por `AbortSignal`, descoberta tolerante das tools (geração, status, conta, créditos), mapeamento de argumentos pelo schema, polling de clips pendentes sem prazo total (backoff de 5 s a 60 s; falha transitória não encerra a geração) e tradução de erros (`suno_credential_expired`, `suno_no_credits`, `suno_timeout`, `suno_unavailable`) sem vazar tokens, corpos ou URLs assinadas.
+- `POST /api/admin/suno/spike` (admin, sessão web): `tools/list` de uma conta Suno conectada, sem tokens.
+
 ### Changed
+- `resolveSunoIdentity` usa o cliente MCP e a tool de conta descoberta (`get_account`, `account-me`, `get_profile`…).
+- `withSunoToken` também reconhece `upstreamStatus: 401` nos erros do cliente MCP.
 - `splitProfile` descarta segredos `mcp:*` dos perfis sincronizados.
 - `credential_state` não tem mais `expired`: só `configured`, `unavailable` e `refresh_failed`.
 - Tentativa de connect inexistente: code `suno_connect_not_found` (antes `not_found`).

@@ -335,10 +335,12 @@ export async function sunoAccessToken(account, sunoAccountId, { rejected } = {})
   return outcome.token;
 }
 
-// Executa `call(token)`; se o Suno responder 401 (status 401 no retorno ou no
-// erro), renova uma vez e repete. Um segundo 401 vira suno_credential_expired.
+// Executa `call(token)`; se o Suno responder 401 (status 401 no retorno, ou
+// upstreamStatus 401 no erro), renova uma vez e repete. Um segundo 401 vira suno_credential_expired.
 export async function withSunoToken(account, sunoAccountId, call) {
-  const unauthorized = (value) => value?.status === 401;
+  // `status` 401 num retorno simples ou `upstreamStatus` 401 num erro do cliente
+  // MCP (em SunoError, `status` é o HTTP da nossa API, nunca o do Suno).
+  const unauthorized = (value) => value?.upstreamStatus === 401 || (!(value instanceof SunoError) && value?.status === 401);
   const attempt = async (token) => {
     try { return await call(token); } catch (error) { if (unauthorized(error)) return error; throw error; }
   };
