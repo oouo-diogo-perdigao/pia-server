@@ -9,6 +9,7 @@ const { migrate, pool } = await import('../src/db.js');
 const {
   MAX_PAGE, decodeCursor, encodeCursor, musicGenerationsRoute, parseLimit, publicItem, validateLocalGeneration,
 } = await import('../src/music_generations.js');
+const { lockSunoTables } = await import('./fixtures/pg_suno_lock.js');
 
 const realDb = process.env.PIA_TEST_PG === '1';
 
@@ -184,11 +185,26 @@ test('route: every query is scoped by the authenticated account_id', async (t) =
 // ---------------------------------------------------------------- Postgres real (PIA_TEST_PG=1 + PG*)
 // O CI não tem banco: estes testes ficam pulados lá. Localmente: um Postgres descartável e
 // PIA_TEST_PG=1 PGHOST=... PGPORT=... PGUSER=... PGDATABASE=... npm test
+// Serializada com as suítes suno_* pelo mesmo advisory lock (pg_suno_lock): o migrate() e as tabelas
+// suno_accounts/music_generations são compartilhados. A limpeza apaga só as contas criadas aqui
+// (o resto sai em cascata), sem DELETE global, para não atrapalhar outra suíte no mesmo banco.
+
+const createdAccounts = [];
+let unlock = null;
+
+test.before(async () => {
+  if (!realDb) return;
+  unlock = await lockSunoTables(pool);
+});
 
 async function fixture() {
   await migrate();
-  const account = async () => (await pool.query(
-    "INSERT INTO pia_server.accounts(email) VALUES('music-' || $1 || '@example.invalid') RETURNING id", [randomUUID()])).rows[0].id;
+  const account = async () => {
+    const id = (await pool.query(
+      "INSERT INTO pia_server.accounts(email) VALUES('music-' || $1 || '@example.invalid') RETURNING id", [randomUUID()])).rows[0].id;
+    createdAccounts.push(id);
+    return id;
+  };
   const device = async (accountId) => {
     const id = randomUUID();
     await pool.query('INSERT INTO pia_server.devices(id,account_id,name,digest) VALUES($1,$2,$3,$4)', [id, accountId, 'PC', randomUUID()]);
@@ -398,5 +414,10 @@ test('database enforces unique client_id per account, no Suno ids on local rows 
 });
 
 test.after(async () => {
-  if (realDb) await pool.end();
+  if (!realDb) return;
+  try {
+    if (createdAccounts.length) await pool.query('DELETE FROM pia_server.accounts WHERE id = ANY($1::bigint[])', [createdAccounts]);
+  } finally {
+    try { await unlock?.(); } finally { await pool.end(); }
+  }
 });

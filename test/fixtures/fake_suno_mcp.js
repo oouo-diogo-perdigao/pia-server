@@ -53,6 +53,21 @@
  *                    aceitar vários tokens, cada um de uma conta. Se informado, substitui
  *                    `token`/`account` (o `token` passa a ser o primeiro do mapa).
  *   clipsPerCall     clips por geração (padrão 2). Use 1 para `incomplete_batch`.
+ *   statusTool       tool de status para o cenário `pending` (padrão: nenhuma, o tools/list não muda).
+ *                    'get_clip' = um id por chamada ({ clip_id }) e resposta com o clip puro;
+ *                    'get_clips' = lote ({ ids: [...] }) e resposta { clips: [...] };
+ *                    ou { name, idField, batch }. Os nomes e campos são os que o src/suno_mcp.js
+ *                    descobre (STATUS_TOOL_PREFERENCE / STATUS_ID_FIELDS).
+ *   pendingPolls     K (padrão 2): quantas consultas de status a um clip pendente ainda respondem
+ *                    `pending`; a consulta K+1 devolve o estado final. K=0 resolve na 1ª consulta.
+ *   pendingFail      ordinais (1 = primeiro clip criado na instância) e/ou ids de clips pendentes
+ *                    que terminam `failed`, ou uma função (clip, ordinal) => boolean. Padrão [].
+ *                    Em runtime: setPendingFail(list), failClip(clipId), setPendingPolls(k).
+ *   accountTool      nome da tool de conta (padrão 'get_account'; ex. 'account-me'); null tira a tool
+ *                    do catálogo. Só renomeia no catálogo heurístico; com `tools` explícito, só o handler.
+ *   accountEnvelope  formato da resposta da tool de conta: 'account' (padrão, { account }), 'user'
+ *                    ({ user }), 'profile' ({ profile }) ou 'none' (o objeto da conta puro).
+ *   toolErrorTexts   sobrescreve os textos dos cenários tool_error* (padrão TOOL_ERROR_TEXTS).
  *   requested        N pedido no job (opcional). Só serve para observabilidade: os clips
  *                    prontos além de N, contando todas as gerações, ficam marcados como extra em
  *                    clips()/extraClips(). Nunca vai na resposta MCP (o Suno real não sabe N).
@@ -73,6 +88,16 @@
  *   401        HTTP 401, JSON-RPC error -32001 'Unauthorized', `WWW-Authenticate: Bearer`.
  *   402        HTTP 402, JSON-RPC error 402 'Insufficient credits'.
  *   503 / 500  HTTP 5xx, JSON-RPC error -32000 'Suno unavailable'.
+ *   pending    HTTP 200, clips com `status: 'pending'` e `audio_url: null`. Precisa de `statusTool`:
+ *              cada consulta conta por clip; depois de `pendingPolls` consultas o clip vira
+ *              `complete` (com `audio_url` em loopback) ou `failed` (`error: 'geração falhou'`)
+ *              se estiver em `pendingFail`. statusCalls() lista as consultas. O GET do áudio de um
+ *              clip ainda pendente dá 404. Clip desconhecido: 'get_clip' responde isError
+ *              'Clip not found'; 'get_clips' só omite.
+ *   tool_error / tool_error_credits / tool_error_unauthorized
+ *              HTTP 200 com `result: { isError: true, content: [{ type: 'text', text }] }`. Os textos
+ *              (TOOL_ERROR_TEXTS) caem em suno_unavailable (detail tool_error), suno_no_credits e
+ *              suno_credential_expired no cliente da T3b. Com `leaky`, o texto inclui o bearer.
  *   Exemplo CA07 (N=3): ['partial', '503'] → o lote para no clip com falha, 1 tools/call.
  *
  * Identidade da conta Suno (ESCOPO v3)
@@ -80,6 +105,7 @@
  *   T10), então o lugar é uma suposição: o cliente da T3b deve isolar a leitura numa função.
  *   A conta do bearer da requisição aparece em três lugares:
  *     - tools/call `get_account` (tool nova no catálogo heurístico): { account: { id, email, label } }
+ *       (nome e envelope configuráveis: accountTool / accountEnvelope)
  *     - tools/call `get_credits`: { credits, account }
  *     - initialize: result._meta['suno/account']
  *   Cada requisição gravada traz `accountId` (conta do bearer, ou null).
@@ -136,7 +162,18 @@ export const DEFAULT_REDIRECT_LOCATION = 'http://example.invalid/suno-audio.mp3'
 export const HTML_AUDIO_BODY = Buffer.from('<html><body>not audio</body></html>');
 export const TOOLS_LIST_FIXTURE_PATH = new URL('./suno_mcp_tools_list.json', import.meta.url);
 export const GENERATION_TOOL_CANDIDATES = Object.freeze(['generate_music', 'create_song', 'suno_generate_custom_music']);
-export const SCENARIOS = Object.freeze(['success', 'odd_extra', 'partial', 'timeout', '401', '402', '503', '500']);
+export const SCENARIOS = Object.freeze(['success', 'odd_extra', 'partial', 'timeout', '401', '402', '503', '500',
+  'pending', 'tool_error', 'tool_error_credits', 'tool_error_unauthorized']);
+export const DEFAULT_PENDING_POLLS = 2;
+export const DEFAULT_ACCOUNT_TOOL = 'get_account';
+export const ACCOUNT_ENVELOPES = Object.freeze(['account', 'user', 'profile', 'none']);
+// Textos do `result.isError`, escolhidos para a classificação do src/suno_mcp.js (AUTH_TEXT/CREDIT_TEXT):
+// genérico -> suno_unavailable (detail tool_error), créditos -> suno_no_credits, unauthorized -> suno_credential_expired.
+export const TOOL_ERROR_TEXTS = Object.freeze({
+  tool_error: 'Generation failed: internal error',
+  tool_error_credits: 'Insufficient credits to generate this song',
+  tool_error_unauthorized: 'Unauthorized: token expired',
+});
 export const RESET_ERROR_CODES = Object.freeze(['ECONNRESET', 'EPIPE', 'ECONNABORTED', 'ERR_STREAM_PREMATURE_CLOSE']);
 
 export const DEFAULT_TOOLS = Object.freeze([
@@ -273,6 +310,32 @@ function parseRecordedJson(body) {
   return JSON.parse(body.toString('utf8'));
 }
 
+/**
+ * statusTool: 'get_clip' (um id por chamada, argumento `clip_id`), 'get_clips' (lote, argumento `ids`)
+ * ou { name, idField, batch }. null/undefined = sem tool de status (padrão).
+ */
+export function normalizeStatusTool(value) {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const batch = /clips$/.test(value);
+    return { name: value, idField: batch ? 'ids' : 'clip_id', batch };
+  }
+  if (typeof value === 'object' && typeof value.name === 'string' && value.name) {
+    const batch = Boolean(value.batch ?? (value.idField === 'ids' || value.idField === 'clip_ids'));
+    return { name: value.name, idField: value.idField || (batch ? 'ids' : 'clip_id'), batch };
+  }
+  throw new Error('statusTool inválido');
+}
+
+export function statusToolDefinition(status) {
+  const property = status.batch ? { type: 'array', items: { type: 'string' } } : { type: 'string' };
+  return {
+    name: status.name,
+    description: 'Consulta o estado de clips gerados (fake).',
+    inputSchema: { type: 'object', properties: { [status.idField]: property }, required: [status.idField] },
+  };
+}
+
 /** Sobe o fake e resolve quando a porta está aberta. */
 export async function startFakeSunoMcp(options = {}) {
   const fake = new FakeSunoMcp(options);
@@ -302,6 +365,13 @@ export class FakeSunoMcp {
     this.credits = options.credits ?? 42;
     this.clipsPerCall = options.clipsPerCall ?? CLIPS_PER_CALL;
     this.requested = Number.isInteger(options.requested) ? options.requested : null;
+    this.pendingPolls = Number.isInteger(options.pendingPolls) && options.pendingPolls >= 0 ? options.pendingPolls : DEFAULT_PENDING_POLLS;
+    this._pendingFail = options.pendingFail ?? [];
+    this.statusTool = normalizeStatusTool(options.statusTool);
+    this.accountTool = options.accountTool === undefined ? DEFAULT_ACCOUNT_TOOL : options.accountTool || null;
+    this.accountEnvelope = options.accountEnvelope ?? 'account';
+    if (!ACCOUNT_ENVELOPES.includes(this.accountEnvelope)) throw new Error(`accountEnvelope inválido: ${this.accountEnvelope}`);
+    this.toolErrorTexts = { ...TOOL_ERROR_TEXTS, ...(options.toolErrorTexts || {}) };
     if (options.tools) {
       this.tools = options.tools;
       this.toolsListSource = 'explicit';
@@ -309,6 +379,7 @@ export class FakeSunoMcp {
       const loaded = loadSunoToolsList(options.toolsListPath);
       this.tools = loaded.tools;
       this.toolsListSource = loaded.source;
+      if (loaded.source === 'plano-heuristico') this.tools = this._heuristicTools(this.tools);
     }
     this.generationTool = pickGenerationTool(this.tools);
     this.requests = [];
@@ -317,6 +388,7 @@ export class FakeSunoMcp {
     this._sessions = new Set();
     this._clips = new Map();
     this._clipOrder = 0;
+    this._createdOrder = 0;
     this._timers = new Set();
     this._sockets = new Set();
     this._server = null;
@@ -400,7 +472,33 @@ export class FakeSunoMcp {
     await this.close();
   }
 
+  _heuristicTools(tools) {
+    let list = tools.filter((tool) => tool.name !== DEFAULT_ACCOUNT_TOOL || this.accountTool);
+    if (this.accountTool && this.accountTool !== DEFAULT_ACCOUNT_TOOL) {
+      list = list.map((tool) => (tool.name === DEFAULT_ACCOUNT_TOOL ? { ...tool, name: this.accountTool } : tool));
+    }
+    if (this.statusTool && !list.some((tool) => tool.name === this.statusTool.name)) list.push(statusToolDefinition(this.statusTool));
+    return list;
+  }
+
   // -- configuração em runtime -------------------------------------------
+
+  /** Faz um clip pendente terminar como failed na próxima resolução. */
+  failClip(clipId) {
+    const clip = this._clips.get(clipId);
+    if (!clip) throw new Error(`clip desconhecido: ${clipId}`);
+    clip._willFail = true;
+  }
+
+  /** Lista de ordinais (1 = primeiro clip criado) ou ids de clips pendentes que vão falhar. */
+  setPendingFail(list) {
+    this._pendingFail = list ?? [];
+  }
+
+  setPendingPolls(k) {
+    if (!Number.isInteger(k) || k < 0) throw new Error('pendingPolls inválido');
+    this.pendingPolls = k;
+  }
 
   /** Redefine a sequência de cenários e zera o contador de gerações. */
   setScenarios(scenarios) {
@@ -462,6 +560,7 @@ export class FakeSunoMcp {
     this._generationIndex = 0;
     this._clips.clear();
     this._clipOrder = 0;
+    this._createdOrder = 0;
     this._audioBehaviorIndex = 0;
   }
 
@@ -472,6 +571,11 @@ export class FakeSunoMcp {
   }
 
   // -- observação ---------------------------------------------------------
+
+  /** Chamadas da tool de status (cenário pending). */
+  statusCalls() {
+    return this.requests.filter((req) => req.jsonrpcMethod === 'tools/call' && this.statusTool && req.toolName === this.statusTool.name);
+  }
 
   generationCalls() {
     return this.requests.filter((req) => req.jsonrpcMethod === 'tools/call' && req.toolName === this.generationTool);
@@ -691,12 +795,16 @@ export class FakeSunoMcp {
     const toolName = String(params.name || '');
     const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
 
-    if (toolName === 'get_credits' || toolName === 'get_account') {
+    if (toolName === 'get_credits' || (this.accountTool && toolName === this.accountTool)) {
       this._record(req, body, payload, 200);
       const account = this._accountOf(req);
-      const data = toolName === 'get_credits' ? { credits: this.credits, account } : { account };
+      const data = toolName === 'get_credits' ? { credits: this.credits, account } : this._accountEnvelope(account);
       const result = { content: [{ type: 'text', text: JSON.stringify(data) }] };
       return this._sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result });
+    }
+    if (this.statusTool && toolName === this.statusTool.name) {
+      this._record(req, body, payload, 200);
+      return this._sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: this._statusResult(args) });
     }
     if (toolName !== this.generationTool && !GENERATION_TOOL_CANDIDATES.includes(toolName)) {
       this._record(req, body, payload, 200);
@@ -718,6 +826,12 @@ export class FakeSunoMcp {
       this._record(req, body, payload, status, { scenario });
       return this._rpcError(res, status, rpcId, -32000, this._errorMessage('unavailable'));
     }
+    if (scenario.startsWith('tool_error')) {
+      // HTTP 200 + result.isError: o erro vem dentro do resultado da tool, não do JSON-RPC
+      this._record(req, body, payload, 200, { scenario });
+      const text = this.leaky && this.token ? `${this.toolErrorTexts[scenario]} Bearer ${this.token}` : this.toolErrorTexts[scenario];
+      return this._sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { isError: true, content: [{ type: 'text', text }] } });
+    }
     if (scenario === 'timeout') {
       // registra antes de esperar: o cliente que já desistiu ainda vê a chamada
       this._record(req, body, payload, 200, { scenario });
@@ -730,6 +844,7 @@ export class FakeSunoMcp {
       call,
       partial: scenario === 'partial',
       extraLast: scenario === 'odd_extra',
+      pending: scenario === 'pending',
     });
     this._record(req, body, payload, 200, { scenario });
     return this._sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result });
@@ -744,15 +859,66 @@ export class FakeSunoMcp {
     return { ...this._audioBehaviorDefault };
   }
 
-  _successResult(args, { call, partial, extraLast }) {
+  _accountEnvelope(account) {
+    if (this.accountEnvelope === 'none') return account ?? {};
+    return { [this.accountEnvelope]: account };
+  }
+
+  _shouldFail(clip, ordinal) {
+    const list = typeof this._pendingFail === 'function' ? null : [].concat(this._pendingFail);
+    if (!list) return Boolean(this._pendingFail(clip, ordinal));
+    return list.includes(ordinal) || list.includes(clip.id);
+  }
+
+  /** Resposta da tool de status: cada consulta a um clip pendente conta; depois de K, ele termina. */
+  _statusResult(args) {
+    const raw = args[this.statusTool.idField];
+    const ids = (Array.isArray(raw) ? raw : [raw]).filter((id) => typeof id === 'string' || typeof id === 'number').map(String);
+    const clips = [];
+    for (const id of ids) {
+      const clip = this._clips.get(id);
+      if (!clip) continue;
+      if (clip.status === 'pending') {
+        clip._polls += 1;
+        if (clip._polls > this.pendingPolls) this._resolvePending(clip);
+      }
+      clips.push(publicClip(clip));
+    }
+    if (this.statusTool.batch) return { content: [{ type: 'text', text: JSON.stringify({ clips }) }] };
+    if (!clips.length) return { isError: true, content: [{ type: 'text', text: 'Clip not found' }] };
+    return { content: [{ type: 'text', text: JSON.stringify(clips[0]) }] };
+  }
+
+  _resolvePending(clip) {
+    if (clip._willFail || this._shouldFail(clip, clip._ordinal)) {
+      clip.status = 'failed';
+      clip.error = 'geração falhou';
+      clip.audio_url = null;
+      return;
+    }
+    clip.status = 'complete';
+    clip.audio_url = this.audioUrl(clip.id);
+    if (this.includeBase64) {
+      clip.audio_base64 = FAKE_AUDIO_BYTES.toString('base64');
+      clip.format = 'mp3';
+    }
+  }
+
+  _successResult(args, { call, partial, extraLast, pending = false }) {
     const prompt = String(args.prompt || args.style || args.description || '');
     const count = Math.max(0, Math.trunc(this.clipsPerCall));
     const clips = [];
     for (let index = 0; index < count; index += 1) {
       const id = `clip-${randomBytes(5).toString('hex')}`;
       const failed = partial && index === count - 1;
+      this._createdOrder += 1;
       const clip = { id, title: prompt || `fake-suno-${index + 1}`, status: failed ? 'error' : 'complete', prompt };
-      if (failed) {
+      clip._ordinal = this._createdOrder;
+      clip._polls = 0;
+      if (pending) {
+        clip.status = 'pending';
+        clip.audio_url = null;
+      } else if (failed) {
         clip.audio_url = null;
         clip.error = 'sem áudio';
       } else {
@@ -762,10 +928,11 @@ export class FakeSunoMcp {
           clip.format = 'mp3';
         }
       }
-      if (!failed) this._clipOrder += 1;
+      const willFail = pending && this._shouldFail(clip, clip._ordinal);
+      if (!failed && !willFail) this._clipOrder += 1;
       clip._audioBehavior = this._behaviorForNewClip();
       clip._call = call;
-      clip._extra = failed
+      clip._extra = failed || willFail
         ? false
         : this.requested !== null
           ? this._clipOrder > this.requested

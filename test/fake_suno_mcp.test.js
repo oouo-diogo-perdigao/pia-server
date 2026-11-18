@@ -10,13 +10,18 @@ import {
   DEFAULT_REDIRECT_LOCATION,
   DEFAULT_TOKEN,
   FAKE_AUDIO_BYTES,
+  FakeSunoMcp,
+  TOOL_ERROR_TEXTS,
   clipsFromResult,
   generationCallsFor,
   loadSunoToolsList,
+  normalizeStatusTool,
   splitRequestedAndExtra,
   startFakeSunoMcp,
   takeNClips,
 } from './fixtures/fake_suno_mcp.js';
+import { SunoMcpClient, generateOnce, sunoMcp } from '../src/suno_mcp.js';
+import { resolveSunoIdentity, sunoIdentity } from '../src/suno_identity.js';
 
 async function rpc(url, method, params = {}, { token = DEFAULT_TOKEN, id = 1, session, timeoutMs = 5000 } = {}) {
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
@@ -454,4 +459,150 @@ test('with auth disabled the single account still comes back and setAccount chan
   assert.deepEqual(await accountOf(suno, null), ACCOUNT_B);
   suno.setAccount(null);
   assert.equal(await accountOf(suno, null), null);
+});
+
+// -- T3c: cenário pending + tool de status, tool de conta configurável, erros de tool ----
+
+async function callTool(suno, name, args = {}) {
+  const res = await rpc(suno.url, 'tools/call', { name, arguments: args }, { id: 7 });
+  assert.equal(res.status, 200);
+  return res.json.result;
+}
+const parsed = (result) => JSON.parse(result.content[0].text);
+
+test('statusTool is opt-in: default tools/list is unchanged and get_clip/get_clips get the T3b schemas', async () => {
+  await using plain = await startFakeSunoMcp();
+  const names = (await rpc(plain.url, 'tools/list')).json.result.tools.map((tool) => tool.name);
+  assert.deepEqual(names, ['generate_music', 'get_account', 'get_credits']);
+  await using single = await startFakeSunoMcp({ statusTool: 'get_clip' });
+  const singleTools = (await rpc(single.url, 'tools/list')).json.result.tools;
+  const getClip = singleTools.find((tool) => tool.name === 'get_clip');
+  assert.deepEqual(getClip.inputSchema.required, ['clip_id']);
+  assert.equal(getClip.inputSchema.properties.clip_id.type, 'string');
+  await using batch = await startFakeSunoMcp({ statusTool: 'get_clips' });
+  const getClips = (await rpc(batch.url, 'tools/list')).json.result.tools.find((tool) => tool.name === 'get_clips');
+  assert.deepEqual(getClips.inputSchema.required, ['ids']);
+  assert.equal(getClips.inputSchema.properties.ids.type, 'array');
+  assert.deepEqual(normalizeStatusTool({ name: 'clip-get', idField: 'clip_ids' }), { name: 'clip-get', idField: 'clip_ids', batch: true });
+  assert.throws(() => normalizeStatusTool(42), /statusTool/);
+});
+
+test('pending: clips stay pending for K polls per clip, then complete with downloadable loopback audio', async () => {
+  await using suno = await startFakeSunoMcp({ scenario: 'pending', statusTool: 'get_clip', pendingPolls: 2 });
+  const clips = await generate(suno);
+  assert.equal(clips.length, 2);
+  for (const clip of clips) { assert.equal(clip.status, 'pending'); assert.equal(clip.audio_url, null); }
+  assert.equal((await download(suno.audioUrl(clips[0].id))).status, 404, 'no audio while pending');
+  const [a, b] = clips.map((clip) => clip.id);
+  assert.equal(parsed(await callTool(suno, 'get_clip', { clip_id: a })).status, 'pending');
+  assert.equal(parsed(await callTool(suno, 'get_clip', { clip_id: a })).status, 'pending');
+  const done = parsed(await callTool(suno, 'get_clip', { clip_id: a }));
+  assert.equal(done.status, 'complete');
+  assert.equal(done.audio_url, suno.audioUrl(a));
+  assert.equal(parsed(await callTool(suno, 'get_clip', { clip_id: b })).status, 'pending', 'K is counted per clip');
+  const audio = await download(done.audio_url);
+  assert.equal(audio.status, 200);
+  assert.deepEqual(audio.body, FAKE_AUDIO_BYTES);
+  assert.equal(suno.statusCalls().length, 4);
+  assert.equal(suno.generationCalls().length, 1, 'status polls are not generations');
+  const missing = await callTool(suno, 'get_clip', { clip_id: 'clip-nope' });
+  assert.equal(missing.isError, true);
+});
+
+test('pending: pendingFail by ordinal and by id, batch get_clips, and runtime failClip/setPendingPolls', async () => {
+  await using suno = await startFakeSunoMcp({ scenario: 'pending', statusTool: 'get_clips', pendingPolls: 0, pendingFail: [2], clipsPerCall: 3 });
+  const [c1, c2, c3] = (await generate(suno)).map((clip) => clip.id);
+  const states = parsed(await callTool(suno, 'get_clips', { ids: [c1, c2, c3, 'clip-unknown'] })).clips;
+  assert.deepEqual(states.map((clip) => [clip.id, clip.status]), [[c1, 'complete'], [c2, 'failed'], [c3, 'complete']]);
+  assert.equal(states[1].audio_url, null);
+  assert.ok(states[1].error);
+  assert.equal(suno.extraClips().length, 0);
+
+  suno.setPendingPolls(1);
+  const [d1, d2, d3] = (await generate(suno)).map((clip) => clip.id);
+  suno.setPendingFail([d3]);
+  suno.failClip(d1);
+  assert.deepEqual(parsed(await callTool(suno, 'get_clips', { ids: [d1, d2, d3] })).clips.map((clip) => clip.status), ['pending', 'pending', 'pending']);
+  assert.deepEqual(parsed(await callTool(suno, 'get_clips', { ids: [d1, d2, d3] })).clips.map((clip) => clip.status), ['failed', 'complete', 'failed']);
+  assert.throws(() => suno.failClip('clip-nope'), /desconhecido/);
+  assert.throws(() => suno.setPendingPolls(-1), /pendingPolls/);
+});
+
+test('pending works end to end with the T3b client (generateOnce), single and batch status tools', async () => {
+  const saved = { ...sunoMcp };
+  Object.assign(sunoMcp, { sleep: async () => {}, requestTimeoutMs: 3000 });
+  try {
+    for (const statusTool of ['get_clip', 'get_clips']) {
+      await using suno = await startFakeSunoMcp({ scenario: 'pending', statusTool, pendingPolls: 2, pendingFail: [2], requireSession: true });
+      const client = new SunoMcpClient({ token: suno.token, url: suno.url });
+      try {
+        const out = await generateOnce(client, { prompt: 'piano' });
+        assert.equal(out.tool, 'generate_music');
+        assert.deepEqual(out.clips.map((clip) => clip.state), ['ready', 'failed'], statusTool);
+        assert.equal(out.clips[0].audio_url, suno.audioUrl(out.clips[0].id));
+        assert.equal(suno.statusCalls().length, statusTool === 'get_clip' ? 6 : 3);
+      } finally { await client.close(); }
+    }
+  } finally { Object.assign(sunoMcp, saved); }
+});
+
+test('accountTool renames or removes the account tool and accountEnvelope shapes its answer', async () => {
+  await using renamed = await startFakeSunoMcp({ account: ACCOUNT_A, accountTool: 'account-me', accountEnvelope: 'user' });
+  const names = (await rpc(renamed.url, 'tools/list')).json.result.tools.map((tool) => tool.name);
+  assert.deepEqual(names, ['generate_music', 'account-me', 'get_credits']);
+  assert.deepEqual(parsed(await callTool(renamed, 'account-me')), { user: ACCOUNT_A });
+  const old = await rpc(renamed.url, 'tools/call', { name: 'get_account', arguments: {} });
+  assert.equal(old.json.error.code, -32602, 'old name is gone');
+  await using bare = await startFakeSunoMcp({ account: ACCOUNT_A, accountEnvelope: 'none' });
+  assert.deepEqual(parsed(await callTool(bare, 'get_account')), ACCOUNT_A);
+  await using profile = await startFakeSunoMcp({ account: ACCOUNT_A, accountEnvelope: 'profile' });
+  assert.deepEqual(parsed(await callTool(profile, 'get_account')), { profile: ACCOUNT_A });
+  await using none = await startFakeSunoMcp({ accountTool: null });
+  assert.deepEqual((await rpc(none.url, 'tools/list')).json.result.tools.map((tool) => tool.name), ['generate_music', 'get_credits']);
+  assert.throws(() => new FakeSunoMcp({ accountEnvelope: 'wrapped' }), /accountEnvelope/);
+});
+
+test('resolveSunoIdentity reads every accountTool/accountEnvelope variant from the fake', async () => {
+  const savedUrl = sunoIdentity.mcpUrl;
+  try {
+    for (const [accountTool, accountEnvelope] of [['account-me', 'user'], ['get_account', 'none'], ['account_me', 'account']]) {
+      await using suno = await startFakeSunoMcp({ account: ACCOUNT_A, accountTool, accountEnvelope });
+      sunoIdentity.mcpUrl = suno.url;
+      const identity = await resolveSunoIdentity(suno.token, { sources: ['mcp_get_account'] });
+      assert.deepEqual(identity, { subject: ACCOUNT_A.id, email: ACCOUNT_A.email, name: ACCOUNT_A.label, source: 'mcp_get_account' });
+    }
+  } finally { sunoIdentity.mcpUrl = savedUrl; }
+});
+
+test('tool_error scenarios answer HTTP 200 with result.isError and texts the T3b client classifies', async () => {
+  await using suno = await startFakeSunoMcp({ scenarios: ['tool_error', 'tool_error_credits', 'tool_error_unauthorized'] });
+  for (const scenario of ['tool_error', 'tool_error_credits', 'tool_error_unauthorized']) {
+    const res = await rpc(suno.url, 'tools/call', { name: 'generate_music', arguments: { prompt: 'x' } });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.error, undefined);
+    assert.equal(res.json.result.isError, true);
+    assert.equal(res.json.result.content[0].text, TOOL_ERROR_TEXTS[scenario]);
+  }
+  assert.deepEqual(suno.generationCalls().map((call) => call.scenario), ['tool_error', 'tool_error_credits', 'tool_error_unauthorized']);
+  assert.equal(suno.clips().length, 0);
+
+  const saved = { ...sunoMcp };
+  Object.assign(sunoMcp, { requestTimeoutMs: 3000 });
+  try {
+    const expected = { tool_error: ['suno_unavailable', 'tool_error'], tool_error_credits: ['suno_no_credits'], tool_error_unauthorized: ['suno_credential_expired'] };
+    for (const [scenario, [code, detail]] of Object.entries(expected)) {
+      await using fake = await startFakeSunoMcp({ scenario, leaky: true });
+      const client = new SunoMcpClient({ token: fake.token, url: fake.url });
+      try {
+        await assert.rejects(generateOnce(client, { prompt: 'piano' }), (error) => {
+          assert.equal(error.code, code, scenario);
+          if (detail) assert.equal(error.detail, detail);
+          assert.ok(!String(error.message).includes(fake.token), 'bearer is redacted by the client');
+          return true;
+        });
+      } finally { await client.close(); }
+    }
+  } finally { Object.assign(sunoMcp, saved); }
+  await using custom = await startFakeSunoMcp({ scenario: 'tool_error', toolErrorTexts: { tool_error: 'boom' } });
+  assert.equal((await callTool(custom, 'generate_music', { prompt: 'x' })).content[0].text, 'boom');
 });
