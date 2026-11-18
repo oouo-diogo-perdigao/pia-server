@@ -2,7 +2,7 @@
 // quando está na lista branca (o handler geral de index.js usa publicError).
 
 export const publicCodes = new Set([
-  'bad_request', 'not_found', 'internal_error',
+  'bad_request', 'internal_error', 'suno_connect_not_found',
   'suno_not_connected', 'suno_credential_expired', 'suno_unavailable', 'suno_identity_unavailable',
   'suno_account_taken', 'suno_account_mismatch', 'suno_account_not_found', 'suno_oauth_denied', 'suno_oauth_invalid',
   'suno_account_required', 'suno_job_active', 'suno_no_credits', 'suno_timeout', 'suno_track_unavailable',
