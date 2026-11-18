@@ -2,6 +2,8 @@ import { lookup as dnsLookup } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { pool } from './db.js';
 import { SunoError, publicError } from './suno_errors.js';
 
@@ -159,6 +161,37 @@ function statusError(status) {
   return unavailable();
 }
 
+// Transform que só conta e repassa: passa do limite (ou do Content-Length
+// declarado) -> erro; fim antes do Content-Length -> erro (truncado); sem dados
+// por `idleMs` -> erro. Nunca guarda chunks.
+export function byteLimiter({ max, declared = null, idleMs = 0 }) {
+  let bytes = 0;
+  let idle = null;
+  const limiter = new Transform({
+    transform(chunk, _encoding, callback) {
+      bytes += chunk.length;
+      if (bytes > max) return callback(Object.assign(new Error('limite de tamanho'), { code: 'PIA_TOO_LARGE' }));
+      if (declared !== null && bytes > declared) return callback(Object.assign(new Error('maior que o declarado'), { code: 'PIA_TOO_LARGE' }));
+      arm();
+      callback(null, chunk);
+    },
+    flush(callback) {
+      limiter.stopIdle();
+      if (declared !== null && bytes !== declared) return callback(Object.assign(new Error('truncado'), { code: 'PIA_TRUNCATED' }));
+      callback();
+    },
+  });
+  const arm = () => {
+    if (!idleMs) return;
+    clearTimeout(idle);
+    idle = setTimeout(() => limiter.destroy(Object.assign(new Error('ocioso'), { code: 'PIA_TIMEOUT' })), idleMs);
+  };
+  limiter.stopIdle = () => clearTimeout(idle);
+  Object.defineProperty(limiter, 'bytes', { get: () => bytes });
+  arm();
+  return limiter;
+}
+
 // Faz o stream da faixa para `res`. Erros antes dos headers viram JSON; depois
 // dos headers só derrubam a conexão (o cliente vê o corpo incompleto).
 export async function streamSunoTrack(account, generationId, rawN, req, res) {
@@ -199,36 +232,21 @@ export async function streamSunoTrack(account, generationId, rawN, req, res) {
     headers['Content-Range'] = upstreamRes.headers['content-range'];
   res.writeHead(status, headers);
 
-  let bytes = 0;
-  await new Promise((resolve) => {
-    let idle;
-    let done = false;
-    const finish = (ok) => {
-      if (done) return;
-      done = true;
-      clearTimeout(idle);
-      res.off('close', abort);
-      if (!ok) { upstreamReq.destroy(); res.destroy(); }
-      resolve();
-    };
-    const arm = () => { clearTimeout(idle); idle = setTimeout(() => finish(false), sunoAudio.idleTimeoutMs); };
-    arm();
-    upstreamRes.on('data', (chunk) => {
-      if (done) return;
-      bytes += chunk.length;
-      if (bytes > sunoAudio.maxBytes || (length !== null && bytes > length)) return finish(false);
-      arm();
-      if (!res.write(chunk)) { upstreamRes.pause(); res.once('drain', () => upstreamRes.resume()); }
-    });
-    upstreamRes.once('end', () => {
-      if (length !== null && bytes !== length) return finish(false); // truncado
-      res.end();
-      finish(true);
-    });
-    upstreamRes.once('aborted', () => finish(false));
-    upstreamRes.once('error', () => finish(false));
-    res.once('close', () => { if (!res.writableFinished) finish(false); });
-  });
+  // Streaming puro: Suno -> limitador (conta chunk a chunk) -> resposta, via
+  // stream.pipeline. Nada vai para disco nem é juntado em memória; a contrapressão
+  // é do pipeline. Qualquer falha (limite, truncado, ociosidade, cliente que saiu)
+  // destrói as três pontas, e o upstream é abortado.
+  const limiter = byteLimiter({ max: sunoAudio.maxBytes, declared: length, idleMs: sunoAudio.idleTimeoutMs });
+  try {
+    await pipeline(upstreamRes, limiter, res);
+  } catch {
+    upstreamReq.destroy();
+    controller.abort();
+    res.destroy();
+  } finally {
+    limiter.stopIdle();
+    res.off('close', abort);
+  }
 }
 
 // ---------------------------------------------------------------------------

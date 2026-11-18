@@ -163,9 +163,12 @@ extra_ready, device_id, from_this_device}` ou `null`.
 
 ### Download do áudio de uma faixa Suno
 
-`GET /device/music/generations/:id/tracks/:n/audio` faz proxy em streaming do
-`audio_url` guardado no servidor. Nada é gravado em disco e o link (ou a query
-dele) nunca aparece em headers, erros ou logs. Qualquer PC pareado da mesma
+`GET /device/music/generations/:id/tracks/:n/audio` faz proxy em streaming puro
+do `audio_url` guardado no servidor: Suno → limitador → resposta, via
+`stream.pipeline`. Nada vai para disco (sem tmpdir nem arquivo parcial) e o
+arquivo nunca é juntado em memória; o limite de 100 MiB é contado chunk a chunk.
+No banco ficam só o link (`audio_url`) e o `suno_account_name`. O link (ou a
+query dele) nunca aparece em headers, erros ou logs. Qualquer PC pareado da mesma
 conta PIA pode baixar (o que vale é a conta, não o PC de origem).
 
 | Situação | Resposta |

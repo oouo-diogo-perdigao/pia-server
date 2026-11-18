@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
-import { after, before, beforeEach, describe, test } from 'node:test';
+import fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import { after, before, beforeEach, describe, mock, test } from 'node:test';
 
 process.env.PIA_ENCRYPTION_KEY ||= '22'.repeat(32);
 process.env.PIA_ADMIN_EMAIL ||= 'admin@example.invalid';
@@ -22,7 +24,7 @@ for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
 
 // Servidor de áudio próprio (Range, chunked sem Content-Length, redirects, 410, stream lento).
 function startAudioServer() {
-  const state = { closed: 0, requests: [] };
+  const state = { closed: 0, requests: [], sent: 0 };
   const body = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251));
   const server = createServer((req, res) => {
     state.requests.push({ url: req.url, range: req.headers.range });
@@ -51,6 +53,23 @@ function startAudioServer() {
       const chunk = Buffer.alloc(16 * 1024, 7);
       let sent = 0;
       const pump = () => { while (sent < 400 * 1024) { sent += chunk.length; if (!res.write(chunk)) return res.once('drain', pump); } res.end(); };
+      return pump();
+    }
+    if (path === '/stream' || path === '/huge') {
+      // /stream: 20 MiB com Content-Length; /huge: 110 MiB em chunks de 64 KiB, sem Content-Length.
+      const total = path === '/stream' ? 20 * 1024 * 1024 : 110 * 1024 * 1024;
+      res.writeHead(200, { 'Content-Type': 'audio/mpeg', ...(path === '/stream' ? { 'Content-Length': total } : {}) });
+      const chunk = Buffer.alloc(64 * 1024, 3);
+      let sent = 0;
+      state.sent = 0;
+      const pump = () => {
+        while (sent < total && !res.destroyed) {
+          sent += chunk.length;
+          state.sent = sent;
+          if (!res.write(chunk)) return res.once('drain', pump);
+        }
+        if (!res.destroyed) res.end();
+      };
       return pump();
     }
     if (path === '/drip') {
@@ -300,6 +319,51 @@ for (const mode of modes) {
       assert.deepEqual([bad.status, bad.json.code], [416, 'bad_request']);
       const octet = await call(path(id, 2), { device: pia.a.token });
       assert.deepEqual([octet.status, octet.buffer.toString()], [200, 'abc']);
+    });
+
+    // Lê o corpo chunk a chunk, só contando (o teste também não acumula o arquivo).
+    async function drain(target) {
+      const response = await fetch(base + target, { headers: { Authorization: 'Bearer ' + pia.a.token } });
+      let bytes = 0;
+      let failed = false;
+      try { for await (const chunk of response.body) bytes += chunk.length; } catch { failed = true; }
+      return { status: response.status, bytes, failed };
+    }
+
+    test('pure streaming: no file is created (fs spies, tmpdir and cwd unchanged) during a 20 MiB download', async () => {
+      const id = await generation('a', [upstream.base + '/stream']);
+      const listing = () => [fs.readdirSync(tmpdir()).sort().join('|'), fs.readdirSync(process.cwd()).sort().join('|')];
+      const beforeFiles = listing();
+      const spies = [
+        mock.method(fs, 'createWriteStream'), mock.method(fs, 'writeFile'), mock.method(fs, 'writeFileSync'),
+        mock.method(fs, 'open'), mock.method(fs, 'openSync'), mock.method(fs, 'appendFile'),
+        mock.method(fs.promises, 'open'), mock.method(fs.promises, 'writeFile'), mock.method(fs.promises, 'appendFile'),
+        mock.method(fs.promises, 'mkdtemp'), mock.method(fs, 'mkdtempSync'),
+      ];
+      let result;
+      try { result = await drain(path(id, 1)); } finally { for (const spy of spies) spy.mock.restore(); }
+      assert.deepEqual([result.status, result.bytes, result.failed], [200, 20 * 1024 * 1024, false]);
+      assert.deepEqual(spies.map((spy) => spy.mock.callCount()), spies.map(() => 0), 'nenhuma chamada de escrita/abertura de arquivo');
+      assert.deepEqual(listing(), beforeFiles, 'tmpdir e cwd sem arquivo novo');
+    });
+
+    test('more than 100 MiB without Content-Length: counted chunk by chunk, upstream aborted, memory does not grow with the size', async () => {
+      const id = await generation('a', [upstream.base + '/huge']);
+      const closed = upstream.state.closed;
+      global.gc?.();
+      const rss = process.memoryUsage().rss;
+      let peak = rss;
+      const sampler = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rss); }, 20);
+      let result;
+      try { result = await drain(path(id, 1)); } finally { clearInterval(sampler); }
+      assert.equal(result.status, 200);
+      assert.equal(result.failed, true, 'a resposta é encerrada no limite');
+      assert.ok(result.bytes <= defaults.maxBytes, 'nunca repassa mais que 100 MiB: ' + result.bytes);
+      assert.ok(result.bytes > defaults.maxBytes - 8 * 1024 * 1024, 'repassou em streaming até perto do limite: ' + result.bytes);
+      for (let i = 0; i < 100 && upstream.state.closed === closed; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(upstream.state.closed, closed + 1, 'upstream abortado');
+      assert.ok(upstream.state.sent < 110 * 1024 * 1024, 'o Suno não chegou a mandar tudo');
+      assert.ok(peak - rss < 48 * 1024 * 1024, 'memória não cresce com o tamanho (pico +' + Math.round((peak - rss) / 1048576) + ' MiB)');
     });
 
     test('client disconnect aborts the upstream request', async () => {
