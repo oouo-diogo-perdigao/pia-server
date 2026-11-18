@@ -64,6 +64,7 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 - **Adendo 2, 5.3:** Retenção com os seis itens, nesta ordem, antes dos três itens fixos e de `{{REMOCAO_DADOS_TREINADOS}}`. O 2º item (prazo de 15 dias, confirmado pelo Diogo) é o trecho jurídico `EXCLUSAO_CONTA_PRAZO`, com `revisado:false` como os demais até o commit de release.
 - **Adendo 4, 5.9:** a frase "Esses provedores podem usar os dados conforme os próprios termos." foi trocada pelo trecho `PROVEDORES_LLM` com o texto final do Adendo 4 (revisado:false como os demais). O parágrafo da Limited Use e os links do Google ficam como estavam.
 - **Adendo 4, seção 7 (substitui a do Adendo 2):** `HOSPEDAGEM_TEXTO` final em `src/legal/dados.js` (servidor e banco no Brasil, decisão do Diogo) e 2º parágrafo fixo final, com o CrowdSec entre os provedores. Sem "principalmente no Brasil". A frase renderizada fica "A hospedagem da PIA Server fica no Brasil, onde ficam o servidor e o banco de dados…".
+- **Parecer final sobre `59a1a82` (favorável com ressalvas):** F.4 (obrigatórias): linha fixa da seção 6 ("…generalizados pela PIA. O que o provedor de IA escolhido por você faz…"), última frase de `ORIGEM_TREINAMENTO_MIDIA` e primeira de `TREINAMENTO_MICROSOFT` com o compromisso da PIA. F.5 (recomendadas): chave e conta do usuário em `PROVEDORES_LLM`, "Os detalhes estão logo abaixo." na seção 7, uma frase só sobre menores na seção 12, Microsoft na seção 5 dos Termos, "podem não ser removíveis" no 6º item da Retenção, runbook sem backups e sem a pendência de prazo. Todos os trechos seguem `revisado:false` até o commit de release do TechLead.
 - **Não entram na v1.0:** 5.7 (aviso de 30 dias antes de encerrar o serviço, decisão do Diogo) e 5.8 (caixa de aceite no primeiro login).
 
 ### Decisões do Diogo sobre o parecer (17/11/2026)
@@ -81,7 +82,7 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 
 ### Aguardando decisão
 
-- **Risco residual da Limited Use do Google (Adendo 4):** continua ALTO e não é afastado pelo texto da 5.9. O Diogo decidiu não mudar o código (Gemini gratuito); o risco fica registrado como aceito por ele. Falta o Diogo confirmar se a chave do Gemini é do próprio usuário ou da PIA.
+- **Risco residual da Limited Use do Google (parecer final, F.7):** MÉDIO-ALTO (antes ALTO), porque a chave do Gemini é do próprio usuário. Aceito expressamente pelo Diogo em 17/11/2026 para publicar a v1.0. Mitigação em andamento: aviso no app sobre o provedor de IA gratuito (feature 0003, Time 1).
 
 - **Prazo e rotação dos registros de acesso (P14, Adendo 2, B e E.1, obrigatório, risco aceito pelo CEO):** o access log do Traefik e o histórico do CrowdSec estão sem prazo e sem rotação; a frase "pelo tempo necessário" só atende provisoriamente ao art. 9º, II. O parecer recomenda rotação com 6 meses como referência (o número não vai para o texto público, CA28).
 - **CrowdSec (Adendo 4, recomendado):** conferir se os termos ou o acordo de tratamento de dados da CrowdSec oferecem cláusulas-padrão da ANPD (Resolução CD/ANPD nº 19/2024) ou garantias equivalentes. IPs bloqueados ficam sem prazo (decisão do Diogo), com o mesmo risco registrado para os logs.

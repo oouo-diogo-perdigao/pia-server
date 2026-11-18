@@ -9,7 +9,6 @@ Procedimento manual para atender pedidos de exclusão de dados recebidos por **c
 1. **Confirme a identidade do titular.** O pedido deve vir do mesmo e-mail da conta PIA (o e-mail Google cadastrado). Se vier de outro endereço, peça confirmação a partir do e-mail da conta antes de seguir.
 2. **Registre o pedido** (data de recebimento, e-mail, o que foi pedido) no controle do controlador.
    - **Pendência:** onde fica esse registro e por quanto tempo é guardado não está definido.
-   - **Pendência:** o prazo de resposta ao titular depende do parecer (`PRAZO_RESPOSTA_TITULAR` em `src/legal/juridico.js`, P10).
 3. **Admin:** se o e-mail for o de `PIA_ADMIN_EMAIL`, **não** apague só a linha: a conta é recriada como admin a cada boot (`src/db.js`, `INSERT ... ON CONFLICT(email) DO UPDATE SET admin=true`). Troque antes o `PIA_ADMIN_EMAIL` no `.env` para outro e-mail e reinicie o contêiner, ou não atenda por este runbook.
 4. **Bot Discord compartilhado:** `pia_server.discord_guild_links.bot_account_id` e `discord_link_requests.bot_account_id` referenciam a conta dona do bot com `ON DELETE CASCADE`. Se outras contas usam o bot desta conta em algum servidor Discord, os vínculos **dessas outras contas** também serão apagados. Confira no passo 1 do SQL e avise as contas afetadas.
 
@@ -68,7 +67,7 @@ Temporários: uploads em andamento usam `/tmp/pia-media-*` e `/tmp/pia-artifact-
 
 1. **Cópias no Google Drive do titular** (gravações, MP3/WAV, capturas de tela): pertencem a ele e ficam na pasta da PIA no Drive. Ele apaga se quiser.
 2. **Dados locais no PC** (SQLite, cofre do sistema, `localStorage` da PIA desktop): o titular apaga ou desinstala.
-3. **Backups manuais do PostgreSQL**, se existirem (o README recomenda guardar a chave com o backup). **Pendência:** se há backups, onde ficam e por quanto tempo; a linha apagada pode continuar neles até a rotação.
+3. Não há backup do banco (decisão do Diogo; a Política afirma isso). Se algum backup for criado, a Política precisa mudar antes.
 4. **Dados já usados em treinamento** podem não ser removíveis do modelo (`REMOCAO_DADOS_TREINADOS`, P10). Hoje não existe pipeline de treinamento no código (T10).
 5. **Logs de acesso com IP:** o access log do Traefik e a lista de IPs bloqueados do CrowdSec não são apagados pela exclusão da conta. São mantidos pelo tempo necessário para segurança, hoje sem rotação (pendência P14). Informe isso ao titular se ele perguntar.
 

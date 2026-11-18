@@ -14,6 +14,7 @@
 - Embed "Gravação em andamento" do bot do Discord com o aviso da 4.14 (terceiros fora do treinamento e contato por e-mail).
 - Adendo 2 do parecer: `LOGS_ACESSO` passa a dizer que a PIA guarda registros de acesso com IP (frase neutra, sem prazo), com a base legal na seção 5 e menções nas seções 4, 8 e 9; nova 4.8 sem país, com a transcrição de voz e com a frase do CrowdSec do Adendo 4 (ligado, decisão do Diogo); Retenção (5.3) com os seis itens e o prazo de 15 dias no novo trecho `EXCLUSAO_CONTA_PRAZO`; provedores de LLM (5.9, texto do Adendo 4, sem prometer que os provedores não treinam) no novo trecho `PROVEDORES_LLM`; seção 7 com `HOSPEDAGEM_TEXTO` e 2º parágrafo finais do Adendo 4 (servidor e banco no Brasil); última frase da 4.9 só com a não identificação; runbook de exclusão de conta atualizado. Asserts do CA28.
 - Adendo 3 do parecer: `AVISO_GRAVACAO_DISCORD` (4.14), `CONSENTIMENTO_TERCEIROS_DISCORD` (4.2) e `OPT_OUT_TREINAMENTO` (4.13) sem a frase ambígua sobre as vozes de terceiros. Todos os trechos seguem `revisado:false`.
+- Parecer final sobre `59a1a82` (favorável com ressalvas): correções obrigatórias F.4 (o compromisso de não treinar com dados do Google e da Microsoft é da PIA) e ajustes recomendados F.5 (chave e conta do usuário na 5.9, seção 7, seção 12, Microsoft nos Termos, Retenção e runbook). Trechos seguem `revisado:false`.
 
 ## v0.2.1 - 2026-11-15
 
