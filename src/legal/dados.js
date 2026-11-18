@@ -17,7 +17,7 @@ export const DADOS = Object.freeze({
   // P07: domínio oficial (texto informativo; os links usam PIA_PUBLIC_URL).
   DOMINIO_OFICIAL: 'travelrpg.com',
   // P05: hospedagem, usado na seção de transferência internacional.
-  HOSPEDAGEM_TEXTO: 'no Brasil, onde também fica o banco de dados com os dados pessoais da sua conta; a PIA não contrata armazenamento de mídia fora do país, e as mídias, como imagens e áudios, ficam no armazenamento que você conecta, que pode estar fora do Brasil',
+  HOSPEDAGEM_TEXTO: 'no Brasil, onde ficam o servidor e o banco de dados com os dados pessoais da sua conta; a PIA não contrata armazenamento de mídia fora do país, e as mídias, como imagens e áudios, ficam no armazenamento que você conecta, que pode estar fora do Brasil',
   // P09: idade mínima.
   IDADE_MINIMA: '18',
 });
