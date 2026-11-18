@@ -83,6 +83,12 @@ nav .rail-icon { padding: 0; }
 #account-menu summary::-webkit-details-marker { display: none; }
 .account-actions { position: absolute; bottom: 0; left: calc(100% + .6rem); z-index: 3; min-width: 11rem; width: max-content; max-width: 18rem; padding: .75rem; border: 1px solid #514366; border-radius: .75rem; background: #1c192b; box-shadow: 0 .6rem 2rem #0b091a77; }
 #account-email { display: block; color: #c6bed8; overflow-wrap: anywhere; }
+.account-legal { display: grid; gap: .1rem; margin: .55rem 0 0; padding: .45rem 0 0; border-top: 1px solid #373250; list-style: none; }
+.account-link { display: flex; align-items: center; gap: .5rem; min-height: 2rem; margin-inline: -.4rem; padding: .25rem .4rem; border-radius: .45rem; color: #d4c4ff; text-decoration: none; white-space: nowrap; }
+.account-link svg { flex: none; width: 16px; height: 16px; color: #bcadf2; }
+.account-link:hover { background: #352957; color: #f3edff; text-decoration: underline; }
+.account-link:focus-visible { outline: 2px solid #8f9eff; outline-offset: 0; }
+.account-actions .account-logout { width: 100%; margin-top: .45rem; padding-top: .45rem; border: 0; border-top: 1px solid #373250; border-radius: 0; }
 .account-logout { display: flex; align-items: center; gap: .5rem; margin: .4rem 0 0; background: transparent; color: #ff9eae; }
 @media (max-width: 620px) {
   .account-actions { top: calc(100% + .4rem); right: 0; bottom: auto; left: auto; }

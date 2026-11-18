@@ -1,3 +1,5 @@
+import { legalFooter } from './legal.js';
+
 const MAX_QUERY_LENGTH = 4096;
 const MAX_PARAM_COUNT = 20;
 const MAX_CODE_LENGTH = 2048;
@@ -42,6 +44,7 @@ function page(status, title, content, includeScript = false) {
     '<img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64">' +
     '<h2>' + escapeHtml(title) + '</h2>' +
     content +
+    legalFooter() +
     '</section></main>' +
     scriptTag +
     '</html>';

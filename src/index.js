@@ -16,6 +16,16 @@ import { acknowledge, configure, monitor, pendingNotices, preferences } from './
 import { receiveMedia } from './media.js';
 import { accessToken, botCredential, enableDiscordLink, isConnectorCallback, migrateConnectorRows, oauthFinish, oauthStart, publicConnectors, registry, removeConnector, runtime, saveConnector, splitProfile, storageCredential, testConnector } from './connectors.js';
 import { renderOAuthCallback } from './oauth_callback.js';
+import { authorizationPage } from './auth_page.js';
+import { legalFiles } from './legal.js';
+import { publicResponse, sendPublic } from './public_files.js';
+import { sunoCapabilities, sunoRoute } from './suno_auth.js';
+import { publicError } from './suno_errors.js';
+import { musicGenerationsRoute } from './music_generations.js';
+import { sunoAdminRoute } from './suno_client.js';
+import { recoverSunoJobs, sunoJobsRoute } from './suno_jobs.js';
+import { sunoAudioRoute } from './suno_audio.js';
+import { cleanupOrphanTemp } from './cleanup_tmp.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -27,9 +37,11 @@ const publicFiles = new Map([
   ['/pia.svg', ['image/svg+xml', readFileSync(new URL('../web/pia.svg', import.meta.url))]],
   ['/secretary.svg', ['image/svg+xml', readFileSync(new URL('../web/secretary.svg', import.meta.url))]],
   ['/login.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/login.css', import.meta.url))]],
+  ['/legal.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/legal.css', import.meta.url))]],
   ['/google-signin.png', ['image/png', readFileSync(new URL('../web/google-signin.png', import.meta.url))]],
   ['/mantine.css', ['text/css; charset=utf-8', mantineCss]],
   ['/style.css', ['text/css; charset=utf-8', readFileSync(new URL('../web/style.css', import.meta.url))]],
+  ...legalFiles(origin),
 ]);
 
 function json(res, status, body) {
@@ -39,17 +51,6 @@ function json(res, status, body) {
 
 function googleSignIn(path) {
   return '<a href="' + path + '" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>';
-}
-
-function authorizationPage(res, title, content) {
-  // Keep the Origin header on same-origin form submissions without sending
-  // the authorization URL as a referrer to Google or other sites.
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Referrer-Policy': 'same-origin' });
-  return res.end('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>' + title + '</title><link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/style.css">' +
-    '<link rel="stylesheet" href="/login.css"><main class="pia-login"><section class="pia-login-card">' +
-    '<img class="pia-login-logo" src="/pia.svg" alt="" width="64" height="64"><h2>' + title + '</h2>' +
-    content + '</section></main></html>');
 }
 
 async function body(req, limit = 65536) {
@@ -132,11 +133,8 @@ async function route(req, res) {
   }
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.googleusercontent.com; frame-ancestors 'none'; base-uri 'none'");
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, googleLogin: oauthReady() });
-  if (req.method === 'GET' && publicFiles.has(path)) {
-    const [type, data] = publicFiles.get(path);
-    res.writeHead(200, { 'Content-Type': type });
-    return res.end(data);
-  }
+  const publicPage = publicResponse(req.method, path, publicFiles);
+  if (publicPage) return sendPublic(res, publicPage);
   const blessing = /^\/discord\/bless\/([A-Za-z0-9_-]{43})(\/login)?$/.exec(path);
   if (blessing) {
     const [, token, login] = blessing;
@@ -159,7 +157,8 @@ async function route(req, res) {
       content = '<p>Servidor ' + guild + ' abençoado e vinculado à sua conta PIA.</p>' +
         '<a href="/#recordings">Abrir gravações</a>';
     } else return json(res, 403, { error: 'Entre na sua conta PIA e abra o link enviado pelo Discord.' });
-    return authorizationPage(res, 'Vincular Discord à PIA', content);
+    // Formulário (GET) leva a frase de aceite do RF05; o resultado (POST) só os links.
+    return authorizationPage(res, 'Vincular Discord à PIA', content, req.method === 'GET' ? 'aceite' : 'links');
   }
   if (req.method === 'POST' && path === '/device/login/start') {
     const result = beginDeviceLogin(await body(req, 2048));
@@ -191,7 +190,8 @@ async function route(req, res) {
       approveDeviceLogin(id, account);
       content = '<p>Computador autorizado. Você pode fechar esta aba e voltar à PIA.</p>';
     } else return json(res, 405, { error: 'Método indisponível.' });
-    return authorizationPage(res, 'Entrar na PIA', content);
+    // Formulário (GET) leva a frase de aceite do RF05; o resultado (POST) só os links.
+    return authorizationPage(res, 'Entrar na PIA', content, req.method === 'GET' ? 'aceite' : 'links');
   }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
   const connectorCallback = path === '/auth/connectors/microsoft' ? 'microsoft' :
@@ -209,6 +209,10 @@ async function route(req, res) {
     res.writeHead(result.status, result.headers);
     return res.end(result.body);
   }
+  if (path === '/auth/connectors/suno' || path.startsWith('/device/suno/')) {
+    if (path.startsWith('/device/suno/jobs') && await sunoJobsRoute(req, res, url, { authenticateDevice, readBody: body })) return;
+    if (await sunoRoute(req, res, url, { authenticateDevice, readBody: body })) return;
+  }
   if (req.method === 'POST' && path === '/device/logout') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Sessão do computador inválida.' });
@@ -217,13 +221,16 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/device/account') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
-    return json(res, 200, accountProfile(account));
+    return json(res, 200, { ...accountProfile(account), capabilities: [...sunoCapabilities] });
   }
   if (req.method === 'POST' && path === '/device/media') {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
     return json(res, 200, await receiveMedia(account, req));
   }
+  if (path.startsWith('/device/music/generations/') && path.endsWith('/audio') &&
+    await sunoAudioRoute(req, res, url, { authenticateDevice })) return;
+  if (path.startsWith('/device/music/generations') && await musicGenerationsRoute(req, res, url, authenticateDevice)) return;
   if (req.method === 'POST' && ['/device/poll', '/device/complete', '/device/notices/ack',
     '/device/profile/read', '/device/profile/write', '/device/connectors/runtime', '/device/connectors/access'].includes(path)) {
     const account = await authenticateDevice(req.headers.authorization);
@@ -361,6 +368,8 @@ async function route(req, res) {
     await pool.query('INSERT INTO pia_server.accounts(email) VALUES($1) ON CONFLICT(email) DO NOTHING', [email]);
     return json(res, 200, { ok: true });
   }
+  // Spike T10: tools/list de uma conta Suno conectada (só admin; sem tokens).
+  if (path === '/api/admin/suno/spike' && account.admin) return json(res, 200, await sunoAdminRoute(account, path, data));
   return json(res, 404, { error: 'Rota não encontrada.' });
 }
 
@@ -411,9 +420,15 @@ async function reconcile() {
 
 await migrate();
 await migrateConnectorRows();
+// Jobs do Suno que estavam na fila ou rodando viram interrupted; nunca refazem tools/call.
+await recoverSunoJobs();
+// Restos de mídia e de gravações já enviadas; nunca lança nem toca na fila de gravação.
+await cleanupOrphanTemp();
 const server = createServer((req, res) => {
   route(req, res).catch((error) => {
     if (res.headersSent) { res.end(); return; }
+    const known = publicError(error);
+    if (known) return json(res, known.status, known.body);
     const message = error.code || error instanceof TypeError ? 'A operação falhou.' : error.message;
     json(res, 400, { error: message });
   });
