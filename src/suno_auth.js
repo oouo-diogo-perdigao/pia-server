@@ -122,6 +122,11 @@ export const pgStore = {
     const { rows } = await pool.query('SELECT ' + accountColumns + ' FROM pia_server.suno_accounts WHERE id=$1 AND account_id=$2', [id, accountId]);
     return rows[0] || null;
   },
+  async updateLabel(accountId, id, label) {
+    const { rows } = await pool.query('UPDATE pia_server.suno_accounts SET label=$3,updated=now() WHERE id=$1 AND account_id=$2 RETURNING ' +
+      accountColumns, [id, accountId, label]);
+    return rows[0] || null;
+  },
   async deleteAccount(accountId, id) {
     const { rowCount } = await pool.query('DELETE FROM pia_server.suno_accounts WHERE id=$1 AND account_id=$2', [id, accountId]);
     return rowCount > 0;
@@ -207,7 +212,7 @@ export async function sunoConnect(account, input = {}) {
 
 export async function sunoConnectAttempt(account, id) {
   const attempt = uuid.test(id || '') ? await store.getAttempt(account.id, id) : null;
-  if (!attempt) throw new SunoError('not_found', 'Tentativa de conexão não encontrada.', 404);
+  if (!attempt) throw new SunoError('suno_connect_not_found', 'Tentativa de conexão não encontrada.', 404);
   if (attempt.status === 'connected') return { state: 'connected', account_id: attempt.suno_account_id };
   if (attempt.status === 'failed') return { state: 'failed', code: attempt.code };
   return { state: attempt.expired ? 'expired' : 'pending' };
@@ -231,7 +236,8 @@ async function saveConnection(attempt, identity, fields) {
     const credential = { client_id: attempt.client_id, ciphertext: fields.ciphertext, expires_at: fields.expires_at,
       scopes: fields.scopes, state: 'connected', last_error_code: null };
     if (owner) {
-      await tx.updateAccount(owner.id, { ...profile, ...credential });
+      // Reconectar não sobrescreve o apelido escolhido pelo usuário (RN07).
+      await tx.updateAccount(owner.id, { suno_email: profile.suno_email, suno_name: profile.suno_name, ...credential });
       return { id: owner.id };
     }
     const id = randomUUID();
@@ -304,14 +310,20 @@ export async function sunoAccessToken(account, sunoAccountId, { rejected } = {})
     let result;
     try {
       result = await post(sunoOAuth.tokenUrl, { grant_type: 'refresh_token', refresh_token: saved.refresh_token, client_id: row.client_id }, true);
-    } catch { return { error: unavailable() }; }
+    } catch {
+      await tx.updateAccount(row.id, { last_error_code: 'suno_unavailable' });
+      return { error: unavailable() };
+    }
     const grant = result.data.error;
     if (!result.ok && (grant === 'invalid_grant' || grant === 'invalid_client' || result.status === 401)) {
       await tx.updateAccount(row.id, failedFields);
       return { error: expired() };
     }
     const fields = result.ok ? tokenFields(result.data, { refresh_token: saved.refresh_token, scopes: row.scopes }) : null;
-    if (!fields) return { error: unavailable() };
+    if (!fields) {
+      await tx.updateAccount(row.id, { last_error_code: 'suno_unavailable' });
+      return { error: unavailable() };
+    }
     const { access, ...patch } = fields;
     await tx.updateAccount(row.id, { ...patch, state: 'connected', last_error_code: null });
     return { token: access };
@@ -341,28 +353,62 @@ export async function withSunoToken(account, sunoAccountId, call) {
 // ---------------------------------------------------------------------------
 // Status e desconexão.
 
-function credentialState(row) {
-  if (row.state === 'refresh_failed') return 'refresh_failed';
-  return fresh(row) ? 'configured' : 'expired';
+// credential_state por conta Suno:
+//   configured     token válido (ou renovado agora); available = true
+//   unavailable    token vencido ou perto de vencer e o refresh falhou por 5xx,
+//                  timeout ou rede; os tokens são mantidos; available = false
+//   refresh_failed invalid_grant/401 no refresh: precisa reconectar
+export const sunoCredentialStates = Object.freeze(['configured', 'unavailable', 'refresh_failed']);
+
+// Code de recusa de um job para cada estado (T4): unavailable nunca vira
+// suno_credential_expired.
+export function sunoCredentialRefusal(credentialState) {
+  if (credentialState === 'refresh_failed') return 'suno_credential_expired';
+  if (credentialState === 'unavailable') return 'suno_unavailable';
+  return null;
 }
 
-export async function sunoStatus(account) {
-  let rows = await store.listAccounts(account.id);
+async function describeAccounts(account, rows) {
+  const transient = new Set();
   const stale = rows.filter((row) => row.state === 'connected' && !fresh(row));
   if (stale.length) {
-    await Promise.all(stale.map((row) => sunoAccessToken(account, row.id).catch(() => null)));
-    rows = await store.listAccounts(account.id);
+    await Promise.all(stale.map((row) => sunoAccessToken(account, row.id).catch((error) => {
+      if (error?.code === 'suno_unavailable') transient.add(row.id);
+    })));
+    const ids = new Set(rows.map((row) => row.id));
+    rows = (await store.listAccounts(account.id)).filter((row) => ids.has(row.id));
   }
-  const accounts = rows.map((row) => {
-    const credential_state = credentialState(row);
+  return rows.map((row) => {
+    const credential_state = row.state === 'refresh_failed' ? 'refresh_failed' :
+      transient.has(row.id) || !(new Date(row.expires_at).getTime() > Date.now()) ? 'unavailable' : 'configured';
     return { id: row.id, label: row.label, email: row.suno_email || null, name: row.suno_name || null, credential_state,
       available: credential_state === 'configured',
       expires_at: row.state === 'connected' && row.expires_at ? new Date(row.expires_at).toISOString() : null,
       scopes: row.state === 'connected' ? row.scopes || '' : null };
   });
+}
+
+export async function sunoStatus(account) {
+  const accounts = await describeAccounts(account, await store.listAccounts(account.id));
   const available = accounts.filter((item) => item.available);
   return { accounts, default_account_id: available.length === 1 ? available[0].id : null,
     active_job: await sunoHooks.activeJob(account), settings: sunoSettings };
+}
+
+// Estado de uma conta Suno no formato do status (para a T4 decidir a recusa).
+export async function sunoAccountStatus(account, id) {
+  const row = uuid.test(id || '') ? await store.getAccount(account.id, id) : null;
+  if (!row) throw accountNotFound();
+  return (await describeAccounts(account, [row]))[0];
+}
+
+// RN07: apelido da conta Suno (trim, 1 a 80 caracteres).
+export async function sunoRename(account, id, input = {}) {
+  const label = typeof input.label === 'string' ? input.label.trim() : '';
+  if (!label || [...label].length > 80) throw new SunoError('bad_request', 'O apelido deve ter de 1 a 80 caracteres.');
+  const row = uuid.test(id || '') ? await store.updateLabel(account.id, id, label) : null;
+  if (!row) throw accountNotFound();
+  return (await describeAccounts(account, [row]))[0];
 }
 
 export async function sunoDisconnect(account, id) {
@@ -424,13 +470,14 @@ export async function sunoRoute(req, res, url, { authenticateDevice, readBody })
   const attemptMatch = /^\/device\/suno\/connect\/([^/]+)$/.exec(path);
   const accountMatch = /^\/device\/suno\/accounts\/([^/]+)$/.exec(path);
   const known = (req.method === 'GET' && (path === '/device/suno/status' || attemptMatch)) ||
-    (req.method === 'POST' && path === '/device/suno/connect') || (req.method === 'DELETE' && accountMatch);
+    (req.method === 'POST' && path === '/device/suno/connect') || ((req.method === 'DELETE' || req.method === 'PATCH') && accountMatch);
   if (!known) return false;
   try {
     const account = await authenticateDevice(req.headers.authorization);
     if (!account) { send(res, 401, { error: 'Pareamento inválido.' }); return true; }
     if (path === '/device/suno/status') send(res, 200, await sunoStatus(account));
     else if (attemptMatch) send(res, 200, await sunoConnectAttempt(account, attemptMatch[1]));
+    else if (accountMatch && req.method === 'PATCH') send(res, 200, await sunoRename(account, accountMatch[1], await readBody(req, 2048)));
     else if (accountMatch) send(res, 200, await sunoDisconnect(account, accountMatch[1]));
     else {
       const input = req.headers['content-type'] || Number(req.headers['content-length'] || 0) ? await readBody(req, 2048) : {};

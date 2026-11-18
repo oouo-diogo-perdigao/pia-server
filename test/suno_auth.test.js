@@ -104,6 +104,7 @@ for (const mode of modes) {
       oauth.config.expiresIn = 900;
       oauth.config.refreshDelayMs = 0;
       oauth.config.rotate = true;
+      auth.sunoOAuth.timeoutMs = original.timeoutMs;
       for (const key of Object.keys(oauth.calls)) oauth.calls[key] = 0;
       sunoIdentity.sources = [...originalIdentity.sources];
       if (mode.pg) {
@@ -204,7 +205,7 @@ for (const mode of modes) {
       assert.equal((await callback({ code: 'x', state: 'nao-existe' })).status, 400);
       const other = await call('GET', '/device/suno/connect/' + started.json.attempt_id, { device: pia.b.token });
       assert.equal(other.status, 404);
-      assert.equal(other.json.code, 'not_found');
+      assert.equal(other.json.code, 'suno_connect_not_found');
       const late = await call('POST', '/device/suno/connect', { device: pia.a.token, body: {} });
       await expireAttempt(late.json.attempt_id);
       const lateGrant = oauth.authorize(late.json.url, { account: SUNO_A });
@@ -323,7 +324,7 @@ for (const mode of modes) {
       assert.equal((await sunoRows()).length, 0);
       assert.equal((await call('DELETE', '/device/suno/accounts/' + attempt.account_id, { device: pia.a.token })).status, 404);
       assert.equal((await call('DELETE', '/device/suno/accounts/nao-e-uuid', { device: pia.a.token })).status, 404);
-      assert.deepEqual((await call('GET', '/device/suno/connect/' + attempt.account_id, { device: pia.a.token })).json.code, 'not_found');
+      assert.deepEqual((await call('GET', '/device/suno/connect/' + attempt.account_id, { device: pia.a.token })).json.code, 'suno_connect_not_found');
     });
 
     test('unpaired devices get the standard /device/* 401', async () => {
@@ -414,14 +415,68 @@ for (const mode of modes) {
       await assert.rejects(unknown, (error) => error.code === 'suno_not_connected');
     });
 
-    test('a temporary refresh failure keeps the account and reports suno_unavailable', async () => {
+    test('a temporary refresh failure (5xx or timeout) makes the account unavailable and keeps the tokens', async () => {
       oauth.config.expiresIn = 30;
       const { attempt } = await connect(pia.a.token, SUNO_A);
+      const account = devices.get(pia.a.token);
+      const [before] = await sunoRows();
       oauth.failures.refresh.push(503);
-      await assert.rejects(auth.sunoAccessToken(devices.get(pia.a.token), attempt.account_id), (error) => error.code === 'suno_unavailable');
-      const [row] = await sunoRows();
+      await assert.rejects(auth.sunoAccessToken(account, attempt.account_id), (error) => error.code === 'suno_unavailable');
+      let [row] = await sunoRows();
       assert.equal(row.state, 'connected');
+      assert.equal(row.ciphertext, before.ciphertext, 'tokens mantidos');
+      assert.equal(row.last_error_code, 'suno_unavailable');
+      oauth.failures.refresh.push(500);
+      const status = await call('GET', '/device/suno/status', { device: pia.a.token });
+      assert.deepEqual(status.json.accounts.map(({ credential_state, available }) => ({ credential_state, available })),
+        [{ credential_state: 'unavailable', available: false }]);
+      assert.equal(status.json.default_account_id, null);
+      oauth.config.expiresIn = 900;
+      const single = await auth.sunoAccountStatus(account, attempt.account_id);
+      assert.equal(single.credential_state, 'configured', 'o refresh volta a funcionar');
+      assert.equal(auth.sunoCredentialRefusal('unavailable'), 'suno_unavailable');
+      assert.equal(auth.sunoCredentialRefusal('refresh_failed'), 'suno_credential_expired');
+      assert.equal(auth.sunoCredentialRefusal('configured'), null);
+      oauth.config.expiresIn = 30;
+      await auth.sunoAccessToken(account, attempt.account_id, { rejected: await auth.sunoAccessToken(account, attempt.account_id) });
+      auth.sunoOAuth.timeoutMs = 100;
+      oauth.config.refreshDelayMs = 400;
+      await assert.rejects(auth.sunoAccessToken(account, attempt.account_id), (error) => error.code === 'suno_unavailable');
+      const late = await call('GET', '/device/suno/status', { device: pia.a.token });
+      assert.equal(late.json.accounts[0].credential_state, 'unavailable');
+      [row] = await sunoRows();
       assert.ok(row.ciphertext);
+      for (const item of [status, late]) assert.ok(item.json.accounts.every((entry) => auth.sunoCredentialStates.includes(entry.credential_state)));
+    });
+
+    test('PATCH renames an own account (trim, 1 to 80 chars) and reconnecting keeps the nickname', async () => {
+      const { attempt } = await connect(pia.a.token, SUNO_A);
+      const path = '/device/suno/accounts/' + attempt.account_id;
+      const renamed = await call('PATCH', path, { device: pia.a.token, body: { label: '  Conta do estúdio  ' } });
+      assert.equal(renamed.status, 200);
+      assert.deepEqual(Object.keys(renamed.json).sort(), ['available', 'credential_state', 'email', 'expires_at', 'id', 'label', 'name', 'scopes']);
+      assert.equal(renamed.json.label, 'Conta do estúdio');
+      assert.equal(renamed.json.id, attempt.account_id);
+      assert.equal(renamed.json.credential_state, 'configured');
+      const issued = oauth.issued.at(-1);
+      assert.ok(!renamed.text.includes(issued.access_token) && !renamed.text.includes(issued.refresh_token));
+      assert.equal((await call('PATCH', path, { device: pia.a.token, body: { label: 'é'.repeat(80) } })).json.label, 'é'.repeat(80));
+      for (const body of [{ label: '   ' }, { label: 'x'.repeat(81) }, { label: 7 }, {}]) {
+        const invalid = await call('PATCH', path, { device: pia.a.token, body });
+        assert.equal(invalid.status, 400, JSON.stringify(body));
+        assert.equal(invalid.json.code, 'bad_request');
+      }
+      const foreign = await call('PATCH', path, { device: pia.b.token, body: { label: 'Minha' } });
+      assert.equal(foreign.status, 404);
+      assert.equal(foreign.json.code, 'suno_account_not_found');
+      assert.equal((await call('PATCH', '/device/suno/accounts/' + randomUUID(), { device: pia.a.token, body: { label: 'x' } })).json.code,
+        'suno_account_not_found');
+      assert.equal((await call('PATCH', path, { body: { label: 'x' } })).status, 401);
+      await call('PATCH', path, { device: pia.a.token, body: { label: 'Apelido' } });
+      await connect(pia.a.token, SUNO_A);
+      const status = await call('GET', '/device/suno/status', { device: pia.a.token });
+      assert.equal(status.json.accounts[0].label, 'Apelido');
+      assert.equal(status.json.accounts[0].email, 'a@suno.test');
     });
 
     test('no token, code, verifier or client secret ever reaches the logs', async () => {

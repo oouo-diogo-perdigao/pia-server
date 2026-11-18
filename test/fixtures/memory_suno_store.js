@@ -65,6 +65,12 @@ export function createMemorySunoStore() {
       const row = accounts.get(id);
       return row && String(row.account_id) === String(accountId) ? copy(row) : null;
     },
+    async updateLabel(accountId, id, label) {
+      const row = accounts.get(id);
+      if (!row || String(row.account_id) !== String(accountId)) return null;
+      row.label = label;
+      return copy(row);
+    },
     async deleteAccount(accountId, id) {
       const row = accounts.get(id);
       if (!row || String(row.account_id) !== String(accountId)) return false;

@@ -13,8 +13,13 @@
 - `DELETE /device/music/generations/:id`: exclusão definitiva (registro, prompt, letra, faixas e links) por qualquer PC da conta; 404 para id de outra conta ou já apagado; 409 `music_generation_active` enquanto o job está em andamento.
 - Erros dessas rotas saem como `4xx {error, code}`.
 
+- `PATCH /device/suno/accounts/:id` `{label}` para o apelido da conta Suno (RN07); reconectar a mesma conta mantém o apelido.
+- `credential_state: "unavailable"` (refresh com 5xx/timeout; tokens mantidos, `available: false`) e `sunoCredentialRefusal()`/`sunoAccountStatus()` para a T4 (`unavailable` → `suno_unavailable`, `refresh_failed` → `suno_credential_expired`).
+
 ### Changed
 - `splitProfile` descarta segredos `mcp:*` dos perfis sincronizados.
+- `credential_state` não tem mais `expired`: só `configured`, `unavailable` e `refresh_failed`.
+- Tentativa de connect inexistente: code `suno_connect_not_found` (antes `not_found`).
 
 ## v0.2.1 - 2026-11-15
 
