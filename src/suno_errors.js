@@ -6,7 +6,7 @@ export const publicCodes = new Set([
   'suno_not_connected', 'suno_credential_expired', 'suno_unavailable', 'suno_identity_unavailable',
   'suno_account_taken', 'suno_account_mismatch', 'suno_account_not_found', 'suno_oauth_denied', 'suno_oauth_invalid',
   'suno_account_required', 'suno_job_active', 'suno_no_credits', 'suno_timeout', 'suno_track_unavailable',
-  'incomplete_batch', 'download_failed',
+  'incomplete_batch', 'download_failed', 'suno_job_not_found',
 ]);
 
 export class SunoError extends Error {
