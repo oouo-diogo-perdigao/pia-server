@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   CLIPS_PER_CALL,
+  DEFAULT_ACCOUNT,
   DEFAULT_REDIRECT_LOCATION,
   DEFAULT_TOKEN,
   FAKE_AUDIO_BYTES,
@@ -63,7 +64,7 @@ test('initialize, notifications/initialized and tools/list follow the heuristic 
   assert.equal(notified.status, 202);
   const list = await rpc(suno.url, 'tools/list', {}, { session });
   assert.equal(list.headers.get('mcp-session-id'), null, 'session header only on initialize');
-  assert.deepEqual(list.json.result.tools.map((tool) => tool.name), ['generate_music', 'get_credits']);
+  assert.deepEqual(list.json.result.tools.map((tool) => tool.name), ['generate_music', 'get_account', 'get_credits']);
   assert.equal(suno.generationTool, 'generate_music');
   const again = await rpc(suno.url, 'initialize', {});
   assert.notEqual(again.headers.get('mcp-session-id'), session, 'new session per handshake');
@@ -340,7 +341,7 @@ test('sse responseMode wraps JSON-RPC answers as text/event-stream', async () =>
 test('get_credits, base64 audio, unknown tool, unknown method and malformed bodies', async () => {
   await using suno = await startFakeSunoMcp({ credits: 7, includeBase64: true, clipsPerCall: 1 });
   const credits = await rpc(suno.url, 'tools/call', { name: 'get_credits', arguments: {} });
-  assert.deepEqual(JSON.parse(credits.json.result.content[0].text), { credits: 7 });
+  assert.deepEqual(JSON.parse(credits.json.result.content[0].text), { credits: 7, account: DEFAULT_ACCOUNT });
   const [clip] = await generate(suno);
   assert.deepEqual(Buffer.from(clip.audio_base64, 'base64'), FAKE_AUDIO_BYTES);
   assert.equal(clip.format, 'mp3');
@@ -375,4 +376,82 @@ test('tools list fixture is preferred when present and unknown scenarios are rej
     rmSync(dir, { recursive: true, force: true });
   }
   await assert.rejects(startFakeSunoMcp({ scenario: 'boom' }), /cenário desconhecido/);
+});
+
+async function accountOf(suno, token) {
+  const res = await rpc(suno.url, 'tools/call', { name: 'get_account', arguments: {} }, { token });
+  assert.equal(res.status, 200);
+  return JSON.parse(res.json.result.content[0].text).account;
+}
+
+const ACCOUNT_A = { id: 'suno-sub-aaa', email: 'ana@suno.test', label: 'Ana' };
+const ACCOUNT_B = { id: 'suno-sub-bbb', email: 'bia@suno.test', label: 'Bia' };
+
+test('account identity is exposed in get_account, get_credits, initialize _meta and recorded per request', async () => {
+  await using suno = await startFakeSunoMcp({ account: ACCOUNT_A });
+  assert.deepEqual(await accountOf(suno), ACCOUNT_A);
+  const credits = await rpc(suno.url, 'tools/call', { name: 'get_credits', arguments: {} });
+  assert.deepEqual(JSON.parse(credits.json.result.content[0].text).account, ACCOUNT_A);
+  const init = await rpc(suno.url, 'initialize');
+  assert.deepEqual(init.json.result._meta['suno/account'], ACCOUNT_A);
+  await generate(suno);
+  assert.equal(suno.generationCalls()[0].accountId, ACCOUNT_A.id);
+  assert.equal(suno.generationCalls().length, 1, 'identity lookups are not generations');
+  await using defaults = await startFakeSunoMcp();
+  assert.deepEqual(await accountOf(defaults), DEFAULT_ACCOUNT);
+});
+
+test('one instance serves two different Suno accounts by bearer, and setAccount swaps one at runtime', async () => {
+  await using suno = await startFakeSunoMcp({ accounts: { 'tok-a': ACCOUNT_A, 'tok-b': ACCOUNT_B } });
+  assert.equal(suno.token, 'tok-a');
+  assert.deepEqual(await accountOf(suno, 'tok-a'), ACCOUNT_A);
+  assert.deepEqual(await accountOf(suno, 'tok-b'), ACCOUNT_B);
+  assert.equal((await rpc(suno.url, 'tools/list', {}, { token: DEFAULT_TOKEN })).status, 401);
+  await generate(suno, 'a', { token: 'tok-a' });
+  await generate(suno, 'b', { token: 'tok-b' });
+  assert.deepEqual(suno.generationCalls().map((req) => req.accountId), [ACCOUNT_A.id, ACCOUNT_B.id]);
+  suno.setAccount(ACCOUNT_B, 'tok-a');
+  assert.deepEqual(await accountOf(suno, 'tok-a'), ACCOUNT_B);
+  suno.addAccount('tok-c', null);
+  assert.equal(await accountOf(suno, 'tok-c'), null, 'Suno without a stable identity');
+  assert.deepEqual(suno.accountFor('tok-b'), ACCOUNT_B);
+});
+
+test('same Suno account behind two bearers simulates an account already linked to another PIA', async () => {
+  await using suno = await startFakeSunoMcp({ accounts: { 'tok-pia-1': ACCOUNT_A, 'tok-pia-2': ACCOUNT_A } });
+  const first = await accountOf(suno, 'tok-pia-1');
+  const second = await accountOf(suno, 'tok-pia-2');
+  assert.equal(first.id, second.id, 'stable id collides, so pia-server must answer suno_account_owned_elsewhere');
+});
+
+test('two fake instances run in parallel, each with its own account, port and clips', async () => {
+  const [a, b] = await Promise.all([
+    startFakeSunoMcp({ account: ACCOUNT_A, scenario: 'success' }),
+    startFakeSunoMcp({ account: ACCOUNT_B, scenario: '402' }),
+  ]);
+  try {
+    assert.notEqual(a.port, b.port);
+    const [accountA, accountB, clipsA, deniedB] = await Promise.all([
+      accountOf(a),
+      accountOf(b),
+      generate(a),
+      rpc(b.url, 'tools/call', { name: 'generate_music', arguments: {} }),
+    ]);
+    assert.deepEqual(accountA, ACCOUNT_A);
+    assert.deepEqual(accountB, ACCOUNT_B);
+    assert.equal(deniedB.status, 402);
+    assert.equal((await download(clipsA[0].audio_url)).status, 200);
+    assert.equal((await download(`${b.audioBaseUrl}/${clipsA[0].id}.mp3`)).status, 404, 'clips are per instance');
+    await a.close();
+    assert.deepEqual(await accountOf(b), ACCOUNT_B, 'closing one does not affect the other');
+  } finally {
+    await Promise.all([a.close(), b.close()]);
+  }
+});
+
+test('with auth disabled the single account still comes back and setAccount changes it', async () => {
+  await using suno = await startFakeSunoMcp({ token: null, account: ACCOUNT_B });
+  assert.deepEqual(await accountOf(suno, null), ACCOUNT_B);
+  suno.setAccount(null);
+  assert.equal(await accountOf(suno, null), null);
 });

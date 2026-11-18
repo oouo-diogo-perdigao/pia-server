@@ -45,6 +45,13 @@
  *                    usado só se existir e tiver tools; hoje não existe porque o schema real
  *                    ainda não foi capturado, ver o spike da T10).
  *   credits          valor de `get_credits` (padrão 42).
+ *   account          identidade da conta Suno do bearer `token` (padrão DEFAULT_ACCOUNT).
+ *                    Formato { id, email, label }: `id` é a identidade estável (o
+ *                    `suno_subject` do ESCOPO v3), `email`/`label` são exibição. `null`
+ *                    simula um Suno que não expõe identidade.
+ *   accounts         mapa bearer → conta ({ [token]: account }), para uma instância
+ *                    aceitar vários tokens, cada um de uma conta. Se informado, substitui
+ *                    `token`/`account` (o `token` passa a ser o primeiro do mapa).
  *   clipsPerCall     clips por geração (padrão 2). Use 1 para `incomplete_batch`.
  *   requested        N pedido no job (opcional). Só serve para observabilidade: os clips
  *                    prontos além de N, contando todas as gerações, ficam marcados como extra em
@@ -68,6 +75,24 @@
  *   503 / 500  HTTP 5xx, JSON-RPC error -32000 'Suno unavailable'.
  *   Exemplo CA07 (N=3): ['partial', '503'] → o lote para no clip com falha, 1 tools/call.
  *
+ * Identidade da conta Suno (ESCOPO v3)
+ *   O mock Python não expõe identidade e o schema real ainda não foi capturado (spike da
+ *   T10), então o lugar é uma suposição: o cliente da T3b deve isolar a leitura numa função.
+ *   A conta do bearer da requisição aparece em três lugares:
+ *     - tools/call `get_account` (tool nova no catálogo heurístico): { account: { id, email, label } }
+ *     - tools/call `get_credits`: { credits, account }
+ *     - initialize: result._meta['suno/account']
+ *   Cada requisição gravada traz `accountId` (conta do bearer, ou null).
+ *   - Duas contas diferentes: `accounts: { tokA: contaA, tokB: contaB }` numa instância
+ *     (o mesmo endpoint MCP, como o Suno real), ou duas instâncias em paralelo, cada uma
+ *     com o seu `account` (portas independentes).
+ *   - Conta já ligada a outro PIA: dois bearers (dois OAuth de PIAs diferentes) que
+ *     resolvem para a MESMA conta, ex. `accounts: { tokPia1: conta, tokPia2: conta }`;
+ *     quem decide o 409 `suno_account_owned_elsewhere` é a pia-server (UNIQUE no id).
+ *   - setAccount(account, token?) troca a conta de um bearer em runtime (ex.: o usuário
+ *     reconectou com outra conta Suno); addAccount(token, account) aceita mais um bearer.
+ *   - O fake não implementa o OAuth (DCR/token/refresh); isso é o fake OAuth da T2.
+ *
  * Download do áudio (`audioBehavior`, por clip; GET /audio/<clipId>.mp3)
  *   'ok'         200, FAKE_AUDIO_BYTES, audio/mpeg.
  *   403/404/500  status correspondente (número, string numérica ou { status }).
@@ -83,7 +108,8 @@
  *   nem gerar erro não tratado. Outros erros de socket também são anotados.
  *
  * Divergências do mock Python: API assíncrona (start/close com Promise) em vez de thread;
- * tempos em ms; opção `responseMode: 'sse'`; cenário novo `odd_extra` e as opções
+ * tempos em ms; opção `responseMode: 'sse'`; identidade da conta (`account`/`accounts`,
+ * tool `get_account`, `account` no `get_credits`, `_meta` no initialize; o Python não tem); cenário novo `odd_extra` e as opções
  * `requested`/`extraClips()`/`audioDownloads()`; helper `splitRequestedAndExtra` (regra
  * RN10, o extra é salvo) ao lado do `takeNClips` original (que descarta).
  *
@@ -96,6 +122,7 @@ import { createServer } from 'node:http';
 
 export const CLIPS_PER_CALL = 2;
 export const DEFAULT_TOKEN = 'suno-test-token';
+export const DEFAULT_ACCOUNT = Object.freeze({ id: 'suno-user-fake-1', email: 'fake1@suno.test', label: 'Fake Suno 1' });
 export const DEFAULT_PROTOCOL_VERSION = '2025-11-25';
 export const DEFAULT_TIMEOUT_DELAY_MS = 1500;
 export const DEFAULT_LARGE_AUDIO_SIZE = 256 * 1024;
@@ -129,6 +156,11 @@ export const DEFAULT_TOOLS = Object.freeze([
       },
       required: ['prompt'],
     },
+  },
+  {
+    name: 'get_account',
+    description: 'Identidade da conta Suno autenticada (suposição do fake; confirmar no spike).',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'get_credits',
@@ -251,7 +283,16 @@ export async function startFakeSunoMcp(options = {}) {
 export class FakeSunoMcp {
   constructor(options = {}) {
     this.host = options.host || '127.0.0.1';
-    this.token = options.token === undefined ? DEFAULT_TOKEN : options.token;
+    this._accounts = new Map();
+    if (options.accounts && typeof options.accounts === 'object') {
+      for (const [token, account] of Object.entries(options.accounts)) this._accounts.set(token, account ?? null);
+      if (!this._accounts.size) throw new Error('accounts precisa de pelo menos um bearer');
+      this.token = [...this._accounts.keys()][0];
+    } else {
+      this.token = options.token === undefined ? DEFAULT_TOKEN : options.token;
+      if (this.token) this._accounts.set(this.token, options.account === undefined ? DEFAULT_ACCOUNT : options.account);
+    }
+    this._openAccount = options.account === undefined ? DEFAULT_ACCOUNT : options.account;
     this.timeoutDelayMs = options.timeoutDelayMs ?? DEFAULT_TIMEOUT_DELAY_MS;
     this.requireSession = Boolean(options.requireSession);
     this.authOnInitialize = options.authOnInitialize ?? true;
@@ -367,6 +408,24 @@ export class FakeSunoMcp {
     this._generationIndex = 0;
   }
 
+  /** Troca a conta Suno de um bearer (padrão: `token`). Sem auth, troca a conta única. */
+  setAccount(account, token = this.token) {
+    if (!token) this._openAccount = account ?? null;
+    else this._accounts.set(token, account ?? null);
+  }
+
+  /** Aceita mais um bearer, ligado a `account`. */
+  addAccount(token, account) {
+    if (!token) throw new Error('token obrigatório');
+    this._accounts.set(token, account ?? null);
+  }
+
+  /** Conta de um bearer (ou a conta única quando a auth está desligada). */
+  accountFor(token = this.token) {
+    if (!this.token) return this._openAccount;
+    return this._accounts.has(token) ? this._accounts.get(token) : null;
+  }
+
   setScenario(scenario) {
     this.setScenarios(scenario);
   }
@@ -467,6 +526,7 @@ export class FakeSunoMcp {
       toolName: typeof params?.name === 'string' ? params.name : null,
       toolArguments: params?.arguments && typeof params.arguments === 'object' ? params.arguments : null,
       status,
+      accountId: this._accountOf(req)?.id ?? null,
       ...extra,
     };
     this.requests.push(recorded);
@@ -512,8 +572,19 @@ export class FakeSunoMcp {
     this._rpcError(res, 401, rpcId, -32001, this._errorMessage('unauthorized'), { 'WWW-Authenticate': 'Bearer' });
   }
 
+  _bearer(req) {
+    const match = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    return match ? match[1] : null;
+  }
+
   _authorized(req) {
-    return !this.token || req.headers.authorization === `Bearer ${this.token}`;
+    return !this.token || this._accounts.has(this._bearer(req));
+  }
+
+  _accountOf(req) {
+    if (!this.token) return this._openAccount;
+    const bearer = this._bearer(req);
+    return this._accounts.has(bearer) ? this._accounts.get(bearer) : null;
   }
 
   _validSession(req) {
@@ -589,6 +660,7 @@ export class FakeSunoMcp {
         protocolVersion: DEFAULT_PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'fake-suno-mcp', version: '0.1.0' },
+        _meta: { 'suno/account': this._accountOf(req) },
       };
       return this._sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result }, { 'Mcp-Session-Id': sessionId });
     }
@@ -619,9 +691,11 @@ export class FakeSunoMcp {
     const toolName = String(params.name || '');
     const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
 
-    if (toolName === 'get_credits') {
+    if (toolName === 'get_credits' || toolName === 'get_account') {
       this._record(req, body, payload, 200);
-      const result = { content: [{ type: 'text', text: JSON.stringify({ credits: this.credits }) }] };
+      const account = this._accountOf(req);
+      const data = toolName === 'get_credits' ? { credits: this.credits, account } : { account };
+      const result = { content: [{ type: 'text', text: JSON.stringify(data) }] };
       return this._sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result });
     }
     if (toolName !== this.generationTool && !GENERATION_TOOL_CANDIDATES.includes(toolName)) {
