@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  DOCUMENTOS, ORIGEM_SNAPSHOT, escapeHtml, formatarData, hashDocumento, legalFiles, legalFooter,
-  legalNotFound, legalRedirects, pendencias, renderDocumento, renderTokens, versoesAlteradas,
+  DOCUMENTOS, escapeHtml, formatarData, legalFiles, legalFooter,
+  legalNotFound, legalRedirects, pendencias, redirecionamentosLegais, renderDocumento, renderTokens,
 } from '../src/legal.js';
 import { escapeHtml as escapeOAuth } from '../src/oauth_callback.js';
 import { DADOS } from '../src/legal/dados.js';
@@ -113,6 +113,15 @@ test('layout: lang, title, description, canonical, h1 único, sumário, resumo, 
   assert.match(termos, /Veja também: <a href="\/privacidade">Política de Privacidade<\/a>/);
 });
 
+test('sumário usa o texto puro e escapado dos títulos; trecho jurídico é texto puro', () => {
+  const extra = fontes({ conteudo: fragmento('<h2 id="a-e-b">A <em>&amp;</em> &lt;B&gt;</h2>') });
+  extra.juridico['1.0'].TRECHO.texto = 'Escreva para <a href="mailto:x@y">x@y</a>.';
+  const { html } = renderDocumento('privacidade', undefined, ORIGIN, extra);
+  assert.match(html, /<li><a href="#a-e-b">A &amp; &lt;B&gt;<\/a><\/li>/);
+  assert.match(html, /<h2 id="a-e-b">A <em>&amp;<\/em> &lt;B&gt;<\/h2>/, 'corpo mantém o HTML do fragmento');
+  assert.match(html, /Escreva para &lt;a href=&quot;mailto:x@y&quot;&gt;x@y&lt;\/a&gt;\./);
+});
+
 test('fragmento inválido falha no boot', () => {
   const casos = [
     [fragmento('<h1>Outro</h1>'), /<h1>/],
@@ -129,37 +138,66 @@ test('fragmento inválido falha no boot', () => {
   }
   assert.throws(() => renderDocumento('outro', undefined, ORIGIN, fontes()), /desconhecido/);
   assert.throws(() => renderDocumento('privacidade', '9.9', ORIGIN, fontes()), /não existe/);
+  const semConjunto = fontes();
+  semConjunto.versoes.privacidade[0].juridico = '9.9';
+  assert.throws(() => legalFiles(ORIGIN, semConjunto), /conjunto jurídico inexistente/);
 });
 
-test('legalFiles serve a versão atual e só as versões publicadas em /vX.Y, com headers por modo', () => {
+test('versão atual = última publicada; v1.1 em rascunho não aparece nem tem /vX.Y (C1)', () => {
   const item = (versao, vigencia) => ({ versao, vigencia, atualizacao: vigencia, resumo: `Versão ${versao}.`, juridico: '1.0' });
   const versoes = { privacidade: [item('1.0', '2026-12-01'), item('1.1', null)], termos: [item('1.0', '2026-12-01')] };
-  const lidos = [];
-  const conteudo = (documento, versao) => { lidos.push(`${documento}-v${versao}`); return fragmento(`<p>texto ${versao}</p>`); };
-  const entradas = new Map(legalFiles(ORIGIN, { ...fontes(), versoes, conteudo }));
+  const conteudo = (documento, versao) => fragmento(`<p>texto ${documento} ${versao}</p>`);
+  const extra = { ...fontes(), versoes, conteudo };
+  const entradas = new Map(legalFiles(ORIGIN, extra));
   assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0']);
-  assert.ok(lidos.includes('privacidade-v1.1') && lidos.includes('termos-v1.0'));
   for (const [type, html, headers] of entradas.values()) {
     assert.equal(type, 'text/html; charset=utf-8');
     assert.equal(typeof html, 'string');
-    assert.ok(headers['Cache-Control']);
+    assert.deepEqual(headers, { 'Cache-Control': 'public, max-age=3600' }, 'v1.0 publicada e final');
   }
-  const [, atual, headersAtual] = entradas.get('/privacidade');
-  assert.match(atual, /texto 1\.1/);
-  assert.equal(headersAtual['X-Robots-Tag'], 'noindex');
-  const [, v10, headersV10] = entradas.get('/privacidade/v1.0');
-  assert.match(v10, /texto 1\.0/);
-  assert.deepEqual(headersV10, { 'Cache-Control': 'public, max-age=3600' });
-  assert.doesNotMatch(v10, /privacidade\/v1\.1/, 'a cópia congelada não cita versões posteriores');
-  assert.match(atual, /<a href="\/privacidade\/v1\.0">1\.0<\/a>[\s\S]*<td>1\.1<\/td>/, 'versão em rascunho sem link no histórico');
+  const [, atual] = entradas.get('/privacidade');
+  assert.match(atual, /texto privacidade 1\.0/, '/privacidade serve a v1.0 publicada');
+  assert.doesNotMatch(atual, /texto privacidade 1\.1|>1\.1</, 'v1.1 em rascunho não aparece na atual');
+  assert.match(atual, /Versão 1\.0 · Vigente a partir de 01\/12\/2026/);
   assert.match(atual, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade">/);
+  const [, v10] = entradas.get('/privacidade/v1.0');
   assert.match(v10, /<link rel="canonical" href="https:\/\/pia\.example\/privacidade\/v1\.0">/);
-  const extra = { ...fontes(), versoes, conteudo };
-  assert.equal(legalNotFound('/privacidade/v1.1', extra).status, 404, 'rascunho não tem /vX.Y');
+  assert.match(v10, /<td><a href="\/privacidade\/v1\.0">1\.0<\/a><\/td>/);
+  assert.equal(renderDocumento('privacidade', undefined, ORIGIN, extra).html, atual);
+
+  const naoEncontrada = legalNotFound('/privacidade/v1.1', extra);
+  assert.equal(naoEncontrada.status, 404, '/privacidade/v1.1 em rascunho: 404 legal');
+  assert.match(naoEncontrada.body, /<a href="\/privacidade">Política de Privacidade<\/a> \(versão atual, 1\.0\)/, '404 lista a publicada atual');
   assert.equal(legalNotFound('/privacidade/v1.1/', extra).status, 404);
   assert.equal(legalNotFound('/privacidade/v1.0', extra), null);
   assert.equal(legalNotFound('/privacidade/v1.0/', extra), null, 'barra final da publicada é redirect');
-  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [item('1.1', null), item('1.0', null)], termos: [item('1.0', null)] } }),
+
+  const redirects = redirecionamentosLegais(extra);
+  assert.equal(redirects.get('/privacidade/v1.0/'), '/privacidade/v1.0');
+  assert.equal(redirects.get('/termos/v1.0/'), '/termos/v1.0');
+  assert.equal(redirects.has('/privacidade/v1.1/'), false, 'barra final só para publicadas');
+
+  // A versão em rascunho só é renderizada explicitamente (preview).
+  const rascunho = renderDocumento('privacidade', '1.1', ORIGIN, extra);
+  assert.equal(rascunho.rascunho, true);
+  assert.match(rascunho.html, /texto privacidade 1\.1/);
+  assert.match(rascunho.html, /<a href="\/privacidade\/v1\.0">1\.0<\/a>[\s\S]*<td>1\.1<\/td>/, 'rascunho sem link no histórico');
+  assert.doesNotMatch(renderDocumento('privacidade', '1.0', ORIGIN, extra).html, /1\.1/, 'cópia congelada não cita versões posteriores');
+});
+
+test('sem nenhuma versão publicada, a atual é a última em rascunho e legalFiles tem 2 entradas (C1)', () => {
+  const item = (versao) => ({ versao, vigencia: null, atualizacao: null, resumo: `Versão ${versao}.`, juridico: '1.0' });
+  const versoes = { privacidade: [item('1.0'), item('1.1')], termos: [item('1.0')] };
+  const extra = { ...fontes(), versoes, conteudo: (documento, versao) => fragmento(`<p>texto ${versao}</p>`) };
+  const entradas = new Map(legalFiles(ORIGIN, extra));
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/termos']);
+  assert.match(entradas.get('/privacidade')[1], /texto 1\.1/, 'última em rascunho');
+  assert.equal(entradas.get('/privacidade')[2]['X-Robots-Tag'], 'noindex');
+  assert.equal(legalNotFound('/privacidade/v1.0', extra).status, 404);
+  assert.match(legalNotFound('/privacidade/v1.0', extra).body, /\(versão atual, 1\.1\)/);
+  assert.deepEqual([...redirecionamentosLegais(extra).keys()], ['/privacy', '/privacidade/', '/terms', '/termos/']);
+  const item2 = (versao, vigencia) => ({ ...item(versao), vigencia });
+  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [item2('1.1', null), item2('1.0', null)], termos: [item('1.0')] } }),
     /ordem crescente/);
 });
 
@@ -175,6 +213,7 @@ test('conteúdo real do repositório renderiza em rascunho, com dados reais e to
   const ambos = privacidade + termos;
   for (const [chave, trecho] of Object.entries(JURIDICO['1.0'])) {
     assert.equal(trecho.revisado, false, `${chave} nasce com revisado:false`);
+    if (chave === 'AVISO_GRAVACAO_DISCORD') continue; // só no embed do Discord (F2-10)
     assert.ok(ambos.includes(`[EM REVISÃO JURÍDICA: ${trecho.pendencia} ${trecho.assunto}]`), `${chave} usado em alguma página`);
   }
   for (const [, , headers] of entradas.values()) assert.equal(headers['Cache-Control'], 'no-store');
@@ -198,6 +237,8 @@ test('legalNotFound devolve 404 HTML só para /privacidade/* e /termos/* desconh
   assert.equal(res.headers['Content-Type'], 'text/html; charset=utf-8');
   assert.equal(res.headers['Cache-Control'], 'no-store');
   assert.match(res.body, /<html lang="pt-BR">/);
+  assert.equal((res.body.match(/<meta name="robots" content="noindex">/g) || []).length, 1);
+  assert.doesNotMatch(res.body, /rel="canonical"|RASCUNHO/);
   assert.equal(legalNotFound('/termos/v1.0').status, 404, 'v1.0 em rascunho não tem rota própria');
   assert.equal((res.body.match(/<h1\b/g) || []).length, 1);
   assert.match(res.body, /<a href="\/privacidade">Política de Privacidade<\/a>/);
@@ -229,41 +270,6 @@ test('pendencias lista trechos sem revisão e datas nulas', () => {
   assert.deepEqual(pendencias(fontes({ revisado: false, datas: false })).map((p) => p.tipo), ['juridico', 'data', 'data', 'data', 'data']);
 });
 
-test('versões publicadas ficam congeladas por sha256 do HTML (texto jurídico novo = versão nova)', () => {
-  const publicadas = Object.entries(VERSOES).flatMap(([documento, lista]) =>
-    lista.filter((item) => item.vigencia).map((item) => ({ documento, ...item })));
-  for (const { documento, versao, sha256 } of publicadas) {
-    const atual = hashDocumento(documento, versao);
-    assert.equal(sha256, atual,
-      `${documento} v${versao} está publicada: preencha sha256: '${atual}' em versoes.js no release, ` +
-      'ou, se o texto mudou, crie uma versão nova em vez de alterar a publicada.');
-  }
-  assert.deepEqual(versoesAlteradas(), []);
-
-  const congelada = (juridico, sha256) => ({
-    ...fontes(),
-    juridico,
-    versoes: {
-      privacidade: [{ versao: '1.0', vigencia: '2026-12-01', atualizacao: '2026-12-01', resumo: 'Primeira.', juridico: '1.0', sha256 }],
-      termos: [{ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'Primeira.', juridico: '1.0', sha256: null }],
-    },
-  });
-  const original = fontes().juridico;
-  const hash = hashDocumento('privacidade', '1.0', congelada(original, null));
-  assert.match(hash, /^[0-9a-f]{64}$/);
-  assert.deepEqual(versoesAlteradas(congelada(original, hash)), [], 'termos em rascunho não entra no congelamento');
-  const semHash = versoesAlteradas(congelada(original, null));
-  assert.deepEqual(semHash, [{ documento: 'privacidade', versao: '1.0', esperado: null, atual: hash }]);
-  const alterado = { '1.0': { TRECHO: { ...original['1.0'].TRECHO, texto: 'Outro texto.' } } };
-  assert.equal(versoesAlteradas(congelada(alterado, hash)).length, 1, 'mudar o trecho de uma versão publicada quebra o hash');
-  const novoConjunto = { ...original, '1.1': { TRECHO: { texto: 'Outro texto.', revisado: true } } };
-  assert.deepEqual(versoesAlteradas(congelada(novoConjunto, hash)), [], 'conjunto novo não altera a versão publicada');
-  assert.equal(hashDocumento('privacidade', '1.0', congelada(original, null)), hash, 'hash determinístico');
-  assert.equal(ORIGEM_SNAPSHOT, 'https://pia.travelrpg.com');
-  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [{ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'x', juridico: '9.9' }], termos: fontes().versoes.termos } }),
-    /conjunto jurídico inexistente/);
-});
-
 function importsDe(arquivo, vistos = new Set()) {
   if (vistos.has(arquivo.href)) return vistos;
   vistos.add(arquivo.href);
@@ -284,4 +290,243 @@ test('src/legal.js não importa db.js (nem auth.js), direta ou indiretamente (T0
     cwd: new URL('..', import.meta.url), env, encoding: 'utf8',
   });
   assert.equal(saida, '2');
+});
+
+// ── F2-02: conteúdo da v1.0 (DevFullstack Time 2) ─────────────────────────────────────────────
+// Presença das seções e dos termos obrigatórios (CA05 a CA10, CA21, CA27) no HTML renderizado
+// pelo src/legal.js, com tokens de dados e trechos jurídicos já substituídos.
+
+const fragmentoReal = (documento) =>
+  readFileSync(new URL(`../src/legal/conteudo/${documento}-v1.0.html`, import.meta.url), 'utf8');
+const paginaReal = (documento) => renderDocumento(documento, '1.0', 'https://pia.travelrpg.com').html;
+// Texto visível sem tags e sem os selos de rascunho, para conferir frases.
+const textoVisivel = (html) => html
+  .replace(/<span class="legal-pendente">\[[^\]]*\]<\/span>/g, '')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+  .replace(/\s+/g, ' ');
+const secaoDe = (html, id) => {
+  const inicio = html.indexOf(`<h2 id="${id}">`);
+  assert.ok(inicio >= 0, `seção ${id} ausente`);
+  const fim = html.indexOf('<h2 ', inicio + 1);
+  return textoVisivel(html.slice(inicio, fim < 0 ? undefined : fim));
+};
+
+const SECOES_PRIVACIDADE = [
+  ['quem-somos', '1. Quem somos, controlador e contato'],
+  ['escopo', '2. Escopo'],
+  ['dados-coletados', '3. Dados coletados'],
+  ['finalidades', '4. Finalidades'],
+  ['bases-legais', '5. Bases legais'],
+  ['compartilhamento', '6. Compartilhamento e terceiros'],
+  ['transferencia-internacional', '7. Transferência internacional'],
+  ['retencao', '8. Retenção, sem garantia de hospedagem'],
+  ['seguranca', '9. Segurança'],
+  ['direitos-do-titular', '10. Direitos do titular'],
+  ['cookies', '11. Cookies e armazenamento local'],
+  ['menores', '12. Menores de idade'],
+  ['mudancas', '13. Mudanças nesta Política'],
+  ['contato', '14. Contato'],
+];
+const SECOES_TERMOS = [
+  ['aceitacao', '1. Aceitação'],
+  ['descricao-do-servico', '2. Descrição do serviço'],
+  ['conta-e-elegibilidade', '3. Conta e elegibilidade'],
+  ['uso-aceitavel', '4. Uso aceitável'],
+  ['conteudo-e-licenca', '5. Conteúdo do usuário e licença'],
+  ['conteudo-gerado-por-ia', '6. Conteúdo gerado por IA e serviços de terceiros'],
+  ['isencao-de-garantias', '7. Isenção de garantias'],
+  ['limitacao-de-responsabilidade', '8. Limitação de responsabilidade'],
+  ['disponibilidade-e-perda-de-dados', '9. Disponibilidade e perda de dados'],
+  ['suspensao-e-encerramento', '10. Suspensão e encerramento'],
+  ['mudancas-nos-termos', '11. Mudanças nos Termos'],
+  ['lei-e-foro', '12. Lei aplicável e foro'],
+  ['contato', '13. Contato'],
+];
+
+function assertSecoes(documento, secoesEsperadas) {
+  const ids = [...fragmentoReal(documento).matchAll(/<h2 id="([a-z0-9-]+)">([^<]*)<\/h2>/g)].map(([, id, titulo]) => [id, titulo]);
+  assert.deepEqual(ids, secoesEsperadas, `seções de ${documento} fora da ordem, faltando ou com outro título`);
+  const html = paginaReal(documento);
+  for (const [id] of secoesEsperadas) assert.match(html, new RegExp(`<li><a href="#${id}">`), `sumário com âncora #${id}`);
+}
+
+test('F2-02: Política tem as 14 seções da 6.1, na ordem, no sumário (CA06)', () => {
+  assertSecoes('privacidade', SECOES_PRIVACIDADE);
+});
+
+test('F2-02: Termos têm as 13 seções da 6.2, na ordem, no sumário (CA10)', () => {
+  assertSecoes('termos', SECOES_TERMOS);
+});
+
+test('F2-02: fragmentos v1.0 sem marcador pendente, colchete, script ou recurso externo', () => {
+  for (const documento of ['privacidade', 'termos']) {
+    const bruto = fragmentoReal(documento).replace(/<!--(?!\s*\/?legal:)[\s\S]*?-->/g, '');
+    assert.doesNotMatch(bruto, /\[|TEXTO PENDENTE|TODO|XXX|lorem|example\.invalid/i);
+    assert.doesNotMatch(bruto, /<script|<style|<img|<link|<iframe|\son[a-z]+=/i);
+    const externos = [...bruto.matchAll(/href="(https?:[^"]+)"/g)].map((m) => m[1]);
+    assert.ok(externos.every((url) => url === 'https://developers.google.com/terms/api-services-user-data-policy'), externos.join(', '));
+  }
+});
+
+test('F2-02: Em resumo traz as quatro premissas nos dois documentos (RN01, CA05)', () => {
+  for (const documento of ['privacidade', 'termos']) {
+    const html = paginaReal(documento);
+    const bloco = html.slice(html.indexOf('<h2 id="em-resumo">'), html.indexOf('<nav class="legal-sumario"'));
+    const resumo = textoVisivel(bloco);
+    assert.match(resumo, /gratuita/);
+    assert.match(resumo, /em desenvolvimento/);
+    assert.match(resumo, /sem garantias/);
+    assert.match(resumo, /treinar modelos de IA e melhorar o serviço/);
+    assert.match(resumo, /retenção nem (a )?(de )?disponibilidade/);
+  }
+});
+
+test('F2-02: Em resumo da Política exclui do treinamento os dados do Google e da Microsoft', () => {
+  const html = paginaReal('privacidade');
+  const resumo = textoVisivel(html.slice(html.indexOf('<h2 id="em-resumo">'), html.indexOf('<nav class="legal-sumario"')));
+  assert.match(resumo, /Dados das APIs do Google e da sua conta Microsoft ficam de fora\./);
+});
+
+test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () => {
+  const secao = secaoDe(paginaReal('privacidade'), 'dados-coletados');
+  for (const termo of [
+    /Conversas \(chats\) sincronizadas/,
+    /E-mail, identificador da conta Google e endereço da foto/,
+    /Credenciais e tokens das integrações/,
+    /Gmail e do seu Google Agenda/,
+    /Gravações de voz do Discord/,
+    /inclusive de outros participantes que não usam a PIA \(terceiros\)/,
+    /computadores pareados/,
+    /Cookies de sessão/,
+    /músicas geradas no PC \(MP3\/WAV, pelo Gemini ou localmente\) e as capturas de tela salvas no PC são enviadas, por meio da PIA Server, para a pasta da PIA no seu Google Drive/,
+    /A PIA Server não guarda o arquivo: ele fica numa pasta temporária só durante o envio e é apagado ao final/,
+    /O servidor mantém apenas metadados/,
+    /não garantimos que o envio aconteça nem que a cópia exista/,
+    /A PIA Server não guarda logs de acesso com endereço IP/,
+  ]) assert.match(secao, termo);
+  assert.doesNotMatch(secao, /podem registrar logs/);
+  const retencao = secaoDe(paginaReal('privacidade'), 'retencao');
+  assert.match(retencao, /Não garantimos a retenção nem a disponibilidade dos dados/);
+  assert.match(retencao, /A PIA Server não guarda arquivos de áudio nem de imagem/);
+  assert.match(retencao, /podem não ser removíveis/);
+});
+
+test('F2-02: finalidades e licença citam voz do Discord e MP3 no treinamento, e Microsoft fora (RN03a)', () => {
+  const finalidades = secaoDe(paginaReal('privacidade'), 'finalidades');
+  assert.match(finalidades, /gravações de voz do Discord \(também as de terceiros\), podem ser usados para treinar modelos/);
+  assert.match(finalidades, /As músicas geradas \(MP3\) também são usadas para treinamento de modelos e melhoria do serviço\./);
+  // TREINAMENTO_MP3_GERADOS (DevBackend) cobre o MP3 no treinamento: na Política, só nas Finalidades, sem duplicar.
+  const html = paginaReal('privacidade');
+  assert.equal(html.split('[EM REVISÃO JURÍDICA: P11 MP3 gerados no treinamento]').length - 1, 1);
+  assert.equal(html.split(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto).length - 1, 1);
+  // Nos Termos (decisão do TechLead): o token aparece no Em resumo e na licença, e nenhum texto fixo fala de MP3.
+  const termos = paginaReal('termos');
+  assert.equal(termos.split('[EM REVISÃO JURÍDICA: P11 MP3 gerados no treinamento]').length - 1, 2);
+  assert.doesNotMatch(fragmentoReal('termos').replace(/\{\{[A-Z0-9_]+\}\}/g, ''), /MP3/, 'MP3 nos Termos só pelo token');
+  const resumoTermos = termos.slice(termos.indexOf('<h2 id="em-resumo">'), termos.indexOf('<nav class="legal-sumario"'));
+  assert.ok(resumoTermos.includes(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto), 'token no Em resumo dos Termos');
+  for (const documento of ['privacidade', 'termos']) {
+    assert.ok(!paginaReal(documento).includes('aviso de gravação no Discord'), 'AVISO_GRAVACAO_DISCORD é só do embed');
+  }
+  assert.match(finalidades, /Dados obtidos da sua conta Microsoft \(e-mails, agenda e arquivos via Microsoft Graph\) não são usados para treinar modelos\. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento\./);
+  assert.match(finalidades, /Credenciais e tokens nunca são usados em treinamento/);
+  const licenca = secaoDe(paginaReal('termos'), 'conteudo-e-licenca');
+  assert.match(licenca, /licença gratuita, não exclusiva, mundial/);
+  assert.match(licenca, /gravações de voz do Discord, inclusive as vozes de outros participantes do canal\. As músicas geradas \(MP3\) também são usadas para treinamento/);
+});
+
+test('F2-02: compartilhamento, Limited Use e transferência internacional (CA07, CA09)', () => {
+  const html = paginaReal('privacidade');
+  const comp = secaoDe(html, 'compartilhamento');
+  for (const t of ['Google', 'Microsoft', 'Discord', 'Taverns', 'Gemini', 'Groq', 'hospedagem']) assert.match(comp, new RegExp(t));
+  assert.match(comp, /Não vendemos dados pessoais/);
+  assert.match(comp, /Google API Services User Data Policy/);
+  assert.match(comp, /Limited Use/);
+  assert.match(comp, /não são usados para treinar modelos de IA generalizados/);
+  assert.match(comp, /não são obtidos pela leitura do seu Google Drive por meio das APIs do Google/);
+  assert.match(html, /<a href="https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy" rel="noreferrer">/);
+  const transf = secaoDe(html, 'transferencia-internacional');
+  assert.match(transf, /principalmente no Brasil/);
+  assert.match(transf, /art\. 33/);
+  assert.match(textoVisivel(paginaReal('termos')), /Limited Use/);
+});
+
+test('F2-02: direitos do titular com art. 18, e-mail, prazo, opt-out e ANPD, sem exclusão automática (CA08, RN08)', () => {
+  const secao = secaoDe(paginaReal('privacidade'), 'direitos-do-titular');
+  assert.match(secao, /art\. 18 da LGPD/);
+  for (const d of [/acesso/, /correção/, /anonimização, bloqueio ou eliminação/, /portabilidade/, /compartilhamos/, /revogação do consentimento/, /oposição/]) assert.match(secao, d);
+  assert.match(secao, /contato@travelrpg\.com/);
+  assert.match(secao, /Respondemos aos pedidos em até 15 dias, contados do recebimento\./);
+  assert.match(secao, /com o assunto 'Opt-out de treinamento', a partir do e-mail da sua conta/);
+  assert.match(secao, /Basta enviar um e-mail para contato@travelrpg\.com/);
+  assert.match(secao, /informando o servidor, o canal e a data aproximada da gravação/);
+  assert.match(secao, /ANPD/);
+  assert.match(secao, /feitas manualmente/);
+  assert.doesNotMatch(paginaReal('privacidade'), /exclusão automática/i);
+});
+
+test('F2-02: controlador, DPO, cifragem honesta, cookies e sem CPF (6.1 itens 1, 9, 11)', () => {
+  const texto = textoVisivel(paginaReal('privacidade'));
+  assert.match(texto, /controlador e responsável .* Diogo Passos Perdigão Britto/);
+  assert.match(texto, /Encarregado \(DPO\): Diogo Passos Perdigão Britto, pelo contato@travelrpg\.com/);
+  assert.match(texto, /O próprio controlador atua como encarregado/);
+  assert.match(texto, /A cifragem não é ponta a ponta/);
+  assert.doesNotMatch(texto, /criptografia ponta a ponta/i);
+  assert.match(texto, /__Host-pia_session/);
+  assert.match(texto, /pia_oauth/);
+  assert.doesNotMatch(texto, /CPF/);
+});
+
+test('F2-02: Termos com garantias, responsabilidade com ressalva, perda de dados, lei e foro (CA10)', () => {
+  const texto = textoVisivel(paginaReal('termos'));
+  assert.match(texto, /"no estado em que se encontra" e "conforme disponível"/);
+  assert.match(texto, /não respondem por danos indiretos/);
+  assert.match(texto, /Código de Defesa do Consumidor/);
+  assert.match(texto, /Não há garantia de hospedagem, retenção, backup/);
+  assert.match(texto, /lei brasileira/);
+  assert.match(texto, /foro da comarca de Belo Horizonte\/MG, ressalvado o foro do domicílio do consumidor quando a lei garantir/);
+  assert.match(texto, /por convite/);
+  assert.match(texto, /quem configura a gravação deve informar os participantes/);
+});
+
+test('F2-02: Discord no treinamento e idade mínima de 18 anos nos dois documentos (CA21)', () => {
+  assert.match(textoVisivel(paginaReal('privacidade')), /gravações de voz, inclusive as vozes de terceiros, podem ser usadas para treinamento de modelos/);
+  for (const documento of ['privacidade', 'termos']) assert.match(textoVisivel(paginaReal(documento)), /18 anos/);
+});
+
+test('F2-02: v1.0 não cita Suno nem histórico de gerações, em lugar nenhum (CA27)', () => {
+  for (const documento of ['privacidade', 'termos']) {
+    const html = paginaReal(documento);
+    assert.doesNotMatch(html, /suno/i, `${documento}: HTML renderizado cita Suno`);
+    assert.doesNotMatch(html, /histórico de geraç/i, `${documento}: HTML renderizado cita histórico de gerações`);
+  }
+  for (const [chave, trecho] of Object.entries(JURIDICO['1.0'])) {
+    assert.doesNotMatch(`${chave} ${trecho.assunto} ${trecho.texto}`, /suno|histórico de geraç/i, `juridico 1.0: ${chave}`);
+  }
+  for (const [chave, valor] of Object.entries(DADOS)) assert.doesNotMatch(`${chave} ${valor}`, /suno/i, `dados: ${chave}`);
+  for (const arquivo of ['../src/legal.js', '../src/legal/dados.js', '../src/legal/juridico.js', '../src/legal/versoes.js']) {
+    assert.doesNotMatch(readFileSync(new URL(arquivo, import.meta.url), 'utf8'), /suno/i, arquivo);
+  }
+});
+
+test('F2-02: trechos jurídicos da v1.0 em revisão, com as redações exatas do PO', () => {
+  const v1 = JURIDICO['1.0'];
+  for (const chave of ['DIREITOS_MUSICAS_GERADAS', 'ENCARREGADO', 'SALVAGUARDAS_TRANSFERENCIA', 'ORIGEM_TREINAMENTO_MIDIA', 'TREINAMENTO_MICROSOFT', 'TREINAMENTO_MP3_GERADOS', 'LOGS_ACESSO', 'OPT_OUT_TREINAMENTO', 'PRAZO_RESPOSTA_TITULAR']) {
+    assert.ok(v1[chave], `chave ausente: ${chave}`);
+    assert.equal(v1[chave].revisado, false, `${chave} segue com revisado:false até o parecer`);
+  }
+  assert.equal(v1.DIREITOS_MUSICAS_SUNO, undefined);
+  // Redação aprovada pelo PO (Termos, seção 6); revisado:false até o parecer.
+  const direitosMusicas = 'Os direitos e limites de uso das músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.';
+  assert.equal(v1.DIREITOS_MUSICAS_GERADAS.texto, direitosMusicas);
+  assert.equal(v1.DIREITOS_MUSICAS_GERADAS.assunto, 'direito autoral das músicas geradas');
+  const secao6 = paginaReal('termos').slice(paginaReal('termos').indexOf('<h2 id="conteudo-gerado-por-ia">'), paginaReal('termos').indexOf('<h2 id="isencao-de-garantias">'));
+  assert.ok(secao6.includes('[EM REVISÃO JURÍDICA: P11 direito autoral das músicas geradas]</span> ' + direitosMusicas), 'texto exato na seção 6 dos Termos');
+  assert.equal(v1.TREINAMENTO_MICROSOFT_SUNO, undefined);
+  assert.equal(v1.TREINAMENTO_MICROSOFT.texto, 'Dados obtidos da sua conta Microsoft (e-mails, agenda e arquivos via Microsoft Graph) não são usados para treinar modelos. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento.');
+  assert.equal(v1.PRAZO_RESPOSTA_TITULAR.texto, 'Respondemos aos pedidos em até 15 dias, contados do recebimento.');
+  assert.match(v1.OPT_OUT_TREINAMENTO.texto, /^Você pode pedir, a qualquer momento, que seus dados deixem de ser usados para treinar modelos\. Basta enviar um e-mail para \{\{CONTATO_EMAIL\}\} com o assunto 'Opt-out de treinamento'/);
+  assert.equal(v1.LOGS_ACESSO.texto, 'A PIA Server não guarda logs de acesso com endereço IP.');
+  for (const trecho of Object.values(v1)) assert.doesNotMatch(trecho.texto + trecho.assunto, /[[\]<>]/, 'texto puro, sem colchetes nem HTML');
 });

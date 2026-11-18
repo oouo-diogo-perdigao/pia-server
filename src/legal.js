@@ -40,12 +40,16 @@
  *   {{VERSAO}}             versão desta página (ex.: 1.0)
  *   {{VIGENCIA}}           DD/MM/AAAA, ou selo [PREENCHER NO RELEASE: data de vigência]
  *   {{ATUALIZACAO}}        DD/MM/AAAA, ou selo [PREENCHER NO RELEASE: data de atualização]
- * Trechos jurídicos (src/legal/juridico.js), inseridos como texto escapado; com revisado:false
+ * Trechos jurídicos (src/legal/juridico.js) são TEXTO PURO: o texto é escapado e inserido sem HTML,
+ * então e-mails e URLs dentro deles não viram link (um mailto: precisa ficar no fragmento, fora do
+ * trecho, ex.: <p>{{OPT_OUT_TREINAMENTO}} <a href="mailto:{{CONTATO_EMAIL}}">…</a></p>). Com revisado:false
  * vêm precedidos do selo [EM REVISÃO JURÍDICA: <pendência> <assunto>]:
  *   {{BASE_LEGAL_TREINAMENTO}} {{CONSENTIMENTO_TERCEIROS_DISCORD}} {{LIMITACAO_CDC}}
  *   {{OPT_OUT_TREINAMENTO}} {{REMOCAO_DADOS_TREINADOS}} {{PRAZO_RESPOSTA_TITULAR}}
- *   {{TREINAMENTO_MICROSOFT_SUNO}} {{LOGS_ACESSO}}
- *   (DIREITOS_MUSICAS_SUNO e os trechos da feature 0001 ficam para a v1.1.)
+ *   {{TREINAMENTO_MICROSOFT}} {{TREINAMENTO_MP3_GERADOS}} {{LOGS_ACESSO}} {{ENCARREGADO}}
+ *   {{SALVAGUARDAS_TRANSFERENCIA}} {{ORIGEM_TREINAMENTO_MIDIA}}   (conjunto '1.0')
+ *   (Os trechos da feature 0001 ficam para a v1.1: docs/legal-v1.1-rascunho.md.)
+ *   {{AVISO_GRAVACAO_DISCORD}} existe para o embed do bot (textoJuridico); as páginas não o usam.
  *   Use cada um como um bloco de frase, por exemplo: <p>{{LOGS_ACESSO}}</p>.
  *
  * ── Rascunho × final (T02, seção 3.2) ─────────────────────────────────────────────────────────
@@ -60,8 +64,8 @@
  *   renderTokens(texto, valores) substitui {{NOME}} por valores[NOME] (já em HTML); erro se faltar.
  *   renderDocumento(documento, versao, origin, fontes?) → { html, rascunho, headers, pendencias }.
  *   legalFiles(origin, fontes?) → array de [caminho, [tipo, html, headers]] para espalhar no
- *                                mapa publicFiles: /privacidade, /termos (versão atual, mesmo em
- *                                rascunho) e /privacidade/vX.Y, /termos/vX.Y só das versões
+ *                                mapa publicFiles: /privacidade, /termos (versão atual = última
+ *                                publicada; sem nenhuma publicada, a última em rascunho) e /privacidade/vX.Y, /termos/vX.Y só das versões
  *                                publicadas (vigencia preenchida). /vX.Y em rascunho = 404 legal.
  *   legalRedirects             Map caminho → Location relativo canônico (301; a query é descartada).
  *   legalNotFound(caminho, fontes?) → { status: 404, headers, body } para /privacidade/* e /termos/*
@@ -69,10 +73,15 @@
  *   legalFooter({ ciencia })   rodapé HTML com links relativos para /privacidade e /termos;
  *                                ciencia:true acrescenta o texto de ciência do RF05.
  *   pendencias(fontes?)        lista de pendências ativas (trechos sem revisão e datas null).
+ *   textoJuridico(chave, documento?) texto simples (sem HTML) de um trecho do conjunto da versão
+ *                                atual do documento, com tokens de dados resolvidos e o selo
+ *                                [EM REVISÃO JURÍDICA: ...] na frente se revisado:false. Para o Discord.
  *   hashDocumento(doc, versao) sha256 do HTML da versão renderizada com ORIGEM_SNAPSHOT.
  *   versoesAlteradas(fontes?)  versões publicadas cujo HTML não bate com o sha256 do manifesto.
  * Congelamento: trechos jurídicos são versionados (JURIDICO['1.0']) e cada versão do manifesto
  * aponta seu conjunto; versão publicada leva sha256 e o teste falha se o HTML dela mudar.
+ * Preview local (sem banco nem variáveis PG* e GOOGLE_*), inclusive das versões em rascunho:
+ *   npm run legal:preview   (http://127.0.0.1:8790; ou -- --out <pasta> para gravar os HTML)
  * "fontes" é opcional e serve aos testes: { dados, juridico, versoes, conteudo(documento, versao) }.
  */
 import { createHash } from 'node:crypto';
@@ -188,6 +197,14 @@ function validarFontes({ dados, juridico, versoes }) {
 /** Publicada = vigência preenchida. Só versões publicadas têm rota /vX.Y. */
 const publicada = (item) => item.vigencia !== null && item.vigencia !== undefined;
 
+/**
+ * Versão atual de um documento (a servida em /privacidade e /termos): a última publicada; se
+ * nenhuma estiver publicada, a última do manifesto (rascunho, só nessas duas rotas).
+ */
+export function versaoAtual(lista) {
+  return lista.filter(publicada).at(-1) || lista.at(-1);
+}
+
 function caminho(documento, versao) {
   return versao ? `/${documento}/v${versao}` : `/${documento}`;
 }
@@ -237,6 +254,9 @@ function separarResumo(fragmento, onde) {
   return { resumo: resumo.trim(), corpo: (antes + depois).trim() };
 }
 
+const ENTIDADES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+const textoPuro = (html) => html.replace(/<[^>]*>/g, '').replace(/&(amp|lt|gt|quot|#39);/g, (e) => ENTIDADES[e]).trim();
+
 function secoes(corpo, onde) {
   const lista = [];
   const ids = new Set();
@@ -245,7 +265,8 @@ function secoes(corpo, onde) {
     if (!id) throw new Error(`${onde}: todo <h2> precisa de id="slug" (a-z, 0-9, hífen).`);
     if (ids.has(id) || RESERVADOS.has(id)) throw new Error(`${onde}: id de seção repetido ou reservado: ${id}.`);
     ids.add(id);
-    lista.push({ id, titulo: conteudo.replace(/<[^>]*>/g, '').trim() });
+    // Texto puro do título (sem tags, entidades decodificadas); escapado de novo no sumário.
+    lista.push({ id, titulo: textoPuro(conteudo) });
   }
   if (!lista.length) throw new Error(`${onde}: nenhuma seção <h2 id="..."> encontrada.`);
   return lista;
@@ -257,13 +278,13 @@ function verificarFragmento(fragmento, onde) {
   if (/\son[a-z]+\s*=/i.test(fragmento)) throw new Error(`${onde}: o fragmento não pode ter atributos on*=.`);
 }
 
-function cabecaHtml({ titulo, descricao, canonical, rascunho }) {
+function cabecaHtml({ titulo, descricao, canonical, rascunho, noindex = rascunho }) {
   return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
     '<title>' + escapeHtml(titulo) + ' · PIA</title>' +
     '<meta name="description" content="' + escapeHtml(descricao) + '">' +
     (canonical ? '<link rel="canonical" href="' + escapeHtml(canonical) + '">' : '') +
-    (rascunho ? '<meta name="robots" content="noindex">' : '') +
+    (noindex ? '<meta name="robots" content="noindex">' : '') +
     '<link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/legal.css"></head><body>' +
     (rascunho ? '<p class="legal-rascunho" role="note"><strong>RASCUNHO, não publicar.</strong> Este texto ainda tem pendências e não foi aprovado.</p>' : '');
 }
@@ -286,7 +307,8 @@ function historico(fontes, documento, ate, registro) {
 }
 
 /**
- * Renderiza uma versão de um documento. Sem `versao`, usa a atual (última do manifesto).
+ * Renderiza uma versão de um documento. Sem `versao`, usa a atual (versaoAtual: última publicada,
+ * ou a última em rascunho se nada estiver publicado).
  * Retorna { html, rascunho, headers, pendencias } e lança erro em qualquer problema de conteúdo.
  */
 export function renderDocumento(documento, versao, origin, fontes) {
@@ -295,7 +317,7 @@ export function renderDocumento(documento, versao, origin, fontes) {
   const base = fontesCom(fontes);
   origin = new URL(origin).origin;
   const lista = base.versoes[documento];
-  const item = versao ? lista.find((v) => v.versao === versao) : lista.at(-1);
+  const item = versao ? lista.find((v) => v.versao === versao) : versaoAtual(lista);
   if (!item) throw new Error(`Versão ${versao} de ${documento} não existe no manifesto.`);
   const onde = `${documento}-v${item.versao}.html`;
   const registro = new Set();
@@ -310,7 +332,7 @@ export function renderDocumento(documento, versao, origin, fontes) {
 
   const sumario = '<nav class="legal-sumario" aria-labelledby="sumario"><h2 id="sumario">Sumário</h2><ol>' +
     [{ id: 'em-resumo', titulo: 'Em resumo' }, ...lista_secoes, { id: 'historico-de-versoes', titulo: 'Histórico de versões' }]
-      .map(({ id, titulo }) => '<li><a href="#' + id + '">' + titulo + '</a></li>').join('') +
+      .map(({ id, titulo }) => '<li><a href="#' + id + '">' + escapeHtml(titulo) + '</a></li>').join('') +
     '</ol></nav>';
   const conteudo =
     '<main class="legal"><header class="legal-cabecalho">' +
@@ -376,6 +398,11 @@ function redirecionamentos(versoes) {
 /** Aliases (301) para o caminho canônico relativo. A query string deve ser descartada pelo chamador. */
 export const legalRedirects = redirecionamentos(VERSOES);
 
+/** Mesmo mapa de legalRedirects, calculado a partir de outras fontes (testes e preview). */
+export function redirecionamentosLegais(fontes) {
+  return redirecionamentos(fontesCom(fontes).versoes);
+}
+
 /**
  * 404 em HTML para /privacidade/* e /termos/* desconhecidos (ex.: /termos/v9.9), com links para as
  * versões atuais. Retorna null para qualquer outro caminho (o 404 global continua JSON).
@@ -390,7 +417,7 @@ export function legalNotFound(path, fontes) {
   }
   if (conhecidos.has(path)) return null;
   const links = Object.entries(DOCUMENTOS).map(([documento, meta]) => {
-    const atual = base.versoes[documento].at(-1).versao;
+    const atual = versaoAtual(base.versoes[documento]).versao;
     return '<li><a href="/' + documento + '">' + escapeHtml(meta.titulo) + '</a> (versão atual, ' + escapeHtml(atual) + ')</li>';
   }).join('');
   const body = cabecaHtml({
@@ -398,7 +425,8 @@ export function legalNotFound(path, fontes) {
     descricao: 'Página legal não encontrada na PIA.',
     canonical: null,
     rascunho: false,
-  }).replace('<link rel="icon"', '<meta name="robots" content="noindex"><link rel="icon"') +
+    noindex: true,
+  }) +
     '<main class="legal"><h1>Página não encontrada</h1>' +
     '<p>Esta versão ou página não existe. Consulte as versões atuais:</p><ul>' + links + '</ul>' +
     '<p><a href="/">Voltar à PIA</a></p></main></body></html>';
@@ -462,4 +490,20 @@ export function versoesAlteradas(fontes) {
     }
   }
   return lista;
+}
+
+/**
+ * Texto simples de um trecho jurídico do conjunto usado pela versão atual do documento, para uso
+ * fora do HTML (ex.: embed do Discord). Tokens de dados são resolvidos sem escape HTML; com
+ * revisado:false, o texto vem precedido do selo de rascunho.
+ */
+export function textoJuridico(chave, documento = 'privacidade', fontes) {
+  const base = fontesCom(fontes);
+  const lista = base.versoes[documento];
+  if (!lista) throw new Error(`Documento legal desconhecido: ${documento}.`);
+  const conjunto = versaoAtual(lista).juridico;
+  const trecho = base.juridico[conjunto][chave];
+  if (!trecho) throw new Error(`Trecho jurídico desconhecido: ${chave} (conjunto ${conjunto}).`);
+  const texto = renderTokens(trecho.texto, base.dados, `juridico.js (${conjunto}/${chave})`);
+  return trecho.revisado ? texto : `[EM REVISÃO JURÍDICA: ${trecho.pendencia} ${trecho.assunto}] ${texto}`;
 }

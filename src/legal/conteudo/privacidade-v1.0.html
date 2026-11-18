@@ -1,49 +1,154 @@
-<!-- Esqueleto da F2-01 (DevBackend Time 2): estrutura, tokens e trechos jurídicos já posicionados.
-     O texto de cada seção é escrito na F2-02 (DevFullstack Time 2), substituindo os marcadores
-     [TEXTO PENDENTE: F2-02]. Formato e lista de tokens: comentário no topo de src/legal.js. -->
+<!-- Política de Privacidade da PIA, versão 1.0 (F2-02 sobre o esqueleto da F2-01). Formato e tokens: topo de src/legal.js.
+     Escopo v1.0 (requisitos v2.7): sem a feature 0001. Os trechos dela estão em docs/legal-v1.1-rascunho.md. -->
 <!-- legal:resumo -->
 <ul>
-<li>A PIA é gratuita.</li>
-<li>A PIA está em desenvolvimento e não tem nenhuma garantia.</li>
-<li>Os dados podem ser usados para treinar modelos e melhorar o serviço, com as exceções desta política.</li>
-<li>Não garantimos a hospedagem dos dados: nem retenção, nem disponibilidade.</li>
+<li>A PIA é <strong>gratuita</strong>.</li>
+<li>A PIA está <strong>em desenvolvimento</strong> e é oferecida <strong>sem garantias</strong> de funcionamento.</li>
+<li>Seus dados <strong>podem ser usados para treinar modelos de IA e melhorar o serviço</strong>, inclusive as gravações de voz do Discord e os MP3 gerados. Dados das APIs do Google e da sua conta Microsoft ficam de fora.</li>
+<li><strong>Não garantimos a retenção nem a disponibilidade</strong> dos dados. Eles podem ser perdidos a qualquer momento. Mantenha suas próprias cópias.</li>
+<li>Para exercer seus direitos, escreva para <a href="mailto:{{CONTATO_EMAIL}}">{{CONTATO_EMAIL}}</a>.</li>
 </ul>
 <!-- /legal:resumo -->
-<h2 id="quem-somos">Quem somos, controlador e contato</h2>
-<p>Controlador e responsável: {{CONTROLADOR_NOME}}. Contato: <a href="mailto:{{CONTATO_EMAIL}}">{{CONTATO_EMAIL}}</a>. Encarregado (DPO): {{ENCARREGADO_NOME}}, pelo <a href="mailto:{{ENCARREGADO_EMAIL}}">{{ENCARREGADO_EMAIL}}</a>.</p>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="escopo">Escopo</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="dados-coletados">Dados coletados</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<p>{{CONSENTIMENTO_TERCEIROS_DISCORD}}</p>
-<p>{{LOGS_ACESSO}}</p>
-<h2 id="finalidades">Finalidades</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<p>{{TREINAMENTO_MICROSOFT_SUNO}}</p>
-<h2 id="bases-legais">Bases legais</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<p>{{BASE_LEGAL_TREINAMENTO}}</p>
-<h2 id="compartilhamento">Compartilhamento e terceiros</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="transferencia-internacional">Transferência internacional</h2>
-<p>A hospedagem fica {{HOSPEDAGEM_TEXTO}}.</p>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="retencao">Retenção, sem garantia de hospedagem</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<p>{{REMOCAO_DADOS_TREINADOS}}</p>
-<h2 id="seguranca">Segurança</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="direitos-do-titular">Direitos do titular</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<p>{{OPT_OUT_TREINAMENTO}}</p>
+
+<h2 id="quem-somos">1. Quem somos, controlador e contato</h2>
+<p>O controlador e responsável pelo tratamento dos dados pessoais da PIA é <strong>{{CONTROLADOR_NOME}}</strong>, pessoa física.</p>
+<p>Contato para privacidade, dúvidas e pedidos dos titulares: <a href="mailto:{{CONTATO_EMAIL}}">{{CONTATO_EMAIL}}</a>.</p>
+<p>Encarregado (DPO): {{ENCARREGADO_NOME}}, pelo <a href="mailto:{{ENCARREGADO_EMAIL}}">{{ENCARREGADO_EMAIL}}</a>.</p>
+<p>{{ENCARREGADO}}</p>
+
+<h2 id="escopo">2. Escopo</h2>
+<p>Esta Política vale para a PIA desktop (o aplicativo instalado no seu computador), a PIA Server (o servidor web que publica esta página e o painel, em <a href="{{ORIGEM}}">{{ORIGEM}}</a>), o MCP da PIA e os bots Discord da PIA. O domínio oficial do projeto é {{DOMINIO_OFICIAL}}.</p>
+<p>Cada serviço de terceiros que você conecta à PIA tem a sua própria política de privacidade, que também se aplica ao uso desse serviço.</p>
+
+<h2 id="dados-coletados">3. Dados coletados</h2>
+<h3>Conta Google</h3>
+<ul>
+<li>E-mail, identificador da conta Google e endereço da foto do perfil, recebidos no login.</li>
+</ul>
+<h3>Conteúdo do usuário guardado no servidor</h3>
+<ul>
+<li>Conversas (chats) sincronizadas, configurações do perfil e segredos do desktop enviados pelo perfil compartilhado.</li>
+</ul>
+<h3>Credenciais de integrações</h3>
+<ul>
+<li>Credenciais e tokens das integrações que você conecta: Google, Microsoft, Object Storage (S3), Discord e Taverns. Eles são guardados cifrados.</li>
+</ul>
+<h3>Computadores pareados e capturas</h3>
+<ul>
+<li>Nome, último acesso e permissões dos computadores pareados, e o resultado das tarefas pedidas a eles.</li>
+<li>Capturas de tela e de câmera pedidas pelo MCP, enviadas para a pasta da PIA no seu Google Drive.</li>
+</ul>
+<h3>Secretária</h3>
+<ul>
+<li>Avisos gerados a partir do seu Gmail e do seu Google Agenda (título, texto e link), quando você habilita a Secretária.</li>
+</ul>
+<h3>Gravações de voz do Discord</h3>
+<ul>
+<li>Faixas de áudio de cada participante do canal de voz, <strong>inclusive de outros participantes que não usam a PIA (terceiros)</strong>, com nomes de usuário do Discord e notas. Elas ficam temporariamente no servidor só até o envio ao seu Google Drive ser confirmado e depois são apagadas do servidor.</li>
+<li><strong>Essas gravações de voz, inclusive as vozes de terceiros, podem ser usadas para treinamento de modelos de IA.</strong></li>
+<li>{{CONSENTIMENTO_TERCEIROS_DISCORD}}</li>
+<li>Identificadores e nome do servidor, do canal e dos usuários do Discord usados nas regras de gravação e no vínculo com a PIA.</li>
+</ul>
+<h3>Cópia de segurança de mídia</h3>
+<ul>
+<li>Quando o computador está pareado, as músicas geradas no PC (MP3/WAV, pelo Gemini ou localmente) e as capturas de tela salvas no PC são enviadas, por meio da PIA Server, para a pasta da PIA no seu Google Drive, como cópia de segurança. A PIA Server não guarda o arquivo: ele fica numa pasta temporária só durante o envio e é apagado ao final. O servidor mantém apenas metadados (identificador, tipo, tamanho, data e identificador do arquivo no Drive). O arquivo original continua no seu PC. A cópia no Drive segue as regras da sua conta Google, e não garantimos que o envio aconteça nem que a cópia exista.</li>
+</ul>
+<h3>Cookies e registros técnicos</h3>
+<ul>
+<li>Cookies de sessão essenciais, descritos na seção 11.</li>
+<li>{{LOGS_ACESSO}}</li>
+</ul>
+
+<h2 id="finalidades">4. Finalidades</h2>
+<ul>
+<li><strong>Prestar o serviço:</strong> login, sincronização do perfil, gravação no Discord, Secretária, cópia de mídia para o Drive, computadores pareados e MCP.</li>
+<li><strong>Segurança:</strong> proteger contas, prevenir abuso e diagnosticar falhas.</li>
+<li><strong>Treinamento de modelos de IA e melhoria do serviço:</strong> seus dados, inclusive as gravações de voz do Discord (também as de terceiros), podem ser usados para treinar modelos e melhorar a PIA, com as exceções da seção 6 sobre dados das APIs do Google. Credenciais e tokens nunca são usados em treinamento. Para pedir que seus dados deixem de ser usados, veja a seção <a href="#direitos-do-titular">Direitos do titular</a>.</li>
+<li>{{TREINAMENTO_MP3_GERADOS}}</li>
+<li>{{TREINAMENTO_MICROSOFT}}</li>
+<li><strong>Comunicação:</strong> responder pedidos e avisar sobre mudanças relevantes.</li>
+</ul>
+
+<h2 id="bases-legais">5. Bases legais</h2>
+<p>Tratamos dados pessoais com base no art. 7º da Lei Geral de Proteção de Dados Pessoais (LGPD, Lei 13.709/2018):</p>
+<ul>
+<li>execução de contrato ou de procedimentos preliminares relacionados a ele (inciso V), para prestar o serviço;</li>
+<li>{{BASE_LEGAL_TREINAMENTO}}</li>
+<li>cumprimento de obrigação legal ou regulatória (inciso II), quando houver.</li>
+</ul>
+
+<h2 id="compartilhamento">6. Compartilhamento e terceiros</h2>
+<p>Para funcionar, a PIA troca dados com os serviços que você usa ou conecta:</p>
+<ul>
+<li><strong>Google:</strong> login (OAuth), Google Drive, Gmail, Google Agenda e Gemini.</li>
+<li><strong>Microsoft:</strong> e-mail, agenda e arquivos, quando você conecta a conta.</li>
+<li><strong>Discord:</strong> bot, canais de voz e gravações.</li>
+<li><strong>Taverns:</strong> quando você conecta a conta.</li>
+<li><strong>Provedores de LLM escolhidos por você:</strong> Gemini, Groq ou Ollama local. Esses provedores podem usar os dados conforme os próprios termos.</li>
+<li><strong>Object Storage (S3)</strong> que você mesmo configura.</li>
+<li><strong>Provedor de hospedagem</strong> do servidor.</li>
+</ul>
+<p>Cada terceiro tem a sua própria política de privacidade e os seus próprios termos. <strong>Não vendemos dados pessoais.</strong></p>
+<h3 id="google-limited-use">Dados das APIs do Google (Limited Use)</h3>
+<p>O uso e a transferência, para qualquer outro aplicativo, de informações recebidas das APIs do Google pela PIA seguem a <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noreferrer">Google API Services User Data Policy</a>, incluindo os requisitos de Uso Limitado (Limited Use).</p>
+<p><strong>Dados obtidos pelas APIs do Google (Gmail, Agenda, Drive e perfil) não são usados para treinar modelos de IA generalizados.</strong></p>
+<p>{{ORIGEM_TREINAMENTO_MIDIA}}</p>
+
+<h2 id="transferencia-internacional">7. Transferência internacional</h2>
+<p>A hospedagem da PIA Server fica {{HOSPEDAGEM_TEXTO}}.</p>
+<p>Google, Microsoft, Discord e Groq tratam dados fora do Brasil. Ao usar essas integrações, seus dados podem ser transferidos para outros países.</p>
+<p>{{SALVAGUARDAS_TRANSFERENCIA}}</p>
+
+<h2 id="retencao">8. Retenção, sem garantia de hospedagem</h2>
+<ul>
+<li>Os dados ficam guardados enquanto a sua conta existir ou enquanto forem úteis para as finalidades desta Política.</li>
+<li><strong>Não garantimos a retenção nem a disponibilidade dos dados.</strong> Eles podem ser perdidos, apagados ou ficar indisponíveis a qualquer momento, sem aviso.</li>
+<li>Mantenha suas próprias cópias. Os arquivos de música ficam no seu PC, e as cópias de mídia e as gravações ficam no seu Google Drive.</li>
+<li>A PIA Server não guarda arquivos de áudio nem de imagem: músicas, capturas e gravações só passam pelo servidor de forma temporária, a caminho do Drive, e o servidor mantém apenas metadados. A cópia no Drive segue as regras da sua conta Google, e não garantimos que o envio aconteça nem que a cópia exista.</li>
+<li>{{REMOCAO_DADOS_TREINADOS}}</li>
+</ul>
+
+<h2 id="seguranca">9. Segurança</h2>
+<ul>
+<li>As conexões usam HTTPS.</li>
+<li>Os tokens de sessão são guardados como hash.</li>
+<li>Credenciais, tokens de integrações e o perfil sincronizado são cifrados no servidor com AES-256-GCM.</li>
+<li>Os cookies de sessão são <code>HttpOnly</code> e <code>Secure</code>.</li>
+<li>Arquivos em envio ficam só temporariamente no servidor.</li>
+</ul>
+<p><strong>A cifragem não é ponta a ponta:</strong> o operador do servidor consegue decifrar esses dados. Nenhum sistema é 100% seguro.</p>
+
+<h2 id="direitos-do-titular">10. Direitos do titular</h2>
+<p>Pelo art. 18 da LGPD, você pode pedir:</p>
+<ul>
+<li>confirmação da existência de tratamento e acesso aos dados;</li>
+<li>correção de dados incompletos, inexatos ou desatualizados;</li>
+<li>anonimização, bloqueio ou eliminação de dados desnecessários, excessivos ou tratados em desconformidade com a lei;</li>
+<li>portabilidade dos dados;</li>
+<li>eliminação dos dados tratados com base no consentimento;</li>
+<li>informação sobre as entidades com quem compartilhamos dados;</li>
+<li>informação sobre a possibilidade de não dar o consentimento e as consequências da negativa;</li>
+<li>revogação do consentimento e oposição ao tratamento.</li>
+</ul>
+<p><strong>Como exercer:</strong> envie o pedido para <a href="mailto:{{CONTATO_EMAIL}}">{{CONTATO_EMAIL}}</a> a partir do e-mail da sua conta. A exclusão da conta e a exportação dos dados são feitas manualmente, a partir desse pedido.</p>
 <p>{{PRAZO_RESPOSTA_TITULAR}}</p>
-<h2 id="cookies">Cookies e armazenamento local</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="menores">Menores</h2>
-<p>A idade mínima para usar a PIA é de {{IDADE_MINIMA}} anos.</p>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="mudancas">Mudanças na política</h2>
-<p>[TEXTO PENDENTE: F2-02]</p>
-<h2 id="contato">Contato</h2>
-<p>{{CONTROLADOR_NOME}}, <a href="mailto:{{CONTATO_EMAIL}}">{{CONTATO_EMAIL}}</a>.</p>
+<p>{{OPT_OUT_TREINAMENTO}}</p>
+<p>Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).</p>
+<p><strong>Controles disponíveis no app:</strong> desconectar os conectores, revogar computadores pareados e tokens MCP, e sair da conta.</p>
+
+<h2 id="cookies">11. Cookies e armazenamento local</h2>
+<ul>
+<li>A PIA Server usa só cookies essenciais: <code>__Host-pia_session</code> (sessão, 24 horas) e <code>pia_oauth</code> (login com Google, 10 minutos).</li>
+<li>Não usamos cookies de analytics nem de publicidade.</li>
+<li>A PIA desktop guarda dados no seu computador: banco SQLite local, cofre de senhas do sistema e armazenamento local do navegador interno (por exemplo, o modelo escolhido no chat e o histórico de notificações).</li>
+</ul>
+
+<h2 id="menores">12. Menores de idade</h2>
+<p>A idade mínima para usar a PIA é de <strong>{{IDADE_MINIMA}} anos</strong>. O serviço não é destinado a menores de {{IDADE_MINIMA}} anos. Se descobrirmos dados de menores, eles serão excluídos.</p>
+
+<h2 id="mudancas">13. Mudanças nesta Política</h2>
+<p>Podemos alterar esta Política a qualquer momento. Cada alteração gera uma versão nova, com a data de última atualização no topo da página e uma linha no histórico de versões. Mudanças relevantes são avisadas no app ou por e-mail, quando possível. Continuar usando a PIA depois da alteração significa que você teve ciência da nova versão.</p>
+
+<h2 id="contato">14. Contato</h2>
+<p>Controlador e encarregado: <strong>{{CONTROLADOR_NOME}}</strong>. E-mail: <a href="mailto:{{CONTATO_EMAIL}}">{{CONTATO_EMAIL}}</a>.</p>
+<p>Veja também os <a href="{{URL_TERMOS}}">Termos de Serviço</a>.</p>

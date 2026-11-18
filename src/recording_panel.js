@@ -1,4 +1,6 @@
 import { guildAccount, hasRecordingRole } from './discord_guild_links.js';
+import { origin } from './auth.js';
+import { textoJuridico } from './legal.js';
 import { ActionRowBuilder, ButtonStyle, ComponentType, ModalBuilder, PermissionFlagsBits, Routes,
   TextInputBuilder, TextInputStyle, escapeMarkdown } from 'discord.js';
 
@@ -18,7 +20,12 @@ export function editableRecording(meta, now = Date.now()) {
   return meta.state !== 'recording' && Date.parse(meta.editUntil) > now;
 }
 
-export function recordingPanel(meta, ping, now = Date.now()) {
+// RF10/CA26: aviso de uso da gravação para treinamento, com link para a Política (texto em juridico.js).
+export function trainingNotice(publicOrigin = origin) {
+  return textoJuridico('AVISO_GRAVACAO_DISCORD') + '\nPolítica de Privacidade: ' + new URL(publicOrigin).origin + '/privacidade';
+}
+
+export function recordingPanel(meta, ping, now = Date.now(), publicOrigin = origin) {
   const active = meta.state === 'recording';
   const members = Object.entries(meta.members || {});
   const visible = members.sort(([, a], [, b]) => Number(Boolean(a.leftAt)) - Number(Boolean(b.leftAt))).slice(0, 12);
@@ -39,6 +46,7 @@ export function recordingPanel(meta, ping, now = Date.now()) {
       .filter(([, value]) => Number.isFinite(value) && value >= 0)
       .map(([type, value]) => type + ': ' + Math.round(value) + ' ms');
     fields.push({ name: 'Latência', value: values.join(' · ') || 'Aguardando medição.' });
+    fields.push({ name: 'Privacidade', value: trainingNotice(publicOrigin) });
   } else {
     fields.push({ name: 'Encerrada por', value: actor(meta.stoppedBy), inline: true },
       { name: 'Duração total', value: duration(meta.durationMs || 0), inline: true });
