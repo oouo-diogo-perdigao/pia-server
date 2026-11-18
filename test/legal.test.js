@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  DOCUMENTOS, escapeHtml, formatarData, legalFiles, legalFooter,
+  DOCUMENTOS, MICROTEXTOS, escapeHtml, formatarData, legalFiles, legalFooter,
   legalNotFound, legalRedirects, pendencias, redirecionamentosLegais, renderDocumento, renderTokens,
 } from '../src/legal.js';
 import { escapeHtml as escapeOAuth } from '../src/oauth_callback.js';
@@ -104,13 +104,13 @@ test('layout: lang, title, description, canonical, h1 único, sumário, resumo, 
     assert.match(html, new RegExp(`<h2 id="${id}">`));
   }
   assert.match(html, /<h2 id="em-resumo">Em resumo<\/h2><ul><li>Gratuito/);
-  assert.match(html, /<td><a href="\/privacidade\/v1\.0">1\.0<\/a><\/td><td>01\/12\/2026<\/td><td>05\/12\/2026<\/td><td>Primeira versão\.<\/td>/);
+  assert.match(html, /<td><a href="\/privacidade\/v1\.0">1\.0<\/a> <span class="legal-current">atual<\/span><\/td><td>01\/12\/2026<\/td><td>Primeira versão\.<\/td>/);
   assert.match(html, /<a href="\/">Voltar à PIA<\/a>/);
-  assert.match(html, /Veja também: <a href="\/termos">Termos de Serviço<\/a>/);
+  assert.match(html, /Leia também: <a href="\/termos">Termos de Serviço<\/a>\./);
   assert.doesNotMatch(html, /<script/i);
   const termos = renderDocumento('termos', '1.0', ORIGIN, fontes()).html;
   assert.match(termos, /<link rel="canonical" href="https:\/\/pia\.example\/termos\/v1\.0">/);
-  assert.match(termos, /Veja também: <a href="\/privacidade">Política de Privacidade<\/a>/);
+  assert.match(termos, /Leia também: <a href="\/privacidade">Política de Privacidade<\/a>\./);
 });
 
 test('sumário usa o texto puro e escapado dos títulos; trecho jurídico é texto puro', () => {
@@ -120,6 +120,40 @@ test('sumário usa o texto puro e escapado dos títulos; trecho jurídico é tex
   assert.match(html, /<li><a href="#a-e-b">A &amp; &lt;B&gt;<\/a><\/li>/);
   assert.match(html, /<h2 id="a-e-b">A <em>&amp;<\/em> &lt;B&gt;<\/h2>/, 'corpo mantém o HTML do fragmento');
   assert.match(html, /Escreva para &lt;a href=&quot;mailto:x@y&quot;&gt;x@y&lt;\/a&gt;\./);
+});
+
+test('microtextos aprovados pelo PO (spec de UX, seção 5, item 7) aparecem exatamente', () => {
+  assert.deepEqual({ ...MICROTEXTOS }, {
+    EYEBROW: 'PIA · Documento legal',
+    LEIA_TAMBEM: 'Leia também',
+    NESTA_PAGINA: 'Nesta página',
+    VOLTAR_AO_SUMARIO: 'Voltar ao sumário',
+    PUBLICADA_EM: 'Publicada em',
+    O_QUE_MUDOU: 'O que mudou',
+    ATUAL: 'atual',
+    FAIXA_RASCUNHO_ROTULO: 'RASCUNHO, não publicar',
+    FAIXA_RASCUNHO_TEXTO: 'Este texto ainda não tem parecer jurídico e não é a versão oficial.',
+    CIENCIA_ANTES: 'Ao continuar, você concorda com os ',
+    CIENCIA_MEIO: ' e declara ter lido a ',
+  });
+  const final = renderDocumento('privacidade', undefined, ORIGIN, fontes()).html;
+  assert.ok(final.includes('<p class="legal-eyebrow">PIA · Documento legal</p><h1>Política de Privacidade</h1>'));
+  assert.ok(final.includes('<p class="legal-outro">Leia também: <a href="/termos">Termos de Serviço</a>.</p>'));
+  assert.ok(final.includes('<nav class="legal-sumario" id="sumario" aria-labelledby="sumario-t"><h2 id="sumario-t">Nesta página</h2>'));
+  assert.ok(final.includes('<th scope="col">Versão</th><th scope="col">Publicada em</th><th scope="col">O que mudou</th>'));
+  assert.ok(final.includes('<span class="legal-current">atual</span>'));
+  assert.doesNotMatch(final, /Sumário|Veja também|Resumo da mudança|RASCUNHO/);
+  const voltar = '<p class="legal-backtop"><a href="#sumario"><span aria-hidden="true">↑ </span>Voltar ao sumário</a></p>';
+  assert.equal(final.split(voltar).length - 1, 3, 'fim de cada seção do fragmento (2) e do histórico (1)');
+  assert.ok(final.includes(voltar + '<h2 id="foro">'), 'antes do h2 seguinte');
+  const congelada = renderDocumento('privacidade', '1.0', ORIGIN, fontes()).html;
+  assert.doesNotMatch(congelada, /legal-current|>atual</, 'cópia /vX.Y sem etiqueta atual (hash estável)');
+  const rascunho = renderDocumento('privacidade', undefined, ORIGIN, fontes({ datas: false })).html;
+  assert.ok(rascunho.includes('<p class="legal-rascunho" role="note"><strong>RASCUNHO, não publicar</strong> Este texto ainda não tem parecer jurídico e não é a versão oficial.</p>'));
+  assert.ok(rascunho.includes('<td><span class="legal-pendente">[PREENCHER NO RELEASE: data]</span></td>'));
+  assert.equal(legalFooter({ ciencia: true }),
+    '<p class="pia-legal-footer pia-legal-footer--server">Ao continuar, você concorda com os <a href="/termos">Termos de Serviço</a> e declara ter lido a <a href="/privacidade">Política de Privacidade</a>.</p>');
+  assert.throws(() => renderDocumento('privacidade', undefined, ORIGIN, fontes({ conteudo: fragmento('<h2 id="sumario-t">X</h2>') })), /reservado/);
 });
 
 test('fragmento inválido falha no boot', () => {

@@ -13,7 +13,7 @@
  *       <!-- legal:resumo --><ul><li>…</li></ul><!-- /legal:resumo -->
  *  2. Cada seção é um <h2 id="slug">Título</h2> (id com a-z, 0-9 e hífen, único). O sumário com
  *     âncoras é montado a partir desses h2. Use h3 dentro das seções. Ids reservados: em-resumo,
- *     sumario, historico-de-versoes.
+ *     sumario, sumario-t, historico-de-versoes.
  *  3. Proibido (erro): <h1 (o h1 é único e gerado), <script e atributos on*=. Não use "[" no texto
  *     final: os colchetes são reservados aos selos e a marcadores de texto pendente, qualquer "["
  *     liga o modo rascunho e o gate de release (CA11) procura "[".
@@ -53,7 +53,7 @@
  *
  * ── Rascunho × final (T02, seção 3.2) ─────────────────────────────────────────────────────────
  * Uma página é rascunho se gerou algum selo (trecho com revisado:false ou data null) ou se o HTML
- * final ainda tem "[". Rascunho: faixa "RASCUNHO, não publicar", <meta name="robots"
+ * final ainda tem "[". Rascunho: faixa "RASCUNHO, não publicar" (texto aprovado em MICROTEXTOS), <meta name="robots"
  * content="noindex">, Cache-Control: no-store e X-Robots-Tag: noindex. Final: Cache-Control:
  * public, max-age=3600, sem noindex. CSP, nosniff e Referrer-Policy continuam vindo do index.js.
  *
@@ -92,7 +92,24 @@ import { VERSOES } from './legal/versoes.js';
 const HTML = 'text/html; charset=utf-8';
 const HEADERS_FINAL = Object.freeze({ 'Cache-Control': 'public, max-age=3600' });
 const HEADERS_RASCUNHO = Object.freeze({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
-const RESERVADOS = new Set(['em-resumo', 'sumario', 'historico-de-versoes']);
+const RESERVADOS = new Set(['em-resumo', 'sumario', 'sumario-t', 'historico-de-versoes']);
+
+// Microtextos aprovados pelo PO (especificação de UX, seção 5, item 7). Não altere sem nova aprovação.
+export const MICROTEXTOS = Object.freeze({
+  EYEBROW: 'PIA · Documento legal',
+  LEIA_TAMBEM: 'Leia também',
+  NESTA_PAGINA: 'Nesta página',
+  VOLTAR_AO_SUMARIO: 'Voltar ao sumário',
+  PUBLICADA_EM: 'Publicada em',
+  O_QUE_MUDOU: 'O que mudou',
+  ATUAL: 'atual',
+  FAIXA_RASCUNHO_ROTULO: 'RASCUNHO, não publicar',
+  FAIXA_RASCUNHO_TEXTO: 'Este texto ainda não tem parecer jurídico e não é a versão oficial.',
+  CIENCIA_ANTES: 'Ao continuar, você concorda com os ',
+  CIENCIA_MEIO: ' e declara ter lido a ',
+});
+const M = MICROTEXTOS;
+const VOLTAR_SUMARIO = '<p class="legal-backtop"><a href="#sumario"><span aria-hidden="true">↑ </span>' + M.VOLTAR_AO_SUMARIO + '</a></p>';
 /** Origin fixo usado para calcular o hash das versões congeladas (independe de PIA_PUBLIC_URL). */
 export const ORIGEM_SNAPSHOT = 'https://pia.travelrpg.com';
 
@@ -285,24 +302,36 @@ function cabecaHtml({ titulo, descricao, canonical, rascunho, noindex = rascunho
     (canonical ? '<link rel="canonical" href="' + escapeHtml(canonical) + '">' : '') +
     (noindex ? '<meta name="robots" content="noindex">' : '') +
     '<link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/legal.css"></head><body>' +
-    (rascunho ? '<p class="legal-rascunho" role="note"><strong>RASCUNHO, não publicar.</strong> Este texto ainda tem pendências e não foi aprovado.</p>' : '');
+    (rascunho ? '<p class="legal-rascunho" role="note"><strong>' + M.FAIXA_RASCUNHO_ROTULO + '</strong> ' + M.FAIXA_RASCUNHO_TEXTO + '</p>' : '');
 }
 
-/** Tabela de versões até a versão renderizada (a cópia congelada não cita versões posteriores). */
-function historico(fontes, documento, ate, registro) {
+/**
+ * Tabela de versões até a versão renderizada (a cópia congelada não cita versões posteriores).
+ * Colunas da spec de UX (1.7): Versão · Publicada em (vigência) · O que mudou. A etiqueta "atual"
+ * só aparece na página servida em /privacidade e /termos (marcarAtual), nunca na cópia /vX.Y, para
+ * que o HTML congelado não mude quando uma versão nova for publicada.
+ */
+function historico(fontes, documento, ate, registro, marcarAtual) {
   const lista = fontes.versoes[documento];
   const linhas = lista.slice(0, lista.indexOf(ate) + 1).map((item) =>
     '<tr><td>' + (publicada(item)
       ? '<a href="' + caminho(documento, item.versao) + '">' + escapeHtml(item.versao) + '</a>'
-      : escapeHtml(item.versao)) + '</td>' +
-    '<td>' + data(item.vigencia, 'data de vigência', documento, item, registro) + '</td>' +
-    '<td>' + data(item.atualizacao, 'data de atualização', documento, item, registro) + '</td>' +
+      : escapeHtml(item.versao)) +
+    (marcarAtual && item === ate ? ' <span class="legal-current">' + M.ATUAL + '</span>' : '') + '</td>' +
+    '<td>' + data(item.vigencia, 'data', documento, item, registro) + '</td>' +
     '<td>' + escapeHtml(item.resumo) + '</td></tr>').join('');
   return '<section class="legal-historico" aria-labelledby="historico-de-versoes">' +
     '<h2 id="historico-de-versoes">Histórico de versões</h2>' +
-    '<table><thead><tr><th scope="col">Versão</th><th scope="col">Vigente a partir de</th>' +
-    '<th scope="col">Última atualização</th><th scope="col">Resumo da mudança</th></tr></thead>' +
-    '<tbody>' + linhas + '</tbody></table></section>';
+    '<table><thead><tr><th scope="col">Versão</th><th scope="col">' + M.PUBLICADA_EM + '</th>' +
+    '<th scope="col">' + M.O_QUE_MUDOU + '</th></tr></thead>' +
+    '<tbody>' + linhas + '</tbody></table>' + VOLTAR_SUMARIO + '</section>';
+}
+
+/** "↑ Voltar ao sumário" no fim de cada seção do fragmento (antes de cada h2 seguinte e no fim). */
+function comVoltarAoSumario(corpo) {
+  const partes = corpo.split(/(?=<h2\b)/);
+  return partes.map((parte, i) => (i > 0 && partes[i - 1].startsWith('<h2') ? VOLTAR_SUMARIO : '') + parte).join('') +
+    VOLTAR_SUMARIO;
 }
 
 /**
@@ -329,22 +358,23 @@ export function renderDocumento(documento, versao, origin, fontes) {
   const outro = DOCUMENTOS[meta.outro];
   const dados = base.dados;
 
-  const sumario = '<nav class="legal-sumario" aria-labelledby="sumario"><h2 id="sumario">Sumário</h2><ol>' +
+  const sumario = '<nav class="legal-sumario" id="sumario" aria-labelledby="sumario-t"><h2 id="sumario-t">' + M.NESTA_PAGINA + '</h2><ol>' +
     [{ id: 'em-resumo', titulo: 'Em resumo' }, ...lista_secoes, { id: 'historico-de-versoes', titulo: 'Histórico de versões' }]
       .map(({ id, titulo }) => '<li><a href="#' + id + '">' + escapeHtml(titulo) + '</a></li>').join('') +
     '</ol></nav>';
   const conteudo =
     '<main class="legal"><header class="legal-cabecalho">' +
     '<p class="legal-voltar"><a href="/">Voltar à PIA</a></p>' +
+    '<p class="legal-eyebrow">' + M.EYEBROW + '</p>' +
     '<h1>' + escapeHtml(meta.titulo) + '</h1>' +
     '<p class="legal-datas">Versão ' + escapeHtml(item.versao) +
     ' · Vigente a partir de ' + valores.VIGENCIA + ' · Última atualização: ' + valores.ATUALIZACAO + '</p>' +
-    '<p class="legal-outro">Veja também: <a href="/' + meta.outro + '">' + escapeHtml(outro.titulo) + '</a></p>' +
+    '<p class="legal-outro">' + M.LEIA_TAMBEM + ': <a href="/' + meta.outro + '">' + escapeHtml(outro.titulo) + '</a>.</p>' +
     '</header>' +
     '<section class="legal-resumo" aria-labelledby="em-resumo"><h2 id="em-resumo">Em resumo</h2>' + resumo + '</section>' +
     sumario +
-    '<article class="legal-corpo">' + corpo + '</article>' +
-    historico(base, documento, item, registro) +
+    '<article class="legal-corpo">' + comVoltarAoSumario(corpo) + '</article>' +
+    historico(base, documento, item, registro, !versao) +
     '<footer class="legal-rodape"><p>Controlador e contato: ' + escapeHtml(dados.CONTROLADOR_NOME) +
     ', <a href="mailto:' + escapeHtml(dados.CONTATO_EMAIL) + '">' + escapeHtml(dados.CONTATO_EMAIL) + '</a>.</p>' +
     '<p><a href="/privacidade">Política de Privacidade</a> · <a href="/termos">Termos de Serviço</a> · <a href="/">Voltar à PIA</a></p>' +
@@ -447,8 +477,8 @@ export function legalNotFound(path, fontes) {
  */
 export function legalFooter({ ciencia = false, aceite = ciencia } = {}) {
   if (aceite) {
-    return '<p class="pia-legal-footer pia-legal-footer--server">Ao continuar, você concorda com os ' +
-      '<a href="/termos">Termos de Serviço</a> e declara ter lido a <a href="/privacidade">Política de Privacidade</a>.</p>';
+    return '<p class="pia-legal-footer pia-legal-footer--server">' + M.CIENCIA_ANTES +
+      '<a href="/termos">Termos de Serviço</a>' + M.CIENCIA_MEIO + '<a href="/privacidade">Política de Privacidade</a>.</p>';
   }
   return '<p class="pia-legal-footer pia-legal-footer--server pia-legal-footer--links">' +
     '<a href="/privacidade">Política de Privacidade</a> <a href="/termos">Termos de Serviço</a></p>';
