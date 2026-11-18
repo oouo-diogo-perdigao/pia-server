@@ -434,7 +434,15 @@ test('legalFooter tem os dois links relativos e o texto de ciência opcional', (
 });
 
 test('pendencias lista trechos sem revisão e datas nulas', () => {
-  assert.deepEqual(pendencias(), [], 'release legal v1.0: nenhum trecho sem revisão nem data nula');
+  // Feature 0004: as únicas pendências reais são as da v1.1 em rascunho (trechos novos ou alterados do conjunto '1.1'
+  // e as datas nulas da 1.1). Nada da v1.0 publicada aparece.
+  const reais = pendencias();
+  assert.ok(reais.every((p) => (p.tipo === 'juridico' && p.conjunto === '1.1') || (p.tipo === 'data' && p.versao === '1.1')),
+    JSON.stringify(reais));
+  assert.deepEqual(reais.filter((p) => p.tipo === 'juridico').map((p) => p.chave),
+    Object.entries(JURIDICO['1.1']).filter(([, t]) => !t.revisado).map(([chave]) => chave));
+  assert.deepEqual(reais.filter((p) => p.tipo === 'data').map((p) => `${p.documento} ${p.versao} ${p.campo}`),
+    ['privacidade 1.1 vigencia', 'privacidade 1.1 atualizacao', 'termos 1.1 vigencia', 'termos 1.1 atualizacao']);
   // Mesmo conteúdo real em estado de rascunho (fixture): todos os trechos e todas as datas aparecem.
   const juridicoRascunho = Object.fromEntries(Object.entries(JURIDICO).map(([conjunto, trechos]) =>
     [conjunto, Object.fromEntries(Object.entries(trechos).map(([chave, t]) => [chave, { ...t, revisado: false }]))]));
@@ -442,7 +450,7 @@ test('pendencias lista trechos sem revisão e datas nulas', () => {
     [documento, lista.map((item) => ({ ...item, vigencia: null, atualizacao: null, sha256: null }))]));
   const lista = pendencias({ juridico: juridicoRascunho, versoes: versoesRascunho });
   const juridicos = lista.filter((p) => p.tipo === 'juridico').map((p) => p.chave);
-  assert.deepEqual(juridicos, Object.keys(JURIDICO['1.0']));
+  assert.deepEqual(juridicos, [...Object.keys(JURIDICO['1.0']), ...Object.keys(JURIDICO['1.1'])]);
   const datas = lista.filter((p) => p.tipo === 'data');
   const esperadas = Object.values(VERSOES).flat().length * 2;
   assert.equal(datas.length, esperadas);

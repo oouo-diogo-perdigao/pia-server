@@ -22,11 +22,18 @@
 //
 // Data null liga o modo rascunho e aparece como "[PREENCHER NO RELEASE: ...]".
 
+// Resumos da v1.1 para o "Histórico de versões" (rascunho).
+const RESUMO_V1_1 = 'Rascunho da versão 1.1.';
+const RESUMO_V1_1_TERMOS = 'Rascunho da versão 1.1.';
+
 export const VERSOES = Object.freeze({
   privacidade: Object.freeze([
     Object.freeze({ versao: '1.0', vigencia: '2026-11-17', atualizacao: '2026-11-17', resumo: 'Primeira versão.', juridico: '1.0', sha256: 'a2ff6c287715f4c54d38b7d8796a07a4422537505b559893ed97126a0fcec3ad' }),
+    // v1.1 (feature 0004): rascunho até o parecer e o commit "release legal v1.1".
+    Object.freeze({ versao: '1.1', vigencia: null, atualizacao: null, resumo: RESUMO_V1_1, juridico: '1.1', sha256: null }),
   ]),
   termos: Object.freeze([
     Object.freeze({ versao: '1.0', vigencia: '2026-11-17', atualizacao: '2026-11-17', resumo: 'Primeira versão.', juridico: '1.0', sha256: '9b9b7335fcd2ea0f138f36932c4b933f99e81a58bdb44c76bc4b862a013ce99f' }),
+    Object.freeze({ versao: '1.1', vigencia: null, atualizacao: null, resumo: RESUMO_V1_1_TERMOS, juridico: '1.1', sha256: null }),
   ]),
 });

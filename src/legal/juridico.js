@@ -22,6 +22,10 @@
 // com as correções obrigatórias F.4 aplicadas literalmente (3f1cccf); os 16 trechos estão revisado:true e o conjunto
 // '1.0' está congelado (sha256 em versoes.js).
 // A v1.0 não cita a feature 0001: os trechos dela estão em docs/legal-v1.1-rascunho.md (fora do código).
+//
+// v1.1 (feature 0004, rascunho): JURIDICO['1.1'] parte do conjunto '1.0' final. Os trechos que não mudam são os mesmos
+// objetos aprovados no release v1.0 (revisado:true); os novos ou alterados usam rascunho(), com revisado:false até o
+// parecer sobre a v1.1. Conferência de cada afirmação nova contra o código: docs/legal-v1.1-conferencia.md.
 
 const trecho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado: true, pendencia, assunto });
 
@@ -73,4 +77,11 @@ const V1_0 = Object.freeze({
     "Quando o assistente lê o seu Gmail, Google Drive, Google Agenda ou dados da sua conta Microsoft para atender a um pedido seu, ele envia ao provedor de modelo de linguagem que você escolheu o conteúdo necessário para gerar a resposta. A chave de API e a conta no Gemini ou na Groq são suas: você as cria no site do provedor e as cadastra na PIA. A PIA não usa esse conteúdo para treinar os próprios modelos. O que o provedor faz com o conteúdo depende dos termos da conta que você usa nele, que são aceitos por você diretamente com esse provedor. Na camada gratuita do Gemini, por exemplo, o Google pode usar o conteúdo enviado para melhorar os produtos dele, inclusive com revisão humana. Pelos termos do próprio Google, isso não ocorre na camada paga, e o Ollama roda no seu próprio computador. Antes de usar a PIA com Gmail, Drive, Agenda ou Microsoft, confira os termos do provedor de IA escolhido. Se não quiser que esse conteúdo possa ser usado pelo provedor, use uma camada paga ou o Ollama local. Esse conteúdo não é guardado pela PIA além do histórico da conversa, que fica no seu computador e, se você usar o perfil compartilhado, é sincronizado de forma cifrada com a PIA Server."),
 });
 
-export const JURIDICO = Object.freeze({ '1.0': V1_0 });
+// Helper do conjunto '1.1': revisado:false até o parecer da v1.1 (o release vira cada um para true no commit dele).
+const rascunho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado: false, pendencia, assunto });
+
+const V1_1 = Object.freeze({
+  ...V1_0,
+});
+
+export const JURIDICO = Object.freeze({ '1.0': V1_0, '1.1': V1_1 });
