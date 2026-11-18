@@ -46,6 +46,7 @@
  *   {{OPT_OUT_TREINAMENTO}} {{REMOCAO_DADOS_TREINADOS}} {{PRAZO_RESPOSTA_TITULAR}}
  *   {{TREINAMENTO_MICROSOFT_SUNO}} {{LOGS_ACESSO}}
  *   (DIREITOS_MUSICAS_SUNO e os trechos da feature 0001 ficam para a v1.1.)
+ *   {{AVISO_GRAVACAO_DISCORD}} existe para o embed do bot (textoJuridico); as páginas não o usam.
  *   Use cada um como um bloco de frase, por exemplo: <p>{{LOGS_ACESSO}}</p>.
  *
  * ── Rascunho × final (T02, seção 3.2) ─────────────────────────────────────────────────────────
@@ -69,6 +70,9 @@
  *   legalFooter({ ciencia })   rodapé HTML com links relativos para /privacidade e /termos;
  *                                ciencia:true acrescenta o texto de ciência do RF05.
  *   pendencias(fontes?)        lista de pendências ativas (trechos sem revisão e datas null).
+ *   textoJuridico(chave, documento?) texto simples (sem HTML) de um trecho do conjunto da versão
+ *                                atual do documento, com tokens de dados resolvidos e o selo
+ *                                [EM REVISÃO JURÍDICA: ...] na frente se revisado:false. Para o Discord.
  *   hashDocumento(doc, versao) sha256 do HTML da versão renderizada com ORIGEM_SNAPSHOT.
  *   versoesAlteradas(fontes?)  versões publicadas cujo HTML não bate com o sha256 do manifesto.
  * Congelamento: trechos jurídicos são versionados (JURIDICO['1.0']) e cada versão do manifesto
@@ -462,4 +466,20 @@ export function versoesAlteradas(fontes) {
     }
   }
   return lista;
+}
+
+/**
+ * Texto simples de um trecho jurídico do conjunto usado pela versão atual do documento, para uso
+ * fora do HTML (ex.: embed do Discord). Tokens de dados são resolvidos sem escape HTML; com
+ * revisado:false, o texto vem precedido do selo de rascunho.
+ */
+export function textoJuridico(chave, documento = 'privacidade', fontes) {
+  const base = fontesCom(fontes);
+  const lista = base.versoes[documento];
+  if (!lista) throw new Error(`Documento legal desconhecido: ${documento}.`);
+  const conjunto = lista.at(-1).juridico;
+  const trecho = base.juridico[conjunto][chave];
+  if (!trecho) throw new Error(`Trecho jurídico desconhecido: ${chave} (conjunto ${conjunto}).`);
+  const texto = renderTokens(trecho.texto, base.dados, `juridico.js (${conjunto}/${chave})`);
+  return trecho.revisado ? texto : `[EM REVISÃO JURÍDICA: ${trecho.pendencia} ${trecho.assunto}] ${texto}`;
 }

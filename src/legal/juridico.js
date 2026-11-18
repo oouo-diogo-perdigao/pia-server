@@ -34,6 +34,10 @@ const V1_0 = Object.freeze({
     'Conteúdo obtido pelas integrações com a Microsoft e com o Suno segue os termos de cada provedor e só é usado em treinamento quando esses termos permitirem.'),
   LOGS_ACESSO: trecho('T04', 'logs de acesso do proxy',
     'O servidor e o proxy de hospedagem podem registrar logs técnicos de acesso (como endereço IP, data, hora e caminho acessado) para segurança e diagnóstico.'),
+  // F2-10 (RF10, CA26): aviso curto no embed "🔴 Gravação em andamento" do bot do Discord.
+  // Fala só da gravação de voz, porque o embed trata da gravação. Não é usado nas páginas.
+  AVISO_GRAVACAO_DISCORD: trecho('P11', 'aviso de gravação no Discord',
+    'Esta gravação de voz, inclusive a dos demais participantes do canal, pode ser usada para treinar modelos e melhorar o serviço.'),
 });
 
 export const JURIDICO = Object.freeze({ '1.0': V1_0 });

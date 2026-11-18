@@ -175,6 +175,7 @@ test('conteúdo real do repositório renderiza em rascunho, com dados reais e to
   const ambos = privacidade + termos;
   for (const [chave, trecho] of Object.entries(JURIDICO['1.0'])) {
     assert.equal(trecho.revisado, false, `${chave} nasce com revisado:false`);
+    if (chave === 'AVISO_GRAVACAO_DISCORD') continue; // só no embed do Discord (F2-10)
     assert.ok(ambos.includes(`[EM REVISÃO JURÍDICA: ${trecho.pendencia} ${trecho.assunto}]`), `${chave} usado em alguma página`);
   }
   for (const [, , headers] of entradas.values()) assert.equal(headers['Cache-Control'], 'no-store');

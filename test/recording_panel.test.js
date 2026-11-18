@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { editableRecording, recordingPanel } from '../src/recording_panel.js';
+import { editableRecording, recordingPanel, trainingNotice } from '../src/recording_panel.js';
 
 import { silenceAction } from '../src/recorder.js';
 import { hasRecordingRole } from '../src/discord_guild_links.js';
@@ -38,4 +38,22 @@ test('closing panel expires at the exact deadline while keeping the duration and
   assert.equal(expired.embeds[0].fields.find(field => field.name === 'Duração total').value, '01:00:00');
   assert.equal(expired.embeds[0].fields.find(field => field.name === 'Encerrada por').value, 'Autorecord');
   assert.ok(expired.components[0].components.every(button => button.disabled));
+});
+
+test('live panel warns that the recording may be used for training and links the privacy policy (RF10, CA26)', () => {
+  const field = (result) => result.embeds[0].fields.find(({ name }) => name === 'Privacidade');
+  const live = recordingPanel({ ...meta, state: 'recording' }, null, Date.now(), 'https://pia.travelrpg.com/qualquer');
+  assert.equal(live.embeds[0].title, '🔴 Gravação em andamento');
+  const notice = field(live).value;
+  assert.match(notice, /pode ser usada para treinar modelos/);
+  assert.match(notice, /inclusive a dos demais participantes do canal/);
+  assert.match(notice, /^\[EM REVISÃO JURÍDICA: P11 aviso de gravação no Discord\] /, 'rascunho visível até o parecer');
+  assert.match(notice, /\nPolítica de Privacidade: https:\/\/pia\.travelrpg\.com\/privacidade$/);
+  assert.doesNotMatch(notice, /MP3/);
+  assert.ok(notice.length <= 1024, 'limite de campo do embed');
+  assert.match(field(recordingPanel({ ...meta, state: 'recording' }, null, Date.now(), 'https://outro.example')).value,
+    /https:\/\/outro\.example\/privacidade$/);
+  assert.match(trainingNotice(), /\/privacidade$/);
+  assert.equal(field(recordingPanel({ ...meta, state: 'queued', editUntil, durationMs: 1000 }, null, Date.parse(editUntil))), undefined,
+    'painel encerrado não repete o aviso');
 });
