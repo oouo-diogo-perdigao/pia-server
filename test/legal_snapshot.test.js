@@ -73,3 +73,38 @@ test('texto jurídico novo em outro conjunto (versão nova) não altera a versã
   comConjuntoNovo.juridico['1.1'] = { TRECHO: { texto: 'Redação nova do Advogado.', revisado: true } };
   assert.deepEqual(versoesAlteradas(comConjuntoNovo), []);
 });
+
+// Feature 0004: a v1.1 entra em rascunho sem mexer na v1.0 publicada. Os hashes abaixo são os do release legal v1.0
+// (5ffd664), escritos aqui à parte de versoes.js: se alguém mudar o HTML da v1.0 e o sha256 do manifesto juntos, este
+// teste ainda falha.
+const SHA256_V1_0 = Object.freeze({
+  privacidade: 'a2ff6c287715f4c54d38b7d8796a07a4422537505b559893ed97126a0fcec3ad',
+  termos: '9b9b7335fcd2ea0f138f36932c4b933f99e81a58bdb44c76bc4b862a013ce99f',
+});
+
+// Release legal v1.1 (2026-11-18), repetidos aqui pelo mesmo motivo.
+const SHA256_V1_1 = Object.freeze({
+  privacidade: '3cbf9340a46b5e747739522c275f73a9611c2831e3848ec4836e188f3ebb153e',
+  termos: 'd1c0db237cabbda801fc49be04d4412f86d545c5aaa6a1e68cb61e72e6aa4f13',
+});
+
+test('v1.0 continua congelada com o sha256 do release, com a v1.1 publicada no manifesto e no juridico.js', async () => {
+  const { JURIDICO } = await import('../src/legal/juridico.js');
+  for (const [documento, sha256] of Object.entries(SHA256_V1_0)) {
+    const item = VERSOES[documento].find((v) => v.versao === '1.0');
+    assert.equal(item.sha256, sha256, `${documento}: sha256 da v1.0 no manifesto`);
+    assert.equal(item.juridico, '1.0');
+    assert.equal(hashDocumento(documento, '1.0'), sha256, `${documento} v1.0 mudou`);
+    // Mesmo hash sem a v1.1 no manifesto nem o conjunto '1.1': a v1.1 não influi no HTML da v1.0.
+    const semV11 = {
+      juridico: { '1.0': JURIDICO['1.0'] },
+      versoes: Object.fromEntries(Object.entries(VERSOES).map(([doc, lista]) => [doc, lista.filter((v) => v.versao === '1.0')])),
+    };
+    assert.equal(hashDocumento(documento, '1.0', semV11), sha256, `${documento} v1.0 depende da v1.1`);
+    const v11 = VERSOES[documento].find((v) => v.versao === '1.1');
+    assert.ok(v11, `${documento} v1.1 no manifesto`);
+    assert.deepEqual([v11.vigencia, v11.atualizacao, v11.sha256, v11.juridico], ['2026-11-18', '2026-11-18', SHA256_V1_1[documento], '1.1'],
+      `${documento} v1.1 publicada (release legal v1.1)`);
+    assert.equal(hashDocumento(documento, '1.1'), SHA256_V1_1[documento], `${documento} v1.1 mudou`);
+  }
+});

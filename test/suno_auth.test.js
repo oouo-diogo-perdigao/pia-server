@@ -15,7 +15,9 @@ const { startFakeSunoMcp } = await import('./fixtures/fake_suno_mcp.js');
 const { createMemorySunoStore } = await import('./fixtures/memory_suno_store.js');
 const { lockSunoTables } = await import('./fixtures/pg_suno_lock.js');
 
-const REDIRECT = 'https://pia.travelrpg.com/auth/connectors/suno';
+// O redirect segue PIA_PUBLIC_URL (origin de src/auth.js); o teste não depende do ambiente.
+const { origin } = await import('../src/auth.js');
+const REDIRECT = origin + '/auth/connectors/suno';
 const SUNO_A = { id: 'suno-user-a', email: 'a@suno.test', label: 'Suno A' };
 const SUNO_B = { id: 'suno-user-b', email: 'b@suno.test', label: 'Suno B' };
 const original = { ...auth.sunoOAuth };
