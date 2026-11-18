@@ -253,7 +253,7 @@ test('legalNotFound devolve 404 HTML só para /privacidade/* e /termos/* desconh
 
 test('legalFooter tem os dois links relativos e o texto de ciência opcional', () => {
   const rodape = legalFooter();
-  assert.match(rodape, /<a href="\/privacidade">Política de Privacidade<\/a> · <a href="\/termos">Termos de Serviço<\/a>/);
+  assert.match(rodape, /^<p class="pia-legal-footer pia-legal-footer--server pia-legal-footer--links"><a href="\/privacidade">Política de Privacidade<\/a> <a href="\/termos">Termos de Serviço<\/a><\/p>$/);
   assert.doesNotMatch(rodape, /Ao continuar/);
   assert.match(legalFooter({ ciencia: true }),
     /Ao continuar, você concorda com os <a href="\/termos">Termos de Serviço<\/a> e declara ter lido a <a href="\/privacidade">Política de Privacidade<\/a>\./);

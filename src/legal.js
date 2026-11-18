@@ -69,8 +69,8 @@
  *   legalRedirects             Map caminho → Location relativo canônico (301; a query é descartada).
  *   legalNotFound(caminho, fontes?) → { status: 404, headers, body } para /privacidade/* e /termos/*
  *                                desconhecidos; null para qualquer outro caminho.
- *   legalFooter({ ciencia })   rodapé HTML com links relativos para /privacidade e /termos;
- *                                ciencia:true acrescenta o texto de ciência do RF05.
+ *   legalFooter({ ciencia })   rodapé do card (<p class="pia-legal-footer ...">), links relativos na
+ *                                mesma aba: ciencia/aceite:true = frase do RF05; padrão = só os links.
  *   pendencias(fontes?)        lista de pendências ativas (trechos sem revisão e datas null).
  *   textoJuridico(chave, documento?) texto simples (sem HTML) de um trecho do conjunto da versão
  *                                atual do documento, com tokens de dados resolvidos e o selo
@@ -437,14 +437,21 @@ export function legalNotFound(path, fontes) {
 }
 
 /**
- * Rodapé com os links para a Política e os Termos, para as páginas de autorização e de callback.
- * Com { ciencia: true }, inclui o texto de ciência do RF05 (telas de login).
+ * Rodapé legal do RF05 para os cards de login e autorização (especificação de UX, seção 2.1).
+ * Sempre o último elemento do .pia-login-card; links relativos, na mesma aba (sem target).
+ *  - { ciencia: true } (ou { aceite: true }): variante "aceite", com a frase do RF05, para telas
+ *    com ação de entrar/continuar (/auth/device/:id e /discord/bless/:token no estado de formulário).
+ *  - padrão: variante "links" (Política e Termos; o separador visual vem do gap do CSS), para
+ *    páginas de resultado (sucesso, erro) e /oauth/callback.
+ * O estilo (sublinhado obrigatório, cores, foco) fica em web/login.css (.pia-legal-footer).
  */
-export function legalFooter({ ciencia = false } = {}) {
-  return '<footer class="legal-footer">' +
-    (ciencia ? '<p>Ao continuar, você concorda com os <a href="/termos">Termos de Serviço</a> e declara ter lido a <a href="/privacidade">Política de Privacidade</a>.</p>' : '') +
-    '<p><a href="/privacidade">Política de Privacidade</a> · <a href="/termos">Termos de Serviço</a></p>' +
-    '</footer>';
+export function legalFooter({ ciencia = false, aceite = ciencia } = {}) {
+  if (aceite) {
+    return '<p class="pia-legal-footer pia-legal-footer--server">Ao continuar, você concorda com os ' +
+      '<a href="/termos">Termos de Serviço</a> e declara ter lido a <a href="/privacidade">Política de Privacidade</a>.</p>';
+  }
+  return '<p class="pia-legal-footer pia-legal-footer--server pia-legal-footer--links">' +
+    '<a href="/privacidade">Política de Privacidade</a> <a href="/termos">Termos de Serviço</a></p>';
 }
 
 /**
