@@ -100,7 +100,8 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 - O HTML fixo segue os textos do rascunho (`docs/legal-v1.1-rascunho.md`), conciliados com a v1.0: seção 7 sem país, "Termos de Serviço", RN11, CA28 e Caminho A.
 - CA27: continua valendo para a v1.0 e passa a exigir o Suno e o histórico de gerações na v1.1 (`test/legal.test.js`). A v1.0 está protegida pelos `sha256` do release, repetidos em `test/legal_snapshot.test.js`.
 - `PIA_LEGAL_RELEASE=1 npm test` falha de propósito enquanto a v1.1 for rascunho (os 7 trechos acima e as 4 datas nulas).
-- Pendências da v1.1: `legalFooter()` no `sunoCallbackPage` (F2-09, CA13), que é código do Suno e ficou fora; RN05 (dado novo pediria 2.0?); aviso de 15 dias da seção 13; as duas partes do `DIREITOS_MUSICAS_SUNO` do F2-02 que não entraram. Detalhes na conferência.
+- O callback do Suno (`/auth/connectors/suno`) tem o rodapé com os links desde `a218e75` (O13, DevBackend); até o release da v1.1 esses links servem a v1.0, que não cita o Suno.
+- Pendências da v1.1: RN05 (dado novo pediria 2.0?); aviso de 15 dias da seção 13; as duas partes do `DIREITOS_MUSICAS_SUNO` do F2-02 que não entraram. Detalhes na conferência.
 
 ## Escopo da v1.0
 

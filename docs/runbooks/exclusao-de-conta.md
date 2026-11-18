@@ -22,7 +22,7 @@ Apagar as linhas **não** revoga nada fora do servidor.
 | Microsoft (conector) | Orientar o titular a remover o app nas permissões da conta Microsoft. Sem revogação remota no código. |
 | Discord (token do bot próprio) | O token do bot é do titular (`accounts.discord_token`, conector `discord`). Orientar a **regenerar o token** no Discord Developer Portal. |
 | Taverns, Object Storage (S3/R2/compatível) | Credenciais do titular: orientar a revogar/rotacionar no provedor. |
-| Suno (feature 0001) | Os tokens ficam cifrados em `suno_accounts.ciphertext` e somem no cascade (seção 2). Nem a desconexão (`DELETE /device/suno/accounts/:id`) nem a exclusão revogam no Suno (`src/suno_auth.js:417`). Orientar o titular a revogar o acesso da PIA na conta Suno dele. Política v1.1, `DESCONEXAO_SUNO`. |
+| Suno (feature 0001) | Os tokens ficam cifrados em `suno_accounts.ciphertext` e somem no cascade (seção 2). Nem a desconexão (`DELETE /device/suno/accounts/:id`) nem a exclusão revogam no Suno (`src/suno_auth.js:418`). Orientar o titular a revogar o acesso da PIA na conta Suno dele. Política v1.1, `DESCONEXAO_SUNO`. |
 | Sessões e tokens MCP, computadores | São apagados pelo cascade (`sessions`, `devices`). Opcionalmente, antes, revogar pelo painel. |
 
 ## 2. Apagar no PostgreSQL (uma transação)
