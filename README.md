@@ -10,7 +10,47 @@ Serviço da PIA para gravar sessões de voz do Discord continuamente e entregar 
 4. Execute `docker compose up -d`. A porta do exemplo fica em loopback. Configure seu proxy HTTPS para apontar ao serviço. No Traefik com as redes `proxy-publico` e `postgres`, use `docker compose -f compose.yaml -f compose.traefik.yaml up -d` e ajuste o host no arquivo de override.
 5. Confira `/health`. Entre no painel com o e-mail administrador autorizado. O administrador pode autorizar outras contas Google e cada conta tem seu próprio bot, regras, fila e pasta no Drive.
 
-A automação no GitHub constrói e envia imagens Linux amd64 e arm64 para `ghcr.io/oouo-diogo-perdigao/pia-server`. No desenvolvimento, execute `npm ci` e `npm test`. Para construir uma imagem local, execute `docker build -t pia-server:local .`.
+A automação no GitHub executa os testes e publica imagens Linux amd64 e arm64
+em `ghcr.io/oouo-diogo-perdigao/pia-server`. Cada push em `main` atualiza a tag
+`main` de produção. Cada push em `develop` atualiza a tag `develop` de staging.
+O Watchtower no servidor consulta o registro a cada cinco minutos e recria o
+contêiner quando a tag do ambiente aponta para uma imagem nova. Mantenha o
+`PIA_IMAGE` de cada ambiente apontando para sua tag no GHCR.
+
+No desenvolvimento, execute `npm ci` e `npm test`. Para construir uma imagem
+local, execute `docker build -t pia-server:local .`.
+
+## Implantar staging
+
+O staging usa a imagem publicada por `develop`, com projeto Compose, rota
+Traefik, volume e banco PostgreSQL próprios. Começa com o banco vazio.
+
+1. Em uma sessão administrativa do `psql`, crie o papel e o banco no PostgreSQL
+   acessível pela rede Docker `postgres`. Use uma senha exclusiva para o papel.
+
+   ```sql
+   CREATE ROLE pia_server_stg LOGIN;
+   \password pia_server_stg
+   CREATE DATABASE pia_server_stg OWNER pia_server_stg;
+   REVOKE CONNECT ON DATABASE pia_server_stg FROM PUBLIC;
+   ```
+
+2. No host do Traefik, copie `.env.stg.example` para `.env.stg`, restrinja o
+   acesso ao arquivo e configure `PGPASSWORD`, `PIA_ADMIN_EMAIL` e uma chave
+   exclusiva gerada com `openssl rand -hex 32`.
+3. Configure um cliente OAuth Google de staging com a URI
+   `https://pia-stg.travelrpg.com/auth/google/callback`. Preencha as credenciais
+   desse cliente em `.env.stg`. Para testar as integrações, use um bot Discord
+   e uma pasta no Drive dedicados ao staging.
+4. Aponte o DNS de `pia-stg.travelrpg.com` ao mesmo ingresso público do Traefik.
+   Com Docker Compose 2.24.4 ou posterior, execute:
+
+   ```sh
+   docker compose --env-file .env.stg -p pia-server-stg -f compose.yaml -f compose.stg.yaml up -d
+   curl -fsS https://pia-stg.travelrpg.com/health
+   ```
+
+5. Entre no painel de staging com a conta administradora configurada.
 
 ## Configurar gravação
 
