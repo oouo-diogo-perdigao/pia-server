@@ -93,6 +93,27 @@ inexistente responde `404 suno_connect_not_found`. `GET /device/account` anuncia
 `capabilities: ["suno:3"]`. Segredos `mcp:*` de perfis sincronizados são
 descartados pelo servidor, porque pertencem a cada computador.
 
+### Cliente MCP do Suno
+
+`src/suno_mcp.js` fala com `https://api.suno.com/mcp` por Streamable HTTP
+(`initialize` com `Mcp-Session-Id`, `notifications/initialized`, novo
+`initialize` quando a sessão expira, respostas JSON ou SSE e timeout por
+`AbortSignal`). As tools de geração, status, conta e créditos são descobertas no
+`tools/list` por nome e por schema, porque o schema real só sai do spike.
+`src/suno_client.js` liga o cliente ao token de cada conta Suno: um 401 do Suno
+renova o token uma vez e repete só aquela requisição. A geração faz um único
+`tools/call` (nunca repetido depois de enviado) e acompanha clips pendentes pela
+tool de status. Os erros saem com o `code` do contrato: `suno_credential_expired`,
+`suno_no_credits`, `suno_timeout` e `suno_unavailable`. Uma conta em
+`unavailable` recebe `suno_unavailable`. Nenhum token, corpo de resposta do Suno
+ou `audio_url` assinada vai para log ou mensagem de erro, e o servidor guarda só
+o link do Suno, nunca uma cópia do áudio.
+
+Para o spike, um admin logado na web pode listar as tools de uma conta Suno
+conectada à própria conta PIA com `POST /api/admin/suno/spike`
+`{"suno_account_id": "…"}`. A resposta traz nomes, descrições e schemas, sem
+tokens, e não gera música.
+
 ## Histórico de gerações de música
 
 O servidor guarda o histórico de músicas da conta PIA (RN13, RN14, RN25/CA24) na
