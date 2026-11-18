@@ -806,15 +806,19 @@ test('F2-09/0004: v1.1 cita o Suno e o histórico de gerações nas seções do 
   for (const pagina of [html, termos]) assert.match(textoVisivel(pagina), /Suno/);
   assert.match(textoVisivel(html), /histórico de gerações de música/);
   const dados = secaoDe(html, 'dados-coletados');
-  assert.ok(dados.includes('Prompts, letras, links de música do Suno e o histórico de gerações de música, incluindo as gerações locais e do Gemini, das quais guardamos o prompt, a letra e metadados, sem o áudio e sem link.'));
+  // Parecer da v1.1, R2 (seção 2, item 2), literal.
+  assert.ok(dados.includes('Histórico de gerações de música: o prompt, a letra, o título, a duração, o estado e as faixas de cada geração. Nas gerações pelo Suno, também o nome da conta Suno usada e os links das músicas no Suno, que ficam só no servidor. Nas gerações locais e pelo Gemini, não guardamos o áudio nem link.'));
   assert.ok(dados.includes('Credenciais e tokens das integrações que você conecta: Google, Microsoft, Object Storage (S3), Discord, Taverns e Suno. Eles são guardados cifrados.'));
   assert.ok(dados.includes('De cada conta Suno que você conecta: o identificador, o e-mail e o nome da conta no Suno, o apelido que você dá a ela, os escopos autorizados e os tokens de acesso, que são guardados cifrados.'));
   assert.doesNotMatch(dados, /das quais guardamos só metadados/, 'divergência D1: o código guarda prompt e letra das gerações locais');
+  // DV2 (requisitos da 0004, CA-0406): a cópia de mídia para o Drive cita as músicas do Suno.
+  assert.ok(dados.includes('as músicas geradas no PC (MP3/WAV, pelo Gemini, pelo Suno ou localmente)'));
   const finalidades = secaoDe(html, 'finalidades');
   assert.match(finalidades, /Secretária, geração de música, cópia de mídia para o Drive, computadores pareados e MCP\./);
   assert.match(finalidades, /A PIA não usa os dados da sua conta Suno \(identificador, e-mail, nome e tokens\) para treinar modelos\./);
   const comp = secaoDe(html, 'compartilhamento');
-  assert.match(comp, /Suno: conta conectada e geração de música\./);
+  // Parecer da v1.1, R1 (seção 4.4), literal.
+  assert.ok(comp.includes('Suno: conta conectada e geração de música. O Suno recebe o prompt e a letra de cada música, as músicas ficam na sua biblioteca no Suno e usam os créditos do seu plano. Pelos termos do Suno, ele pode usar o que você envia para melhorar os próprios serviços e modelos de IA.'));
   const transf = secaoDe(html, 'transferencia-internacional');
   assert.ok(transf.includes('como Google, Microsoft, Discord, Suno, Groq e CrowdSec, podem tratar dados no exterior. Os detalhes estão logo abaixo.'));
   assert.ok(transf.includes('O Discord transmite o áudio das chamadas de voz gravadas pelo bot. O Suno recebe o prompt e a letra quando você gera músicas com a sua conta Suno conectada.'));
@@ -822,8 +826,9 @@ test('F2-09/0004: v1.1 cita o Suno e o histórico de gerações nas seções do 
   const retencao = secaoDe(html, 'retencao');
   for (const frase of [
     'conectores, contas Suno conectadas, histórico de gerações de música, computadores pareados',
-    'Excluir um item do histórico apaga do servidor o prompt, a letra e os links daquele item. Excluir um item do histórico não apaga a cópia no Drive nem os metadados de mídia.',
-    'Desconectar uma conta Suno apaga do servidor os tokens e os dados dessa conta, mas não revoga o acesso da PIA no próprio Suno.',
+    // Parecer da v1.1, R3 (seção 4.4) e R4 (seção 2, item 4), literais.
+    'Excluir um item do histórico apaga do servidor o prompt, a letra e os links daquele item. Excluir um item do histórico não apaga a cópia no Drive, os metadados de mídia, os arquivos no seu computador nem a música na sua biblioteca no Suno.',
+    'Desconectar uma conta Suno apaga do servidor os tokens e os dados dessa conta. Sem os tokens, a PIA deixa de conseguir usar essa conta, mas a autorização dada no próprio Suno não é revogada pela PIA: se quiser, revogue-a na sua conta Suno. O histórico de gerações continua na sua conta PIA, com o apelido, o nome ou o e-mail da conta Suno que foi usada, e você pode excluir cada item.',
     'Links de música do Suno podem expirar.',
     'O áudio das músicas do Suno não é guardado na PIA Server',
   ]) assert.ok(retencao.includes(frase), frase);
@@ -832,7 +837,10 @@ test('F2-09/0004: v1.1 cita o Suno e o histórico de gerações nas seções do 
   const licenca = secaoDe(termos, 'conteudo-e-licenca');
   assert.match(licenca, /prompts, letras, chats, músicas geradas e gravações/);
   assert.match(licenca, /os dados da sua conta Microsoft, os dados da sua conta Suno e as suas credenciais e tokens/);
-  assert.match(secaoDe(termos, 'conteudo-gerado-por-ia'), /músicas geradas pelo Suno, pelo Gemini ou por outros provedores seguem os termos de cada provedor/);
+  const secao6 = secaoDe(termos, 'conteudo-gerado-por-ia');
+  // Parecer da v1.1, R6 (seção 2, item 7) e R5 (seção 5), literais.
+  assert.ok(secao6.includes('Os direitos e limites de uso das músicas geradas pelo Suno, pelo Gemini ou por outros provedores seguem os termos de cada provedor e o plano que você tem nele. No Suno, por exemplo, músicas feitas no plano gratuito só podem ser usadas para fins pessoais e não comerciais, conforme os termos do Suno. A PIA não concede direitos sobre essas músicas. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.'));
+  assert.ok(secao6.includes('A PIA não controla os serviços de terceiros e não responde pela disponibilidade, pela cobrança de créditos ou pelas mudanças deles. Gerar músicas pelo Suno consome os créditos do seu plano no Suno, conforme as regras dele.'));
 });
 
 test('F2-09/0004: v1.1 mantém as regras da v1.0 (RN11, CA28, Caminho A, Termos de Serviço, seções e ids)', () => {
@@ -866,19 +874,27 @@ test('F2-09/0004: v1.1 mantém as regras da v1.0 (RN11, CA28, Caminho A, Termos 
   }
 });
 
-test('F2-09/0004: JURIDICO[1.1] = conjunto 1.0 final + trechos novos ou alterados com revisado:false, texto puro e só tokens de dados', () => {
+// Parecer da v1.1 (feature 0004): trechos com texto literal aprovado (revisado:true). TREINAMENTO_CONTA_SUNO só passa com
+// a Alternativa A do O1 (seção 3.3).
+const APROVADOS_PARECER_V1_1 = ['AUDIO_SUNO', 'DADOS_CONTA_SUNO', 'DESCONEXAO_SUNO', 'DIREITOS_MUSICAS_GERADAS', 'HISTORICO_GERACOES', 'SALVAGUARDAS_TRANSFERENCIA'];
+
+test('F2-09/0004: JURIDICO[1.1] = conjunto 1.0 final + trechos do parecer da v1.1, texto puro e só tokens de dados', () => {
   const v10 = JURIDICO['1.0'];
   const v11 = JURIDICO['1.1'];
   for (const [chave, trecho] of Object.entries(v11)) {
     const igual = v10[chave] && v10[chave].texto === trecho.texto;
-    assert.equal(trecho.revisado, Boolean(igual), `${chave}: revisado:${trecho.revisado}, ${igual ? 'igual' : 'diferente'} da v1.0`);
+    assert.equal(trecho.revisado, Boolean(igual) || APROVADOS_PARECER_V1_1.includes(chave), `${chave}: revisado:${trecho.revisado}, ${igual ? 'igual' : 'diferente'} da v1.0`);
     if (!trecho.revisado) assert.ok(trecho.pendencia && trecho.assunto, chave);
     assert.doesNotMatch(trecho.texto + trecho.assunto, /[[\]<>]/, `${chave}: texto puro, sem colchetes nem HTML`);
     assert.doesNotMatch(trecho.texto, /\{\{(?!CONTATO_EMAIL|CONTROLADOR_NOME|IDADE_MINIMA)[A-Z_]+\}\}/, `${chave}: só tokens de dados`);
   }
   for (const chave of Object.keys(v10)) assert.ok(Object.hasOwn(v11, chave), `${chave} continua no conjunto 1.1`);
   assert.deepEqual(Object.entries(v11).filter(([, t]) => !t.revisado).map(([c]) => c).sort(),
-    ['AUDIO_SUNO', 'DADOS_CONTA_SUNO', 'DESCONEXAO_SUNO', 'DIREITOS_MUSICAS_GERADAS', 'HISTORICO_GERACOES', 'SALVAGUARDAS_TRANSFERENCIA', 'TREINAMENTO_CONTA_SUNO']);
+    ['TREINAMENTO_CONTA_SUNO']);
+  // Textos aprovados no parecer da v1.1 (seção 2, itens 1, 3 e 6), sem mudança.
+  assert.equal(v11.DADOS_CONTA_SUNO.texto, 'De cada conta Suno que você conecta: o identificador, o e-mail e o nome da conta no Suno, o apelido que você dá a ela, os escopos autorizados e os tokens de acesso, que são guardados cifrados.');
+  assert.equal(v11.AUDIO_SUNO.texto, 'O áudio das músicas do Suno não é guardado na PIA Server: quando você baixa uma faixa, o servidor busca o áudio no Suno pelo link guardado no histórico e o repassa ao seu computador, sem gravar o arquivo.');
+  assert.ok(v11.SALVAGUARDAS_TRANSFERENCIA.texto.includes('O Suno recebe o prompt e a letra quando você gera músicas com a sua conta Suno conectada.'));
   // Todos os trechos usados em alguma página da v1.1 (AVISO_GRAVACAO_DISCORD é só do embed).
   const ambos = paginaV11('privacidade') + paginaV11('termos');
   for (const [chave, trecho] of Object.entries(v11)) {

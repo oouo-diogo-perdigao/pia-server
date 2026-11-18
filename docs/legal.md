@@ -103,6 +103,13 @@ Redações do **parecer jurídico sobre `f1338f7`** (`/workspace/techlead-time2/
 - O callback do Suno (`/auth/connectors/suno`) tem o rodapé com os links desde `a218e75` (O13, DevBackend); até o release da v1.1 esses links servem a v1.0, que não cita o Suno.
 - Pendências da v1.1: RN05 (dado novo pediria 2.0?); aviso de 15 dias da seção 13; as duas partes do `DIREITOS_MUSICAS_SUNO` do F2-02 que não entraram. Detalhes na conferência.
 
+### Parecer da v1.1 (18/11/2026)
+
+- Favorável com ressalvas; textos literais aplicados (R1 a R6, DV2 e O1 na Alternativa A, decisão do Diogo). Detalhes em `docs/legal-v1.1-conferencia.md`, seção 2a.
+- **R7 pendente:** o aviso "Conectar sua conta Suno" vai "no app, antes de abrir o login do Suno". O pia-server não tem essa tela (só o callback, depois do login); cabe ao app desktop (`pia`).
+- **R8 (Recomendado):** reconferir os termos do Suno e a página do Suno MCP a cada 6 meses e antes de o MCP sair do beta. Próxima conferência: até 18/05/2027.
+- **O2/O3:** sem deploy de produção com o Suno antes de a v1.1 valer; se já houve, publicar a v1.1 já e avisar quem conectou (texto no parecer, seção 6.3).
+
 ## Escopo da v1.0
 
 A v1.0 sai sem a feature 0001 (requisitos v2.7): nenhuma página cita a integração de música da 0001 nem histórico de gerações (CA27, verificado em `test/legal.test.js` no HTML renderizado e nas fontes legais). Os trechos retirados ficam em `docs/legal-v1.1-rascunho.md` e entram numa v1.1, junto com a F2-09, depois do merge da 0001.

@@ -64,6 +64,28 @@ Escopo: a v1.1 trata **só do Suno**. Os ajustes do parecer da feature 0003 (avi
 - A v1.1 **não menciona a página de conexão nem o fluxo OAuth** do Suno: fala só da "conta conectada" (seções 3 e 6) e da desconexão (seção 8). Não há frase incoerente com o rodapé, e nada foi alterado no texto.
 - `test/legal_links.test.js` não precisou de ajuste para a v1.1: ele confere o HTML do rodapé, e não o conteúdo das páginas.
 
+## 2a. Parecer da v1.1 (`/workspace/techlead-time2/feature-0004/parecer-juridico.md`, sobre `3862937`) e o que mudou
+
+Parecer favorável com ressalvas. Decisão do Diogo: publicar com os textos do parecer, sem nova rodada, Alternativa A no O1. Todos os textos foram copiados literalmente.
+
+| Item | Onde | O que mudou | Status no `JURIDICO['1.1']` |
+|---|---|---|---|
+| Seção 2, item 1 | `DADOS_CONTA_SUNO` | Texto mantido, aprovado | `trecho()` |
+| Seção 2, item 3 | `AUDIO_SUNO` | Texto mantido, aprovado | `trecho()` |
+| Seção 2, item 6 | `SALVAGUARDAS_TRANSFERENCIA` | Frase do Suno mantida, aprovada | `trecho()` |
+| R2 (seção 2, item 2) | `HISTORICO_GERACOES` | Texto do parecer (com título, duração, estado, faixas e a conta Suno usada) | `trecho()` |
+| R4 (seção 2, item 4) | `DESCONEXAO_SUNO` | Texto do parecer (efeito prático e "você pode excluir cada item") | `trecho()` |
+| R6 (seção 2, item 7) | `DIREITOS_MUSICAS_GERADAS` | Texto do parecer (plano, plano gratuito do Suno, "A PIA não concede direitos"). Resolve a D8 | `trecho()` |
+| R1 (seção 4.4) | Política, seção 6, HTML | Item do Suno com prompt e letra, biblioteca, créditos e o que os termos do Suno permitem | HTML |
+| R3 (seção 4.4) | Política, seção 8, HTML | 2ª frase da exclusão de item com arquivos no computador e biblioteca no Suno. Cobre a DV4; o 409 fica só na mensagem da interface (decisão do Advogado) | HTML |
+| R5 (seção 5) | Termos, seção 6, 3º item, HTML | Frase dos créditos do Suno ao fim do item | HTML |
+| R7 (seção 6.1) | Aviso "Conectar sua conta Suno" | **Não aplicado no pia-server.** O parecer põe o aviso "no app, antes de abrir o login do Suno", com os botões "Cancelar · Continuar para o Suno". O pia-server não renderiza nenhuma tela antes do login: `sunoConnect()` (`src/suno_auth.js:196-212`) devolve a URL de autorização do Suno ao app, e a única página do Suno no servidor é o callback (`src/suno_auth.js:429-438`), mostrada **depois** do login. O aviso cabe no app desktop (repositório `pia`) ou numa tela nova no servidor, que exigiria mudar a lógica do fluxo | — |
+| R8 (seção 4.1) | `docs/legal.md` | Reconferir termos e MCP do Suno periodicamente (prazo no doc; não entra nas páginas, CA28) | — |
+| DV2 (requisitos 0004, CA-0406) | Política, seção 3, HTML | "pelo Gemini ou localmente" passa a "pelo Gemini, pelo Suno ou localmente" | HTML |
+| O1, Alternativa A (seção 3.3) | `TREINAMENTO_CONTA_SUNO`, resumo da Política, Termos 5 | Commit separado (o último da branch) | `trecho()` no commit 2 |
+| Op1 (seção 7) | Resumo do histórico de versões | Junto com o O1 (Alternativa A) | — |
+| O2 e O3 | Processo de release | Ordem do release e, se já houve deploy com o Suno, e-mail a quem conectou. Com o TechLead | — |
+
 ## 3. O que os requisitos pedem a mais para a v1.1
 
 Fonte: `/workspace/feature-0002-requisitos.md`, seção 0.1 (v1.1), 6.1, 6.2, CA06, CA07, CA13 e o F2-09 do plano técnico.
