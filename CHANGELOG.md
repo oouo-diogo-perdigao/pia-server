@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Release legal v1.1 - 2026-11-18
+- Política de Privacidade e Termos de Serviço v1.1 publicados: `vigencia` e `atualizacao` em 2026-11-18 e `sha256` do HTML congelado em `src/legal/versoes.js` (privacidade `3cbf9340a46b…`, termos `d1c0db237cab…`). Todos os trechos de `JURIDICO['1.1']` estão `revisado:true` (parecer do Advogado sobre `3862937`, favorável com ressalvas; textos literais em `64a9fb0` e O1 na Alternativa A em `f606f48`, decisão do Diogo). `/privacidade` e `/termos` passam a servir a v1.1; `/privacidade/v1.1` e `/termos/v1.1` respondem 200 com a cópia congelada.
+- A v1.0 foi aprovada e congelada em 2026-11-17 (release legal v1.0), mas foi substituída pela v1.1 antes de ser publicada em produção. A entrada da v1.0 em `versoes.js` e o `sha256` dela não mudam (`/privacidade/v1.0` e `/termos/v1.0` seguem servindo a mesma cópia); a nota está no resumo da v1.1 no "Histórico de versões".
+- Fora desta release: R7 do parecer (aviso antes do login do Suno), porque o servidor não tem tela antes do login; vira follow-up no app desktop.
+- Testes do conteúdo real adaptados ao estado publicado da v1.1. `npm test` e `PIA_LEGAL_RELEASE=1 npm test` passam.
+
 ### Páginas legais v1.1 (rascunho, feature 0004)
 - Política de Privacidade e Termos de Serviço v1.1 com a feature 0001 (Suno), sobre o texto final da v1.0: conta Suno, histórico de gerações de música, Suno como terceiro e na transferência internacional (sem país), exclusão de item do histórico, desconexão da conta Suno, links que expiram e áudio do Suno repassado sem ser guardado. Novos `privacidade-v1.1.html`, `termos-v1.1.html` e `JURIDICO['1.1']` (trechos novos ou alterados com `revisado:false`); entradas 1.1 em `versoes.js` com datas e `sha256` nulos. A v1.0 continua congelada em `/privacidade/v1.0` e `/termos/v1.0`, com o mesmo `sha256`.
 - Conferência de cada afirmação contra o código e divergências com o rascunho em `docs/legal-v1.1-conferencia.md`; runbook de exclusão de conta com as tabelas do Suno.

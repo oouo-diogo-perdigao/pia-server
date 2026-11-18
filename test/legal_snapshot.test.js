@@ -82,7 +82,13 @@ const SHA256_V1_0 = Object.freeze({
   termos: '9b9b7335fcd2ea0f138f36932c4b933f99e81a58bdb44c76bc4b862a013ce99f',
 });
 
-test('v1.0 continua congelada com o sha256 do release, com a v1.1 no manifesto e no juridico.js', async () => {
+// Release legal v1.1 (2026-11-18), repetidos aqui pelo mesmo motivo.
+const SHA256_V1_1 = Object.freeze({
+  privacidade: '3cbf9340a46b5e747739522c275f73a9611c2831e3848ec4836e188f3ebb153e',
+  termos: 'd1c0db237cabbda801fc49be04d4412f86d545c5aaa6a1e68cb61e72e6aa4f13',
+});
+
+test('v1.0 continua congelada com o sha256 do release, com a v1.1 publicada no manifesto e no juridico.js', async () => {
   const { JURIDICO } = await import('../src/legal/juridico.js');
   for (const [documento, sha256] of Object.entries(SHA256_V1_0)) {
     const item = VERSOES[documento].find((v) => v.versao === '1.0');
@@ -97,6 +103,8 @@ test('v1.0 continua congelada com o sha256 do release, com a v1.1 no manifesto e
     assert.equal(hashDocumento(documento, '1.0', semV11), sha256, `${documento} v1.0 depende da v1.1`);
     const v11 = VERSOES[documento].find((v) => v.versao === '1.1');
     assert.ok(v11, `${documento} v1.1 no manifesto`);
-    assert.deepEqual([v11.vigencia, v11.atualizacao, v11.sha256, v11.juridico], [null, null, null, '1.1'], `${documento} v1.1 em rascunho`);
+    assert.deepEqual([v11.vigencia, v11.atualizacao, v11.sha256, v11.juridico], ['2026-11-18', '2026-11-18', SHA256_V1_1[documento], '1.1'],
+      `${documento} v1.1 publicada (release legal v1.1)`);
+    assert.equal(hashDocumento(documento, '1.1'), SHA256_V1_1[documento], `${documento} v1.1 mudou`);
   }
 });

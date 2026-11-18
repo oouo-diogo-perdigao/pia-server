@@ -361,9 +361,10 @@ test('sem nenhuma versão publicada, a atual é a última em rascunho e legalFil
     /ordem crescente/);
 });
 
-test('conteúdo real do repositório renderiza publicado (v1.0 final), com dados reais e todos os trechos jurídicos', () => {
+test('conteúdo real do repositório renderiza publicado (v1.0 e v1.1 finais), com dados reais e todos os trechos jurídicos', () => {
   const entradas = new Map(legalFiles('https://pia.travelrpg.com'));
-  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0'], 'v1.0 publicada: atuais e cópias congeladas');
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/privacidade/v1.1', '/termos', '/termos/v1.0', '/termos/v1.1'],
+    'v1.0 e v1.1 publicadas: atuais e cópias congeladas');
   const privacidade = entradas.get('/privacidade')[1];
   const termos = entradas.get('/termos')[1];
   assert.match(privacidade, /<link rel="canonical" href="https:\/\/pia\.travelrpg\.com\/privacidade">/);
@@ -371,16 +372,21 @@ test('conteúdo real do repositório renderiza publicado (v1.0 final), com dados
   assert.match(privacidade, /contato@travelrpg\.com/);
   assert.match(termos, /comarca de Belo Horizonte\/MG/);
   const ambos = privacidade + termos;
-  for (const [chave, trecho] of Object.entries(JURIDICO['1.0'])) {
-    assert.equal(trecho.revisado, true, `${chave} aprovado no parecer final (release legal v1.0)`);
-    if (chave === 'AVISO_GRAVACAO_DISCORD') continue; // só no embed do Discord (F2-10)
-    assert.ok(ambos.includes(escapeHtml(renderTokens(trecho.texto, DADOS))), `${chave} usado em alguma página`);
+  const ambosV10 = entradas.get('/privacidade/v1.0')[1] + entradas.get('/termos/v1.0')[1];
+  for (const [conjunto, paginas] of [['1.0', ambosV10], ['1.1', ambos]]) {
+    for (const [chave, trecho] of Object.entries(JURIDICO[conjunto])) {
+      assert.equal(trecho.revisado, true, `${conjunto} ${chave} aprovado no parecer (release legal v${conjunto})`);
+      if (chave === 'AVISO_GRAVACAO_DISCORD') continue; // só no embed do Discord (F2-10)
+      assert.ok(paginas.includes(escapeHtml(renderTokens(trecho.texto, DADOS))), `${conjunto} ${chave} usado em alguma página`);
+    }
   }
   const corpo = (html) => html.slice(html.indexOf('<h2 id="em-resumo">'), html.indexOf('<h2 id="historico-de-versoes"'));
   for (const documento of ['privacidade', 'termos']) {
     const atual = corpo(entradas.get(`/${documento}`)[1]);
     assert.ok(atual.length > 1000);
-    assert.equal(atual, corpo(entradas.get(`/${documento}/v1.0`)[1]), `/${documento} serve o mesmo texto da cópia congelada v1.0`);
+    assert.equal(atual, corpo(entradas.get(`/${documento}/v1.1`)[1]), `/${documento} serve o mesmo texto da cópia congelada v1.1`);
+    assert.notEqual(atual, corpo(entradas.get(`/${documento}/v1.0`)[1]), `/${documento} deixou de servir a v1.0 (release legal v1.1)`);
+    assert.match(entradas.get(`/${documento}`)[1], /Versão <strong>1\.1<\/strong>/);
   }
   for (const [, html, headers] of entradas.values()) {
     assert.deepEqual(headers, { 'Cache-Control': 'public, max-age=3600' }, 'publicado: cache público, sem noindex');
@@ -397,7 +403,9 @@ test('legalRedirects mapeia aliases e barra final para o caminho canônico relat
   assert.equal(legalRedirects.get('/termos/'), '/termos');
   assert.equal(legalRedirects.get('/privacidade/v1.0/'), '/privacidade/v1.0', 'v1.0 publicada: barra final redireciona');
   assert.equal(legalRedirects.get('/termos/v1.0/'), '/termos/v1.0');
-  assert.equal(legalRedirects.has('/privacidade/v1.1/'), false, 'versão inexistente não tem redirect');
+  assert.equal(legalRedirects.get('/privacidade/v1.1/'), '/privacidade/v1.1', 'v1.1 publicada: barra final redireciona');
+  assert.equal(legalRedirects.get('/termos/v1.1/'), '/termos/v1.1');
+  assert.equal(legalRedirects.has('/privacidade/v1.2/'), false, 'versão inexistente não tem redirect');
   assert.equal(legalRedirects.has('/privacidade'), false);
   for (const destino of legalRedirects.values()) assert.match(destino, /^\/(privacidade|termos)(\/v\d+\.\d+)?$/);
 });
@@ -413,7 +421,9 @@ test('legalNotFound devolve 404 HTML só para /privacidade/* e /termos/* desconh
   assert.equal(legalNotFound('/termos/v1.0'), null, 'v1.0 publicada tem rota própria (200 no legalFiles)');
   assert.equal(legalNotFound('/privacidade/v1.0'), null);
   assert.equal(legalNotFound('/termos/v1.0/'), null, 'barra final da publicada é redirect');
-  assert.match(res.body, /\(versão atual, 1\.0\)/);
+  assert.equal(legalNotFound('/termos/v1.1'), null, 'v1.1 publicada tem rota própria');
+  assert.equal(legalNotFound('/privacidade/v1.1'), null);
+  assert.match(res.body, /\(versão atual, 1\.1\)/);
   assert.equal((res.body.match(/<h1\b/g) || []).length, 1);
   assert.match(res.body, /<a href="\/privacidade">Política de Privacidade<\/a>/);
   assert.match(res.body, /<a href="\/termos">Termos de Serviço<\/a>/);
@@ -434,15 +444,8 @@ test('legalFooter tem os dois links relativos e o texto de ciência opcional', (
 });
 
 test('pendencias lista trechos sem revisão e datas nulas', () => {
-  // Feature 0004: as únicas pendências reais são as da v1.1 em rascunho (trechos novos ou alterados do conjunto '1.1'
-  // e as datas nulas da 1.1). Nada da v1.0 publicada aparece.
-  const reais = pendencias();
-  assert.ok(reais.every((p) => (p.tipo === 'juridico' && p.conjunto === '1.1') || (p.tipo === 'data' && p.versao === '1.1')),
-    JSON.stringify(reais));
-  assert.deepEqual(reais.filter((p) => p.tipo === 'juridico').map((p) => p.chave),
-    Object.entries(JURIDICO['1.1']).filter(([, t]) => !t.revisado).map(([chave]) => chave));
-  assert.deepEqual(reais.filter((p) => p.tipo === 'data').map((p) => `${p.documento} ${p.versao} ${p.campo}`),
-    ['privacidade 1.1 vigencia', 'privacidade 1.1 atualizacao', 'termos 1.1 vigencia', 'termos 1.1 atualizacao']);
+  // Release legal v1.1 (2026-11-18): v1.0 e v1.1 publicadas, nenhuma pendência real.
+  assert.deepEqual(pendencias(), []);
   // Mesmo conteúdo real em estado de rascunho (fixture): todos os trechos e todas as datas aparecem.
   const juridicoRascunho = Object.fromEntries(Object.entries(JURIDICO).map(([conjunto, trechos]) =>
     [conjunto, Object.fromEntries(Object.entries(trechos).map(([chave, t]) => [chave, { ...t, revisado: false }]))]));
@@ -477,7 +480,7 @@ test('src/legal.js não importa db.js (nem auth.js), direta ou indiretamente (T0
   const saida = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: new URL('..', import.meta.url), env, encoding: 'utf8',
   });
-  assert.equal(saida, '4', '/privacidade, /privacidade/v1.0, /termos e /termos/v1.0');
+  assert.equal(saida, '6', '/privacidade, /privacidade/v1.0, /privacidade/v1.1, /termos, /termos/v1.0 e /termos/v1.1');
 });
 
 // ── F2-02: conteúdo da v1.0 (DevFullstack Time 2) ─────────────────────────────────────────────
@@ -841,7 +844,9 @@ test('F2-09/0004: v1.1 cita o Suno e o histórico de gerações nas seções do 
   assert.match(licenca, /prompts, letras, chats, músicas geradas e gravações/);
   assert.ok(licenca.includes('Ficam de fora do treinamento os dados obtidos pelas APIs do Google (Gmail, Agenda, Drive e perfil), conforme a Google API Services User Data Policy (Limited Use), os dados da sua conta Microsoft, os dados da sua conta Suno, os prompts, as letras e os títulos do histórico de gerações de música e as suas credenciais e tokens.'), 'O1, Alternativa A: Termos, seção 5');
   assert.match(licenca, /credenciais e tokens\. Veja a Política de Privacidade ?\./);
-  for (const documento of ['privacidade', 'termos']) assert.equal(VERSOES[documento].find((v) => v.versao === '1.1').resumo, 'Conta Suno, histórico de gerações de música e o Suno como terceiro. Os dados da conta Suno e o histórico de gerações de música ficam fora do treinamento.', 'Op1');
+  // Op1 literal, seguido da nota do release legal v1.1 (a v1.0 foi substituída antes de ir para a produção; O2 do parecer).
+  for (const documento of ['privacidade', 'termos']) assert.equal(VERSOES[documento].find((v) => v.versao === '1.1').resumo, 'Conta Suno, histórico de gerações de música e o Suno como terceiro. Os dados da conta Suno e o histórico de gerações de música ficam fora do treinamento. A versão 1.0, aprovada em 17/11/2026, foi substituída por esta antes de ser publicada em produção.', 'Op1 + nota da v1.0');
+  for (const documento of ['privacidade', 'termos']) assert.equal(VERSOES[documento].find((v) => v.versao === '1.0').resumo, 'Primeira versão.', 'resumo da v1.0 intocado (sha256 da cópia congelada)');
   const secao6 = secaoDe(termos, 'conteudo-gerado-por-ia');
   // Parecer da v1.1, R6 (seção 2, item 7) e R5 (seção 5), literais.
   assert.ok(secao6.includes('Os direitos e limites de uso das músicas geradas pelo Suno, pelo Gemini ou por outros provedores seguem os termos de cada provedor e o plano que você tem nele. No Suno, por exemplo, músicas feitas no plano gratuito só podem ser usadas para fins pessoais e não comerciais, conforme os termos do Suno. A PIA não concede direitos sobre essas músicas. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.'));
@@ -869,13 +874,16 @@ test('F2-09/0004: v1.1 mantém as regras da v1.0 (RN11, CA28, Caminho A, Termos 
     const ids = (f) => [...f.matchAll(/<h2 id="([a-z0-9-]+)">([^<]*)<\/h2>/g)].map(([, id, t]) => [id, t]);
     assert.deepEqual(ids(fragmentoV11(documento)), ids(fragmentoReal(documento)), `${documento}: mesmas seções da v1.0`);
   }
-  // A v1.1 é rascunho: só aparece em renderDocumento(…, '1.1'); /privacidade e /termos continuam na v1.0.
+  // Release legal v1.1 (2026-11-18): /privacidade e /termos servem a v1.1; a v1.0 segue em /v1.0, sem o Suno.
   const entradas = new Map(legalFiles('https://pia.travelrpg.com'));
-  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/termos', '/termos/v1.0']);
+  assert.deepEqual([...entradas.keys()], ['/privacidade', '/privacidade/v1.0', '/privacidade/v1.1', '/termos', '/termos/v1.0', '/termos/v1.1']);
   for (const documento of ['privacidade', 'termos']) {
     const r = renderDocumento(documento, '1.1', 'https://pia.travelrpg.com');
-    assert.equal(r.rascunho, true);
-    assert.doesNotMatch(entradas.get('/' + documento)[1], /suno/i, 'a atual continua sendo a v1.0');
+    assert.equal(r.rascunho, false);
+    assert.match(entradas.get('/' + documento)[1], /Suno/, 'a atual é a v1.1');
+    assert.match(entradas.get('/' + documento)[1], /substituída por esta antes de ser publicada em produção/, 'histórico de versões com a nota da v1.0');
+    assert.doesNotMatch(entradas.get('/' + documento + '/v1.0')[1], /suno/i, 'a cópia congelada v1.0 não cita o Suno');
+    assert.doesNotMatch(entradas.get('/' + documento + '/v1.0')[1], /1\.1/, 'a cópia congelada v1.0 não cita a v1.1');
   }
 });
 
