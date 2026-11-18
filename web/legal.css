@@ -89,6 +89,20 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
   overflow-wrap: anywhere;
 }
 
+/* Selo RASCUNHO no cabeçalho (só no modo rascunho; cores do selo do UX, #ffd666/#2b2210 11,25:1) */
+.legal-badge {
+  display: inline-block;
+  margin: 0 0 .5rem;
+  padding: .05rem .5rem;
+  border: 1px solid #f0b429;
+  border-radius: .3rem;
+  background: #2b2210;
+  color: #ffd666;
+  font-size: .8125rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
 /* 3. Layout: coluna de leitura (até 68ch) + sumário ---------------------- */
 .legal {
   display: block;
