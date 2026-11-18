@@ -46,8 +46,10 @@ test('live panel announces the recording, keeps non-users out of training and li
   assert.equal(live.embeds[0].title, '🔴 Gravação em andamento');
   const notice = field(live).value;
   // Redação 4.14 do parecer jurídico (Caminho A): terceiros fora do treinamento; contato por e-mail.
-  assert.match(notice, /Este canal está sendo gravado pela PIA\. O áudio de cada participante vai para o Google Drive de quem configurou a gravação\. As vozes de quem não usa a PIA não são usadas para treinar modelos\. Se não quiser ser gravado, avise quem configurou a gravação ou saia do canal\. Dúvidas e pedidos: contato@travelrpg\.com\./);
+  assert.match(notice, /Este canal está sendo gravado pela PIA\. O áudio de cada participante vai para o Google Drive de quem configurou a gravação\. As vozes gravadas não são usadas para treinar modelos\. Se não quiser ser gravado, avise quem configurou a gravação ou saia do canal\. Dúvidas e pedidos: contato@travelrpg\.com\./);
   assert.doesNotMatch(notice, /pode ser usada para treinar modelos/);
+  // Adendo 3 (O9 do QA): sem a frase ambígua sobre as vozes de terceiros.
+  assert.doesNotMatch(notice, /vozes de quem não usa a PIA não são usadas/i);
   assert.doesNotMatch(notice, /\{\{/, 'token de dados expandido no embed');
   assert.match(notice, /^\[EM REVISÃO JURÍDICA: P11 aviso de gravação no Discord\] /, 'rascunho visível até o parecer');
   assert.match(notice, /\nPolítica de Privacidade: https:\/\/pia\.travelrpg\.com\/privacidade$/);
