@@ -2,8 +2,8 @@
    Folha autônoma: as páginas carregam só /legal.css (sem style.css, Mantine ou JS).
    Contrato de classes: src/legal.js (F2-01). Cores do UX (ux/contraste.md), todas AA:
    corpo #edeaf6/#11121b 15,72:1; metadados #c6bed8 10,44:1; link #d4c4ff 11,67:1;
-   foco #b6a2ff (decisão do TechLead para todos os elementos novos; 8,53:1 na página e
-   7,75:1 no Em resumo); faixa de rascunho #ffe08a/#3d2c05 10,43:1; selo #ffd666/#2b2210 11,25:1.
+   foco #8f9eff (spec UX 4.2 para as páginas web; 7,55:1 na página, 6,87:1 no Em resumo,
+   7,02:1 na barra e no rodapé #191928); faixa de rascunho #ffe08a/#3d2c05 10,43:1; selo #ffd666/#2b2210 11,25:1.
    Sem recursos externos: só fontes do sistema, sem imagens nem importações. */
 
 /* 1. Base --------------------------------------------------------------- */
@@ -28,7 +28,7 @@ body {
 a { color: #d4c4ff; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; }
 a:visited { color: #d4c4ff; }
 a:hover { color: #f3edff; text-decoration-thickness: 2px; }
-:focus-visible { outline: 2px solid #b6a2ff; outline-offset: 2px; border-radius: 2px; }
+:focus-visible { outline: 2px solid #8f9eff; outline-offset: 2px; border-radius: 2px; }
 
 /* 1b. Neutraliza o style.css global caso ele venha a ser carregado antes (spec UX 1.10) */
 .legal section { padding: 0; margin: 0; background: none; border: 0; border-radius: 0; }
@@ -48,7 +48,7 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
   font-weight: 600;
   text-decoration: none;
 }
-.skip-link:focus, .legal .skip-link:focus { top: .75rem; outline: 2px solid #b6a2ff; outline-offset: 2px; }
+.skip-link:focus, .legal .skip-link:focus { top: .75rem; outline: 2px solid #8f9eff; outline-offset: 2px; }
 .legal [tabindex="-1"]:focus, main.legal:focus { outline: none; }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -228,22 +228,48 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
   .legal-historico td:nth-child(-n + 3) { white-space: normal; }
 }
 
-/* 10. Rodapé -------------------------------------------------------------- */
-.legal-rodape, .legal-footer {
-  margin-top: 2.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid #373250;
+/* 10. Rodapé da página: <footer class="legal-rodape"> fora do <main>, com <address> (spec UX 1.9) */
+.legal-rodape {
+  padding: 1.5rem clamp(1rem, 4vw, 3rem) 2rem;
+  border-top: 1px solid #35314a;
+  background: #191928;
   color: #c6bed8;
-  font-size: .9375rem;
+  font-size: .9333rem;
 }
-.legal-rodape p:last-child, .legal-footer p:last-child { margin-bottom: 0; }
-.legal-rodape a, .legal-footer a { display: inline-block; padding-block: .2rem; }
+.legal-rodape > * { max-width: 66rem; margin: 0 auto; }
+.legal-rodape address { margin-bottom: .5rem; font-style: normal; }
+.legal-rodape p { margin-bottom: 0; }
+.legal-rodape a { display: inline-block; padding-block: .2rem; }
+/* rodapé dentro do <main> (cópias antigas do markup) */
+.legal .legal-rodape { margin: 2.5rem 0 0; padding: 1.25rem 0 0; background: none; border-top-color: #373250; }
+.legal .legal-rodape > * { max-width: none; }
+
+/* 10b. Barra superior: <header class="legal-header"> com faixa, marca e navegação (spec UX 1.1) */
+.legal-header { margin: 0; }
+.legal-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem 1.5rem;
+  padding: .7rem clamp(1rem, 4vw, 3rem);
+  border-bottom: 1px solid #35314a;
+  background: #191928;
+}
+.legal-brand { display: flex; align-items: center; gap: .55rem; margin: 0; color: #edeaf6; font-size: 1.2rem; font-weight: 700; }
+.legal-brand img { flex: none; }
+.legal-brand small { color: #bcadf2; font-size: inherit; font-weight: 500; }
+.legal-topnav ul { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; margin: 0; padding: 0; list-style: none; }
+.legal-topnav li + li { margin-top: 0; }
+.legal-topnav a { display: inline-block; padding: .3rem 0; color: #d4c4ff; font-size: .9333rem; text-decoration: underline; text-underline-offset: .2em; }
+.legal-topnav a[aria-current="page"] { color: #f3edff; font-weight: 600; text-decoration-thickness: 2px; }
 
 /* 11. Impressão ------------------------------------------------------------ */
 @media print {
   html, body { background: #fff; color: #000; }
   a, a:visited { color: #000; }
   .legal { display: block; max-width: none; padding: 0; }
-  .legal-sumario, .legal-voltar { display: none; }
+  .legal-sumario, .legal-voltar, .legal-topbar, .skip-link, .legal-backtop { display: none; }
+  .legal-rodape { background: none; color: #000; }
   .legal-resumo, .legal-rascunho { background: none; color: #000; border-color: #000; }
 }

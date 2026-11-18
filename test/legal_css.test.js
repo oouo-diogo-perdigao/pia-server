@@ -30,9 +30,8 @@ test('F2-03: legal.css cobre todas as classes geradas pelas páginas legais (fin
     legalNotFound('/privacidade/v9.9').body;
   const rascunhoForcado = '<p class="legal-rascunho"></p><span class="legal-pendente">[x]</span>';
   const usadas = classes(html + rascunhoForcado);
-  // Classes novas da A2 (QA D1: barra superior da spec 1.1), geradas pelo backend antes da regra no
-  // legal.css. Pendência do DevFrontend: criar as regras e esvaziar esta lista (a página funciona sem elas).
-  const aguardandoCss = new Set(['legal-header', 'legal-topbar', 'legal-brand', 'legal-topnav']);
+  // Lista de espera para classes geradas pelo backend antes da regra no legal.css (vazia desde a A2).
+  const aguardandoCss = new Set([]);
   for (const name of usadas) {
     if (aguardandoCss.has(name)) continue;
     assert.match(css, new RegExp('\\.' + name + '\\b'), 'legal.css sem regra para .' + name);
@@ -49,7 +48,7 @@ test('F2-03: leitura confortável e responsiva de 320 a 1920 px', () => {
   assert.match(css, /position: sticky/);
   assert.match(css, /overflow-wrap: (break-word|anywhere)/, 'palavras longas não causam rolagem horizontal');
   assert.match(css, /\.legal-historico[^{]*\{[^}]*overflow-x: auto/, 'tabela rola dentro do bloco em 320 px');
-  assert.match(css, /:focus-visible \{[^}]*outline: 2px solid #b6a2ff/, 'foco visível #b6a2ff');
+  assert.match(css, /:focus-visible \{[^}]*outline: 2px solid #8f9eff/, 'foco visível #8f9eff (spec 4.2)');
   for (const fixo of css.matchAll(/(?:^|[\s;{])(?:min-)?width:\s*(\d+)px/g)) assert.ok(Number(fixo[1]) <= 320, 'largura fixa maior que 320 px');
 });
 
@@ -77,8 +76,8 @@ test('F2-03: cores de texto têm contraste AA sobre os fundos da página', () =>
   }
 });
 
-test('F2-03: foco #b6a2ff em tudo e nenhum outline: none sem substituto', () => {
-  assert.doesNotMatch(css, /#8f9eff/, 'foco antigo do style.css');
+test('F2-03: foco #8f9eff nas páginas web e nenhum outline: none sem substituto', () => {
+  assert.doesNotMatch(css, /#b6a2ff/, 'o anel #b6a2ff é só dos cards de login');
   for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^}]*outline:\s*(?:none|0)[^}]*)\}/g)) {
     assert.match(selector, /\[tabindex="-1"\]:focus|main\.legal:focus/, 'outline removido em ' + selector.trim());
     assert.doesNotMatch(selector, /focus-visible/);
@@ -102,4 +101,15 @@ test('F2-03: links do corpo e do rodapé da página sempre sublinhados', () => {
   for (const [, selector] of css.matchAll(/([^{}]+)\{[^}]*text-decoration:\s*none/g)) {
     assert.match(selector, /skip-link|nav a|legal-sumario a/, 'sublinhado removido em ' + selector.trim());
   }
+});
+
+test('A2: barra superior e rodapé fora do <main> têm regras (spec UX 1.1 e 1.9)', () => {
+  const html = String(new Map(legalFiles('https://pia.example')).get('/privacidade')[1]);
+  assert.match(html, /<header class="legal-header">[\s\S]*<div class="legal-topbar"><p class="legal-brand">[\s\S]*<nav class="legal-topnav"/);
+  assert.match(html, /<\/main><footer class="legal-rodape"><address>/);
+  assert.match(css, /\.legal-rodape \{[^}]*background: #191928/);
+  assert.match(css, /\.legal-rodape address \{[^}]*font-style: normal/);
+  assert.match(css, /\.legal-topbar \{[^}]*flex-wrap: wrap/);
+  assert.match(css, /\.legal-topnav a \{[^}]*text-decoration: underline/);
+  assert.match(css, /\.legal-topnav a\[aria-current="page"\]/);
 });
