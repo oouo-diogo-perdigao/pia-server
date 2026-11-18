@@ -22,6 +22,13 @@
 // com as correções obrigatórias F.4 aplicadas literalmente (3f1cccf); os 16 trechos estão revisado:true e o conjunto
 // '1.0' está congelado (sha256 em versoes.js).
 // A v1.0 não cita a feature 0001: os trechos dela estão em docs/legal-v1.1-rascunho.md (fora do código).
+//
+// v1.1 (feature 0004): parecer do Advogado sobre 3862937 (favorável com ressalvas), textos literais. DADOS_CONTA_SUNO,
+// AUDIO_SUNO e SALVAGUARDAS_TRANSFERENCIA aprovados sem ajuste; HISTORICO_GERACOES (R2), DESCONEXAO_SUNO (R4) e
+// DIREITOS_MUSICAS_GERADAS (R6) com o texto literal do parecer, todos com trecho() (revisado:true). JURIDICO['1.1'] parte do conjunto '1.0' final. Os trechos que não mudam são os mesmos
+// objetos aprovados no release v1.0 (revisado:true). Release legal v1.1 (2026-11-18): os trechos novos ou alterados
+// estão revisado:true e o conjunto '1.1' está congelado (sha256 em versoes.js). Conferência de cada afirmação nova
+// contra o código: docs/legal-v1.1-conferencia.md.
 
 const trecho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado: true, pendencia, assunto });
 
@@ -73,4 +80,35 @@ const V1_0 = Object.freeze({
     "Quando o assistente lê o seu Gmail, Google Drive, Google Agenda ou dados da sua conta Microsoft para atender a um pedido seu, ele envia ao provedor de modelo de linguagem que você escolheu o conteúdo necessário para gerar a resposta. A chave de API e a conta no Gemini ou na Groq são suas: você as cria no site do provedor e as cadastra na PIA. A PIA não usa esse conteúdo para treinar os próprios modelos. O que o provedor faz com o conteúdo depende dos termos da conta que você usa nele, que são aceitos por você diretamente com esse provedor. Na camada gratuita do Gemini, por exemplo, o Google pode usar o conteúdo enviado para melhorar os produtos dele, inclusive com revisão humana. Pelos termos do próprio Google, isso não ocorre na camada paga, e o Ollama roda no seu próprio computador. Antes de usar a PIA com Gmail, Drive, Agenda ou Microsoft, confira os termos do provedor de IA escolhido. Se não quiser que esse conteúdo possa ser usado pelo provedor, use uma camada paga ou o Ollama local. Esse conteúdo não é guardado pela PIA além do histórico da conversa, que fica no seu computador e, se você usar o perfil compartilhado, é sincronizado de forma cifrada com a PIA Server."),
 });
 
-export const JURIDICO = Object.freeze({ '1.0': V1_0 });
+// Helper para trechos de um conjunto novo em rascunho (revisado:false até o parecer dele). Sem uso desde o release legal
+// v1.1 (2026-11-18): todos os trechos de JURIDICO['1.1'] usam trecho().
+const rascunho = (pendencia, assunto, texto) => Object.freeze({ texto, revisado: false, pendencia, assunto });
+
+const V1_1 = Object.freeze({
+  ...V1_0,
+  // Seção 3: dados da conta Suno (src/db.js, suno_accounts). Parecer da v1.1 (feature 0004), seção 2, item 1: aprovado.
+  DADOS_CONTA_SUNO: trecho('F2-09', 'dados da conta Suno',
+    'De cada conta Suno que você conecta: o identificador, o e-mail e o nome da conta no Suno, o apelido que você dá a ela, os escopos autorizados e os tokens de acesso, que são guardados cifrados.'),
+  // Seção 3: R2 do parecer da v1.1 (seção 2, item 2), texto literal. Aprovado (revisado:true):
+  // decisão do Diogo de publicar com os textos do parecer.
+  HISTORICO_GERACOES: trecho('F2-09', 'histórico de gerações de música',
+    'Histórico de gerações de música: o prompt, a letra, o título, a duração, o estado e as faixas de cada geração. Nas gerações pelo Suno, também o nome da conta Suno usada e os links das músicas no Suno, que ficam só no servidor. Nas gerações locais e pelo Gemini, não guardamos o áudio nem link.'),
+  // Seção 8: proxy em stream, sem gravar em disco (src/suno_audio.js). Parecer da v1.1, seção 2, item 3: aprovado.
+  AUDIO_SUNO: trecho('F2-09', 'áudio do Suno não guardado',
+    'O áudio das músicas do Suno não é guardado na PIA Server: quando você baixa uma faixa, o servidor busca o áudio no Suno pelo link guardado no histórico e o repassa ao seu computador, sem gravar o arquivo.'),
+  // Seção 8: R4 do parecer da v1.1 (seção 2, item 4), texto literal, aprovado (revisado:true).
+  DESCONEXAO_SUNO: trecho('F2-09', 'desconexão da conta Suno',
+    'Desconectar uma conta Suno apaga do servidor os tokens e os dados dessa conta. Sem os tokens, a PIA deixa de conseguir usar essa conta, mas a autorização dada no próprio Suno não é revogada pela PIA: se quiser, revogue-a na sua conta Suno. O histórico de gerações continua na sua conta PIA, com o apelido, o nome ou o e-mail da conta Suno que foi usada, e você pode excluir cada item.'),
+  // Seção 4: O1 do parecer da v1.1, Alternativa A (seção 3.3), decisão do Diogo: dados da conta Suno e prompts, letras e
+  // títulos do histórico de gerações fora do treino. Texto literal, aprovado (revisado:true). Músicas: Caminho A.
+  TREINAMENTO_CONTA_SUNO: trecho('P11', 'dados da conta Suno e histórico de gerações fora do treinamento',
+    'A PIA não usa para treinar modelos os dados da sua conta Suno (identificador, e-mail, nome e tokens) nem os prompts, as letras e os títulos guardados no histórico de gerações de música, inclusive os das gerações pelo Suno, pelo Gemini e pelos modelos locais. Se você escrever um prompt ou uma letra numa conversa com o assistente, esse texto segue as regras das conversas descritas acima.'),
+  // Seção 7 (4.8): texto final da v1.0 com a frase do Suno, sem país (CA28). Parecer da v1.1, seção 2, item 6: aprovado.
+  SALVAGUARDAS_TRANSFERENCIA: trecho('P05', 'salvaguardas da transferência internacional',
+    'Transferência internacional de dados. Os dados pessoais guardados no servidor e no banco de dados da PIA, como a sua conta, as conversas e configurações sincronizadas e os metadados, ficam no Brasil. Outros dados, como imagens e áudios, inclusive gravações de voz, que também são dados pessoais, podem ficar ou ser tratados fora do Brasil. Para que o serviço funcione, alguns dados passam por fornecedores que podem tratá-los no exterior. O Google faz o login, recebe as suas mídias no seu Google Drive e dá acesso ao Gmail e à Agenda quando você conecta essas integrações. A Microsoft dá acesso a e-mail, agenda e arquivos quando você conecta essa integração. O Gemini, do Google, e a Groq processam as mensagens e, quando você usa a transcrição de voz, o áudio a transcrever, por modelos de linguagem. O Discord transmite o áudio das chamadas de voz gravadas pelo bot. O Suno recebe o prompt e a letra quando você gera músicas com a sua conta Suno conectada. As mídias, como imagens e áudios, ficam na conta de armazenamento que você mesmo conecta, como o seu Google Drive ou o Object Storage que você configura, e podem estar fora do Brasil, conforme as regras desse provedor. A PIA não contrata armazenamento de mídia fora do país. Essas transferências acontecem porque são necessárias para prestar o serviço que você pediu, nos termos do art. 33, inciso IX, combinado com o art. 7º, inciso V, da LGPD. Cada fornecedor trata os dados conforme os próprios termos de uso e políticas de privacidade, publicados em seus sites. A ferramenta de segurança do servidor (CrowdSec) envia ao fornecedor dela, que pode tratá-los no exterior, os endereços IP que tentaram abusar do serviço, com a data, a hora e o tipo de ataque, para manter uma lista compartilhada de endereços maliciosos. Esse envio tem como base o legítimo interesse em proteger o serviço e segue as garantias previstas nos termos desse fornecedor. Se quiser saber mais sobre essas transferências, escreva para {{CONTATO_EMAIL}}.'),
+  // Termos, seção 6: R6 do parecer da v1.1 (seção 2, item 7, resolve a D8), texto literal, aprovado (revisado:true).
+  DIREITOS_MUSICAS_GERADAS: trecho('P11', 'direito autoral das músicas geradas',
+    'Os direitos e limites de uso das músicas geradas pelo Suno, pelo Gemini ou por outros provedores seguem os termos de cada provedor e o plano que você tem nele. No Suno, por exemplo, músicas feitas no plano gratuito só podem ser usadas para fins pessoais e não comerciais, conforme os termos do Suno. A PIA não concede direitos sobre essas músicas. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.'),
+});
+
+export const JURIDICO = Object.freeze({ '1.0': V1_0, '1.1': V1_1 });

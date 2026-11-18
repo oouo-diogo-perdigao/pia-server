@@ -6,6 +6,7 @@ import { authorizationHtml, authorizationPage } from '../src/auth_page.js';
 import { legalFiles, legalFooter } from '../src/legal.js';
 import { renderOAuthCallback } from '../src/oauth_callback.js';
 import { publicResponse, sendPublic } from '../src/public_files.js';
+import { sunoCallbackPage } from '../src/suno_auth.js';
 
 // Especificação de UX, seção 2.1: variante "aceite" (frase do RF05) e variante "links".
 const ACEITE = '<p class="pia-legal-footer pia-legal-footer--server">Ao continuar, você concorda com os ' +
@@ -72,6 +73,19 @@ test('/oauth/callback: só os links no sucesso e nos erros', () => {
     const res = renderOAuthCallback(new URL(`https://pia.example/oauth/callback${query}`));
     assert.ok(res.body.includes(LINKS + '</section></main>'), query);
     assert.doesNotMatch(res.body, /Ao continuar|target=/);
+    assert.equal(res.headers['Cache-Control'], 'no-store');
+  }
+});
+
+test('/auth/connectors/suno: só os links no sucesso e nos erros', () => {
+  for (const [title, message, status] of [['Suno conectado', 'Suno conectado, pode voltar à PIA.', 200],
+    ['Não foi possível conectar o Suno', 'A operação falhou.', 500], ['Não foi possível conectar o Suno', '<x>', 409]]) {
+    const res = sunoCallbackPage(title, message, status);
+    assert.equal(res.status, status);
+    assert.ok(res.body.includes(LINKS + '</section></main>'), title);
+    assert.equal(res.body.match(/class="pia-legal-footer /g).length, 1);
+    assert.doesNotMatch(res.body, /Ao continuar|target=|<x>/);
+    assert.match(res.body, /href="\/login\.css"/);
     assert.equal(res.headers['Cache-Control'], 'no-store');
   }
 });

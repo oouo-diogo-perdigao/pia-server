@@ -22,7 +22,7 @@ Apagar as linhas **não** revoga nada fora do servidor.
 | Microsoft (conector) | Orientar o titular a remover o app nas permissões da conta Microsoft. Sem revogação remota no código. |
 | Discord (token do bot próprio) | O token do bot é do titular (`accounts.discord_token`, conector `discord`). Orientar a **regenerar o token** no Discord Developer Portal. |
 | Taverns, Object Storage (S3/R2/compatível) | Credenciais do titular: orientar a revogar/rotacionar no provedor. |
-| Suno (feature 0001, quando estiver na develop) | A desconexão faz `DELETE` sem revogação remota. Orientar o titular a revogar no Suno. **Fora da v1.0** das páginas legais; revisar este runbook na v1.1. |
+| Suno (feature 0001) | Os tokens ficam cifrados em `suno_accounts.ciphertext` e somem no cascade (seção 2). Nem a desconexão (`DELETE /device/suno/accounts/:id`) nem a exclusão revogam no Suno (`src/suno_auth.js:418`). Orientar o titular a revogar o acesso da PIA na conta Suno dele. Política v1.1, `DESCONEXAO_SUNO`. |
 | Sessões e tokens MCP, computadores | São apagados pelo cascade (`sessions`, `devices`). Opcionalmente, antes, revogar pelo painel. |
 
 ## 2. Apagar no PostgreSQL (uma transação)
@@ -47,7 +47,7 @@ DELETE FROM pia_server.accounts WHERE email = :'email' AND admin = false RETURNI
 COMMIT;
 ```
 
-O cascade apaga: `discord_guild_links`, `discord_link_requests`, `sessions`, `devices`, `device_jobs` (via `devices`), `secretary`, `notices`, `notice_delivery`, `profiles` (chats e configurações sincronizados), `connectors` e `media` (metadados). Na feature 0001 (quando entrar): `suno_accounts`, `suno_connect_attempts`, `music_generations` e `music_generation_tracks`.
+O cascade apaga: `discord_guild_links`, `discord_link_requests`, `sessions`, `devices`, `device_jobs` (via `devices`), `secretary`, `notices`, `notice_delivery`, `profiles` (chats e configurações sincronizados), `connectors` e `media` (metadados), e as tabelas da feature 0001: `suno_accounts` (contas Suno e tokens), `suno_connect_attempts`, `music_generations` (histórico: prompts, letras, `suno_account_name`) e `music_generation_tracks` (faixas e links do Suno, em cascata pela geração). Conferência: `docs/legal-v1.1-conferencia.md`, A15. `suno_oauth_clients` não é por conta e não tem dado pessoal: não mexa.
 
 ## 3. Apagar arquivos no volume `/data`
 
@@ -61,12 +61,13 @@ docker compose exec pia-server rm -rf -- /data/<id>
 
 Se houver uma gravação em andamento dessa conta, pare-a pelo Discord antes (ou aguarde o fim), senão a pasta é recriada.
 
-Temporários: uploads em andamento usam `/tmp/pia-media-*` e `/tmp/pia-artifact-*`, apagados ao fim da requisição. Se o processo caiu no meio de um envio pode sobrar um arquivo órfão; ele some quando o contêiner é recriado (`docker compose up -d --force-recreate`).
+Temporários: uploads em andamento usam `/tmp/pia-media-*` e `/tmp/pia-artifact-*`, apagados ao fim da requisição. Se o processo caiu no meio de um envio pode sobrar um arquivo órfão; ele some quando o contêiner é recriado (`docker compose up -d --force-recreate`). Também são apagados no boot por `cleanupOrphanTemp` (`src/cleanup_tmp.js`). O áudio do Suno não passa por disco (proxy em stream, `src/suno_audio.js`), então não há temporário do Suno.
 
 ## 4. O que NÃO é apagado (informar ao titular)
 
 1. **Cópias no Google Drive do titular** (gravações, MP3/WAV, capturas de tela): pertencem a ele e ficam na pasta da PIA no Drive. Ele apaga se quiser.
 2. **Dados locais no PC** (SQLite, cofre do sistema, `localStorage` da PIA desktop): o titular apaga ou desinstala.
+2a. **Músicas na conta Suno do titular:** ficam no Suno, sob as regras do Suno. A PIA não apaga nada lá.
 3. Não há backup do banco (decisão do Diogo; a Política afirma isso). Se algum backup for criado, a Política precisa mudar antes.
 4. **Dados já usados em treinamento** podem não ser removíveis do modelo (`REMOCAO_DADOS_TREINADOS`, P10). Hoje não existe pipeline de treinamento no código (T10).
 5. **Logs de acesso com IP:** o access log do Traefik e a lista de IPs bloqueados do CrowdSec não são apagados pela exclusão da conta. São mantidos pelo tempo necessário para segurança, hoje sem rotação (pendência P14). Informe isso ao titular se ele perguntar.
@@ -78,7 +79,7 @@ Temporários: uploads em andamento usam `/tmp/pia-media-*` e `/tmp/pia-artifact-
 
 Modelo de resposta (ajustar):
 
-> Olá. Concluímos a exclusão da sua conta na PIA Server em DD/MM/AAAA: conta, sessões, computadores pareados, chats e configurações sincronizados, conectores, avisos da Secretária, metadados de mídia e gravações pendentes no servidor. Para revogar o acesso da PIA à sua conta Google, acesse as permissões da sua conta Google e remova a PIA; faça o mesmo nos demais serviços conectados. As cópias na pasta da PIA no seu Google Drive e os dados no seu computador não foram apagados e ficam sob seu controle. Dados já usados em treinamento de modelos podem não ser removíveis. Registros técnicos de acesso com endereço IP são mantidos pelo tempo necessário para segurança e prevenção de abuso.
+> Olá. Concluímos a exclusão da sua conta na PIA Server em DD/MM/AAAA: conta, sessões, computadores pareados, chats e configurações sincronizados, conectores, contas Suno conectadas, histórico de gerações de música, avisos da Secretária, metadados de mídia e gravações pendentes no servidor. Para revogar o acesso da PIA à sua conta Google, acesse as permissões da sua conta Google e remova a PIA; faça o mesmo nos demais serviços conectados. As cópias na pasta da PIA no seu Google Drive e os dados no seu computador não foram apagados e ficam sob seu controle. Dados já usados em treinamento de modelos podem não ser removíveis. Registros técnicos de acesso com endereço IP são mantidos pelo tempo necessário para segurança e prevenção de abuso.
 
 ## 6. Exportação (acesso e portabilidade)
 
