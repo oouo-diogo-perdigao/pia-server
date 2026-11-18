@@ -18,6 +18,7 @@ import { accessToken, botCredential, enableDiscordLink, isConnectorCallback, mig
 import { renderOAuthCallback } from './oauth_callback.js';
 import { sunoCapabilities, sunoRoute } from './suno_auth.js';
 import { publicError } from './suno_errors.js';
+import { musicGenerationsRoute } from './music_generations.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -229,6 +230,7 @@ async function route(req, res) {
     if (!account) return json(res, 401, { error: 'Pareamento inválido.' });
     return json(res, 200, await receiveMedia(account, req));
   }
+  if (path.startsWith('/device/music/generations') && await musicGenerationsRoute(req, res, url, authenticateDevice)) return;
   if (req.method === 'POST' && ['/device/poll', '/device/complete', '/device/notices/ack',
     '/device/profile/read', '/device/profile/write', '/device/connectors/runtime', '/device/connectors/access'].includes(path)) {
     const account = await authenticateDevice(req.headers.authorization);
