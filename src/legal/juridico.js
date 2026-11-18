@@ -47,9 +47,9 @@ const V1_0 = Object.freeze({
   // Fala só da gravação de voz, porque o embed trata da gravação. Não é usado nas páginas.
   AVISO_GRAVACAO_DISCORD: trecho('P11', 'aviso de gravação no Discord',
     'Esta gravação de voz, inclusive a dos demais participantes do canal, pode ser usada para treinar modelos e melhorar o serviço.'),
-  // Termos, seção 6 (decisão do TechLead): texto da v1.0 sem a feature 0001; aguarda confirmação do PO e parecer.
-  DIREITOS_MUSICAS_GERADAS: trecho('P11', 'direitos sobre músicas geradas',
-    'Direitos e limites sobre músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor.'),
+  // Termos, seção 6: redação aprovada pelo PO (v1.0, sem a feature 0001); aguarda o parecer do Advogado.
+  DIREITOS_MUSICAS_GERADAS: trecho('P11', 'direito autoral das músicas geradas',
+    'Os direitos e limites de uso das músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.'),
   ENCARREGADO: trecho('P04', 'encarregado exercido pelo controlador',
     'O próprio controlador atua como encarregado pelo tratamento de dados pessoais e atende os titulares pelo e-mail de contato, na forma permitida a agentes de tratamento de pequeno porte pela Resolução CD/ANPD nº 2/2022.'),
   SALVAGUARDAS_TRANSFERENCIA: trecho('P05', 'salvaguardas da transferência internacional',

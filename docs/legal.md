@@ -35,7 +35,7 @@ Feature 0002. As páginas são públicas, sem login, em `/privacidade` e `/termo
 | `ENCARREGADO` | P04 | Política, 1 |
 | `CONSENTIMENTO_TERCEIROS_DISCORD` | P11 | Política, 3 |
 | `LOGS_ACESSO` | T04 | Política, 3: "A PIA Server não guarda logs de acesso com endereço IP." (texto do DevBackend, v2.4/v2.5) |
-| `TREINAMENTO_MP3_GERADOS` | P11 | Política, 4 (único trecho sobre MP3 no treinamento na Política) e Termos, "Em resumo" e 5 (licença), por decisão do TechLead; chave do DevBackend |
+| `TREINAMENTO_MP3_GERADOS` | P11 | Política, 4 (único trecho sobre MP3 no treinamento na Política) e Termos, "Em resumo" e 5 (licença), por decisão do TechLead **confirmada pelo PO**; chave do DevBackend |
 | `TREINAMENTO_MICROSOFT` | P11 | Política, 4 (texto aprovado pelo Diogo; falta o parecer) |
 | `BASE_LEGAL_TREINAMENTO` | P10 | Política, 5 |
 | `ORIGEM_TREINAMENTO_MIDIA` | P11 | Política, 6 (voz e MP3 no treinamento frente à Limited Use) |
@@ -43,7 +43,7 @@ Feature 0002. As páginas são públicas, sem login, em `/privacidade` e `/termo
 | `REMOCAO_DADOS_TREINADOS` | P10 | Política, 8 |
 | `PRAZO_RESPOSTA_TITULAR` | P10 | Política, 10 |
 | `OPT_OUT_TREINAMENTO` | P10 | Política, 10 (redação da v2.6, com `{{CONTATO_EMAIL}}`) |
-| `DIREITOS_MUSICAS_GERADAS` | P11 | Termos, 6. **Aguarda confirmação do PO** (substitui o trecho da 0001 retirado da v1.0) |
+| `DIREITOS_MUSICAS_GERADAS` | P11 | Termos, 6 (direito autoral). Redação **aprovada pelo PO**; aguarda só o parecer do Advogado. Substitui o trecho da 0001 retirado da v1.0 |
 | `LIMITACAO_CDC` | P10 | Termos, 8 |
 | `AVISO_GRAVACAO_DISCORD` | P11 | Só no embed do bot do Discord (F2-10); não aparece nas páginas |
 

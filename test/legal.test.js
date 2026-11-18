@@ -511,8 +511,12 @@ test('F2-02: trechos jurídicos da v1.0 em revisão, com as redações exatas do
     assert.equal(v1[chave].revisado, false, `${chave} segue com revisado:false até o parecer`);
   }
   assert.equal(v1.DIREITOS_MUSICAS_SUNO, undefined);
-  assert.equal(v1.DIREITOS_MUSICAS_GERADAS.texto, 'Direitos e limites sobre músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor.');
-  assert.match(secaoDe(paginaReal('termos'), 'conteudo-gerado-por-ia'), /Direitos e limites sobre músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor\./);
+  // Redação aprovada pelo PO (Termos, seção 6); revisado:false até o parecer.
+  const direitosMusicas = 'Os direitos e limites de uso das músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.';
+  assert.equal(v1.DIREITOS_MUSICAS_GERADAS.texto, direitosMusicas);
+  assert.equal(v1.DIREITOS_MUSICAS_GERADAS.assunto, 'direito autoral das músicas geradas');
+  const secao6 = paginaReal('termos').slice(paginaReal('termos').indexOf('<h2 id="conteudo-gerado-por-ia">'), paginaReal('termos').indexOf('<h2 id="isencao-de-garantias">'));
+  assert.ok(secao6.includes('[EM REVISÃO JURÍDICA: P11 direito autoral das músicas geradas]</span> ' + direitosMusicas), 'texto exato na seção 6 dos Termos');
   assert.equal(v1.TREINAMENTO_MICROSOFT_SUNO, undefined);
   assert.equal(v1.TREINAMENTO_MICROSOFT.texto, 'Dados obtidos da sua conta Microsoft (e-mails, agenda e arquivos via Microsoft Graph) não são usados para treinar modelos. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento.');
   assert.equal(v1.PRAZO_RESPOSTA_TITULAR.texto, 'Respondemos aos pedidos em até 15 dias, contados do recebimento.');
