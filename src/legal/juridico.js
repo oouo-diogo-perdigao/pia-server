@@ -32,8 +32,14 @@ const V1_0 = Object.freeze({
     'Respondemos aos pedidos dos titulares em até 15 dias.'),
   TREINAMENTO_MICROSOFT_SUNO: trecho('P11', 'conteúdo de Microsoft e Suno no treinamento',
     'Conteúdo obtido pelas integrações com a Microsoft e com o Suno segue os termos de cada provedor e só é usado em treinamento quando esses termos permitirem.'),
-  LOGS_ACESSO: trecho('T04', 'logs de acesso do proxy',
-    'O servidor e o proxy de hospedagem podem registrar logs técnicos de acesso (como endereço IP, data, hora e caminho acessado) para segurança e diagnóstico.'),
+  // Requisitos v2.4/v2.5 (T04): o Diogo informa e o repositório confirma que não guardamos logs de
+  // acesso com IP (o app não registra IP; não há access log do Traefik no repo).
+  LOGS_ACESSO: trecho('T04', 'logs de acesso',
+    'A PIA Server não guarda logs de acesso com endereço IP.'),
+  // Requisitos v2.4 (RN03a): os MP3 gerados também entram no treinamento; a cópia durável fica no
+  // Drive do usuário, e a leitura pela API do Google esbarra na Limited Use (RN03): parecer do Advogado.
+  TREINAMENTO_MP3_GERADOS: trecho('P11', 'MP3 gerados no treinamento',
+    'As músicas geradas (MP3) também são usadas para treinamento de modelos e melhoria do serviço.'),
   // F2-10 (RF10, CA26): aviso curto no embed "🔴 Gravação em andamento" do bot do Discord.
   // Fala só da gravação de voz, porque o embed trata da gravação. Não é usado nas páginas.
   AVISO_GRAVACAO_DISCORD: trecho('P11', 'aviso de gravação no Discord',
