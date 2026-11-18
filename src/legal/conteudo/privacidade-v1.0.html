@@ -61,7 +61,7 @@
 <h2 id="finalidades">4. Finalidades</h2>
 <ul>
 <li><strong>Prestar o serviço:</strong> login, sincronização do perfil, gravação no Discord, Secretária, cópia de mídia para o Drive, computadores pareados e MCP.</li>
-<li><strong>Segurança:</strong> proteger contas, prevenir abuso e diagnosticar falhas.</li>
+<li><strong>Segurança:</strong> proteger contas, prevenir abuso e diagnosticar falhas, inclusive com registros de acesso que contêm o seu endereço IP (seção 3).</li>
 <li><strong>Treinamento de modelos de IA e melhoria do serviço:</strong> conversas, prompts e outros conteúdos de texto que você envia podem ser usados para treinar modelos e melhorar a PIA, com as exceções da seção 6 sobre dados das APIs do Google. Credenciais e tokens nunca são usados em treinamento. Para pedir que seus dados deixem de ser usados, veja a seção <a href="#direitos-do-titular">Direitos do titular</a>.</li>
 <li>{{TREINAMENTO_MP3_GERADOS}}</li>
 <li>{{TREINAMENTO_MICROSOFT}}</li>
@@ -73,6 +73,7 @@
 <ul>
 <li>execução de contrato ou de procedimentos preliminares relacionados a ele (inciso V), para prestar o serviço;</li>
 <li>{{BASE_LEGAL_TREINAMENTO}}</li>
+<li>legítimo interesse do controlador (inciso IX), para segurança, prevenção de abuso e diagnóstico de falhas, inclusive os registros de acesso com endereço IP, e exercício regular de direitos em processo judicial, administrativo ou arbitral (inciso VI), quando necessário;</li>
 <li>cumprimento de obrigação legal ou regulatória (inciso II), quando houver.</li>
 </ul>
 
@@ -115,6 +116,7 @@
 <li>Credenciais, tokens de integrações e o perfil sincronizado são cifrados no servidor com AES-256-GCM.</li>
 <li>Os cookies de sessão são <code>HttpOnly</code> e <code>Secure</code>.</li>
 <li>Arquivos em envio ficam só temporariamente no servidor.</li>
+<li>Os registros de acesso são analisados por uma ferramenta automática de segurança, que bloqueia endereços IP com comportamento abusivo.</li>
 </ul>
 <p><strong>A cifragem não é ponta a ponta:</strong> o operador do servidor consegue decifrar esses dados. Nenhum sistema é 100% seguro.</p>
 

@@ -70,7 +70,7 @@ Temporários: uploads em andamento usam `/tmp/pia-media-*` e `/tmp/pia-artifact-
 2. **Dados locais no PC** (SQLite, cofre do sistema, `localStorage` da PIA desktop): o titular apaga ou desinstala.
 3. **Backups manuais do PostgreSQL**, se existirem (o README recomenda guardar a chave com o backup). **Pendência:** se há backups, onde ficam e por quanto tempo; a linha apagada pode continuar neles até a rotação.
 4. **Dados já usados em treinamento** podem não ser removíveis do modelo (`REMOCAO_DADOS_TREINADOS`, P10). Hoje não existe pipeline de treinamento no código (T10).
-5. **Logs de acesso com IP:** a PIA Server não guarda (T04, requisitos v2.5).
+5. **Logs de acesso com IP:** o access log do Traefik e a lista de IPs bloqueados do CrowdSec não são apagados pela exclusão da conta. São mantidos pelo tempo necessário para segurança, hoje sem rotação (pendência P14). Informe isso ao titular se ele perguntar.
 
 ## 5. Depois da exclusão
 
@@ -79,7 +79,7 @@ Temporários: uploads em andamento usam `/tmp/pia-media-*` e `/tmp/pia-artifact-
 
 Modelo de resposta (ajustar):
 
-> Olá. Concluímos a exclusão da sua conta na PIA Server em DD/MM/AAAA: conta, sessões, computadores pareados, chats e configurações sincronizados, conectores, avisos da Secretária, metadados de mídia e gravações pendentes no servidor. Para revogar o acesso da PIA à sua conta Google, acesse as permissões da sua conta Google e remova a PIA; faça o mesmo nos demais serviços conectados. As cópias na pasta da PIA no seu Google Drive e os dados no seu computador não foram apagados e ficam sob seu controle. Dados já usados em treinamento de modelos podem não ser removíveis.
+> Olá. Concluímos a exclusão da sua conta na PIA Server em DD/MM/AAAA: conta, sessões, computadores pareados, chats e configurações sincronizados, conectores, avisos da Secretária, metadados de mídia e gravações pendentes no servidor. Para revogar o acesso da PIA à sua conta Google, acesse as permissões da sua conta Google e remova a PIA; faça o mesmo nos demais serviços conectados. As cópias na pasta da PIA no seu Google Drive e os dados no seu computador não foram apagados e ficam sob seu controle. Dados já usados em treinamento de modelos podem não ser removíveis. Registros técnicos de acesso com endereço IP são mantidos pelo tempo necessário para segurança e prevenção de abuso.
 
 ## 6. Exportação (acesso e portabilidade)
 

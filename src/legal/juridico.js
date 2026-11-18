@@ -1,4 +1,4 @@
-// Trechos que dependem do parecer do Advogado (plano técnico, seção 3.3) ou de pendência do Diogo (T04).
+// Trechos que dependem do parecer do Advogado (plano técnico, seção 3.3).
 // Cada chave vira um token {{CHAVE}} nos fragmentos de src/legal/conteudo/*.html.
 //
 // Formato de cada trecho:
@@ -36,11 +36,9 @@ const V1_0 = Object.freeze({
     "Se você pedir confirmação de que tratamos seus dados ou acesso a eles, enviamos uma resposta simplificada imediatamente, assim que confirmarmos que o pedido veio do e-mail da sua conta, ou, se preferir, uma declaração clara e completa, com a origem dos dados, os critérios usados e a finalidade, em até 15 dias contados do pedido. Os demais pedidos são respondidos em até 15 dias contados do recebimento. Se não for possível atender de imediato, informamos os motivos nesse prazo. O atendimento é gratuito."),
   TREINAMENTO_MICROSOFT: trecho('P11', 'dados da Microsoft no treinamento',
     "Dados obtidos da sua conta Microsoft (e-mails, agenda e arquivos, via Microsoft Graph) não são usados para treinar modelos. Conversas e prompts que você envia à PIA podem ser usados para treinamento, exceto trechos de e-mails, eventos, arquivos ou outros conteúdos obtidos do Google ou da Microsoft que apareçam nessas conversas, que são excluídos antes de qualquer treinamento."),
-  // T04: texto da base f1338f7, mantido de propósito (decisão do TechLead). A redação 4.3 do parecer NÃO foi aplicada:
-  // o Traefik da VPS guarda access log com IP, e o Diogo vai decidir como tratar isso; a redação nova vem depois.
-  // Hoje este texto não bate com a VPS. Não publicar antes dessa decisão.
+  // T04 resolvida pela v3.1 dos requisitos (0.0, item 1): a PIA guarda IP no access log do Traefik e no CrowdSec. Redação do Adendo 2 do parecer, frase neutra sem prazo. Prazo e rotação pendentes (P14).
   LOGS_ACESSO: trecho('T04', 'logs de acesso',
-    'A PIA Server não guarda logs de acesso com endereço IP.'),
+    "A PIA guarda registros de acesso com o seu endereço IP. A cada acesso, o servidor registra o endereço IP e a porta de origem, a data e a hora, o método, o endereço da página acessada, o domínio, o código de resposta e dados técnicos da conexão segura (TLS). Uma ferramenta automática de segurança (CrowdSec) analisa esses registros para detectar e bloquear tentativas de abuso e guarda os endereços IP bloqueados. Usamos esses dados apenas para segurança, prevenção de abuso e diagnóstico de falhas, com base no legítimo interesse do controlador (art. 7º, inciso IX, da LGPD) e, quando necessário, para o exercício regular de direitos em processo judicial, administrativo ou arbitral (art. 7º, inciso VI), inclusive para atender ordem judicial ou pedido de autoridade competente. Esses registros são mantidos pelo tempo necessário para segurança e prevenção de abuso e não são usados para treinar modelos. O provedor de hospedagem e os serviços de terceiros que você usa com a PIA, como Google e Discord, também podem registrar o seu endereço IP, conforme as políticas de cada um."),
   // Parecer jurídico (f1338f7), 4.4, Caminho A: hoje voz e MP3 não entram no treinamento (sem cópia própria;
   // ler o Drive viola a Limited Use). Mudar isso exige versão nova (Caminho B, 4.15), decisão do Diogo.
   TREINAMENTO_MP3_GERADOS: trecho('P11', 'voz e MP3 fora do treinamento',

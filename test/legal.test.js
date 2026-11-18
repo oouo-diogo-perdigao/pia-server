@@ -559,7 +559,7 @@ test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () 
     /A PIA Server não guarda o arquivo: ele fica numa pasta temporária só durante o envio e é apagado ao final/,
     /O servidor mantém apenas metadados/,
     /não garantimos que o envio aconteça nem que a cópia exista/,
-    /A PIA Server não guarda logs de acesso com endereço IP\./,
+    /A PIA guarda registros de acesso com o seu endereço IP/,
   ]) assert.match(secao, termo);
   const retencao = secaoDe(paginaReal('privacidade'), 'retencao');
   assert.match(retencao, /Não garantimos a retenção nem a disponibilidade dos dados/);
@@ -569,6 +569,10 @@ test('F2-02: dados coletados cobrem o CA06 da v1.0 e a mídia segue a RN11', () 
   assert.match(retencao, /Quando você pede a exclusão da conta, apagamos do servidor a conta, as sessões, os computadores pareados, as conversas e configurações sincronizadas, os conectores, os avisos da Secretária, os metadados de mídia e as gravações pendentes\. Não apagamos as cópias na pasta da PIA no seu Google Drive nem os dados guardados no seu computador/);
   assert.match(retencao, /Os dados ficam guardados enquanto a sua conta existir; depois do pedido de exclusão, pelo prazo da frase acima\./);
   assert.doesNotMatch(retencao, /enquanto forem úteis|Cópias de segurança do banco|30 dias/);
+  // Adendo 2, tabela D: base legal dos registros de acesso (obrigatório) e menções em Finalidades e Segurança.
+  assert.match(secaoDe(paginaReal('privacidade'), 'bases-legais'), new RegExp("legítimo interesse do controlador (inciso IX), para segurança, prevenção de abuso e diagnóstico de falhas, inclusive os registros de acesso com endereço IP, e exercício regular de direitos em processo judicial, administrativo ou arbitral (inciso VI), quando necessário;".replace(/[.*+?^${}()|\\[\]\\]/g, '\\$&')));
+  assert.match(secaoDe(paginaReal('privacidade'), 'finalidades'), /inclusive com registros de acesso que contêm o seu endereço IP \(seção 3\)/);
+  assert.match(secaoDe(paginaReal('privacidade'), 'seguranca'), /Os registros de acesso são analisados por uma ferramenta automática de segurança, que bloqueia endereços IP com comportamento abusivo\./);
 });
 
 test('F2-02: Caminho A do parecer: só texto no treinamento; voz, MP3 e terceiros fora (4.2, 4.4, 4.5, 5.1, 5.2)', () => {
@@ -721,8 +725,9 @@ test('F2-02: trechos jurídicos da v1.0 com as redações exatas do parecer (Cam
   }
   for (const [chave, trecho] of Object.entries(v1)) assert.equal(trecho.revisado, false, `${chave} segue com revisado:false até o parecer favorável`);
   assert.equal(Object.keys(v1).length, 14);
-  // LOGS_ACESSO fica com o texto da base f1338f7 até a decisão sobre o access log do Traefik (redação 4.3 não aplicada).
-  assert.equal(v1.LOGS_ACESSO.texto, 'A PIA Server não guarda logs de acesso com endereço IP.');
+  // LOGS_ACESSO: redação 4.3 do Adendo 2 (frase neutra, sem prazo; prazo e rotação pendentes, P14).
+  assert.match(v1.LOGS_ACESSO.texto, /A PIA guarda registros de acesso com o seu endereço IP/);
+  assert.equal(v1.LOGS_ACESSO.texto, "A PIA guarda registros de acesso com o seu endereço IP. A cada acesso, o servidor registra o endereço IP e a porta de origem, a data e a hora, o método, o endereço da página acessada, o domínio, o código de resposta e dados técnicos da conexão segura (TLS). Uma ferramenta automática de segurança (CrowdSec) analisa esses registros para detectar e bloquear tentativas de abuso e guarda os endereços IP bloqueados. Usamos esses dados apenas para segurança, prevenção de abuso e diagnóstico de falhas, com base no legítimo interesse do controlador (art. 7º, inciso IX, da LGPD) e, quando necessário, para o exercício regular de direitos em processo judicial, administrativo ou arbitral (art. 7º, inciso VI), inclusive para atender ordem judicial ou pedido de autoridade competente. Esses registros são mantidos pelo tempo necessário para segurança e prevenção de abuso e não são usados para treinar modelos. O provedor de hospedagem e os serviços de terceiros que você usa com a PIA, como Google e Discord, também podem registrar o seu endereço IP, conforme as políticas de cada um.");
   assert.equal(v1.DIREITOS_MUSICAS_SUNO, undefined);
   assert.equal(v1.TREINAMENTO_MICROSOFT_SUNO, undefined);
   const direitosMusicas = 'Os direitos e limites de uso das músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor. Músicas geradas por modelos locais seguem as licenças desses modelos. Cabe a você verificar esses termos antes de usar as músicas, inclusive para fins comerciais.';
