@@ -410,11 +410,16 @@ test('F2-02: finalidades e licença citam voz do Discord e MP3 no treinamento, e
   const finalidades = secaoDe(paginaReal('privacidade'), 'finalidades');
   assert.match(finalidades, /gravações de voz do Discord \(também as de terceiros\), podem ser usados para treinar modelos/);
   assert.match(finalidades, /As músicas geradas \(MP3\) também são usadas para treinamento de modelos e melhoria do serviço\./);
-  // TREINAMENTO_MP3_GERADOS (DevBackend) cobre o MP3 no treinamento: só nas Finalidades da Política, nunca duplicado.
+  // TREINAMENTO_MP3_GERADOS (DevBackend) cobre o MP3 no treinamento: na Política, só nas Finalidades, sem duplicar.
   const html = paginaReal('privacidade');
   assert.equal(html.split('[EM REVISÃO JURÍDICA: P11 MP3 gerados no treinamento]').length - 1, 1);
   assert.equal(html.split(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto).length - 1, 1);
-  assert.doesNotMatch(paginaReal('termos'), /MP3 gerados no treinamento|As músicas geradas \(MP3\) também/, 'TREINAMENTO_MP3_GERADOS fica fora dos Termos (pendente)');
+  // Nos Termos (decisão do TechLead): o token aparece no Em resumo e na licença, e nenhum texto fixo fala de MP3.
+  const termos = paginaReal('termos');
+  assert.equal(termos.split('[EM REVISÃO JURÍDICA: P11 MP3 gerados no treinamento]').length - 1, 2);
+  assert.doesNotMatch(fragmentoReal('termos').replace(/\{\{[A-Z0-9_]+\}\}/g, ''), /MP3/, 'MP3 nos Termos só pelo token');
+  const resumoTermos = termos.slice(termos.indexOf('<h2 id="em-resumo">'), termos.indexOf('<nav class="legal-sumario"'));
+  assert.ok(resumoTermos.includes(JURIDICO['1.0'].TREINAMENTO_MP3_GERADOS.texto), 'token no Em resumo dos Termos');
   for (const documento of ['privacidade', 'termos']) {
     assert.ok(!paginaReal(documento).includes('aviso de gravação no Discord'), 'AVISO_GRAVACAO_DISCORD é só do embed');
   }
@@ -422,7 +427,7 @@ test('F2-02: finalidades e licença citam voz do Discord e MP3 no treinamento, e
   assert.match(finalidades, /Credenciais e tokens nunca são usados em treinamento/);
   const licenca = secaoDe(paginaReal('termos'), 'conteudo-e-licenca');
   assert.match(licenca, /licença gratuita, não exclusiva, mundial/);
-  assert.match(licenca, /gravações de voz do Discord, inclusive as vozes de outros participantes do canal, e as músicas geradas em MP3/);
+  assert.match(licenca, /gravações de voz do Discord, inclusive as vozes de outros participantes do canal\. As músicas geradas \(MP3\) também são usadas para treinamento/);
 });
 
 test('F2-02: compartilhamento, Limited Use e transferência internacional (CA07, CA09)', () => {
@@ -501,11 +506,13 @@ test('F2-02: v1.0 não cita Suno nem histórico de gerações, em lugar nenhum (
 
 test('F2-02: trechos jurídicos da v1.0 em revisão, com as redações exatas do PO', () => {
   const v1 = JURIDICO['1.0'];
-  for (const chave of ['ENCARREGADO', 'SALVAGUARDAS_TRANSFERENCIA', 'ORIGEM_TREINAMENTO_MIDIA', 'TREINAMENTO_MICROSOFT', 'TREINAMENTO_MP3_GERADOS', 'LOGS_ACESSO', 'OPT_OUT_TREINAMENTO', 'PRAZO_RESPOSTA_TITULAR']) {
+  for (const chave of ['DIREITOS_MUSICAS_GERADAS', 'ENCARREGADO', 'SALVAGUARDAS_TRANSFERENCIA', 'ORIGEM_TREINAMENTO_MIDIA', 'TREINAMENTO_MICROSOFT', 'TREINAMENTO_MP3_GERADOS', 'LOGS_ACESSO', 'OPT_OUT_TREINAMENTO', 'PRAZO_RESPOSTA_TITULAR']) {
     assert.ok(v1[chave], `chave ausente: ${chave}`);
     assert.equal(v1[chave].revisado, false, `${chave} segue com revisado:false até o parecer`);
   }
   assert.equal(v1.DIREITOS_MUSICAS_SUNO, undefined);
+  assert.equal(v1.DIREITOS_MUSICAS_GERADAS.texto, 'Direitos e limites sobre músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor.');
+  assert.match(secaoDe(paginaReal('termos'), 'conteudo-gerado-por-ia'), /Direitos e limites sobre músicas geradas pelo Gemini ou por outros provedores seguem os termos de cada provedor\./);
   assert.equal(v1.TREINAMENTO_MICROSOFT_SUNO, undefined);
   assert.equal(v1.TREINAMENTO_MICROSOFT.texto, 'Dados obtidos da sua conta Microsoft (e-mails, agenda e arquivos via Microsoft Graph) não são usados para treinar modelos. Conversas, prompts e músicas que você gera ou envia à PIA podem ser usados para treinamento.');
   assert.equal(v1.PRAZO_RESPOSTA_TITULAR.texto, 'Respondemos aos pedidos em até 15 dias, contados do recebimento.');

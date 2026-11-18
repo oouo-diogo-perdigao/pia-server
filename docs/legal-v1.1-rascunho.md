@@ -65,7 +65,7 @@ Requisitos 6.1 (para conferir na v1.1): dados da conta Suno guardados pela 0001 
 <li>Você continua dono do seu conteúdo: prompts, letras, chats e gravações.</li>
 ```
 
-### Seção 6, Conteúdo gerado por IA (o token saiu; a v1.0 usa uma frase sem Suno e sem trecho jurídico)
+### Seção 6, Conteúdo gerado por IA (o token saiu; a v1.0 usa o trecho jurídico `DIREITOS_MUSICAS_GERADAS`, sem a 0001)
 
 ```html
 <li>{{DIREITOS_MUSICAS_SUNO}}</li>
