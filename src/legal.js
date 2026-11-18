@@ -40,7 +40,9 @@
  *   {{VERSAO}}             versão desta página (ex.: 1.0)
  *   {{VIGENCIA}}           DD/MM/AAAA, ou selo [PREENCHER NO RELEASE: data de vigência]
  *   {{ATUALIZACAO}}        DD/MM/AAAA, ou selo [PREENCHER NO RELEASE: data de atualização]
- * Trechos jurídicos (src/legal/juridico.js), inseridos como texto escapado; com revisado:false
+ * Trechos jurídicos (src/legal/juridico.js) são TEXTO PURO: o texto é escapado e inserido sem HTML,
+ * então e-mails e URLs dentro deles não viram link (um mailto: precisa ficar no fragmento, fora do
+ * trecho, ex.: <p>{{OPT_OUT_TREINAMENTO}} <a href="mailto:{{CONTATO_EMAIL}}">…</a></p>). Com revisado:false
  * vêm precedidos do selo [EM REVISÃO JURÍDICA: <pendência> <assunto>]:
  *   {{BASE_LEGAL_TREINAMENTO}} {{CONSENTIMENTO_TERCEIROS_DISCORD}} {{LIMITACAO_CDC}}
  *   {{OPT_OUT_TREINAMENTO}} {{REMOCAO_DADOS_TREINADOS}} {{PRAZO_RESPOSTA_TITULAR}}
@@ -249,6 +251,9 @@ function separarResumo(fragmento, onde) {
   return { resumo: resumo.trim(), corpo: (antes + depois).trim() };
 }
 
+const ENTIDADES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+const textoPuro = (html) => html.replace(/<[^>]*>/g, '').replace(/&(amp|lt|gt|quot|#39);/g, (e) => ENTIDADES[e]).trim();
+
 function secoes(corpo, onde) {
   const lista = [];
   const ids = new Set();
@@ -257,7 +262,8 @@ function secoes(corpo, onde) {
     if (!id) throw new Error(`${onde}: todo <h2> precisa de id="slug" (a-z, 0-9, hífen).`);
     if (ids.has(id) || RESERVADOS.has(id)) throw new Error(`${onde}: id de seção repetido ou reservado: ${id}.`);
     ids.add(id);
-    lista.push({ id, titulo: conteudo.replace(/<[^>]*>/g, '').trim() });
+    // Texto puro do título (sem tags, entidades decodificadas); escapado de novo no sumário.
+    lista.push({ id, titulo: textoPuro(conteudo) });
   }
   if (!lista.length) throw new Error(`${onde}: nenhuma seção <h2 id="..."> encontrada.`);
   return lista;
@@ -269,13 +275,13 @@ function verificarFragmento(fragmento, onde) {
   if (/\son[a-z]+\s*=/i.test(fragmento)) throw new Error(`${onde}: o fragmento não pode ter atributos on*=.`);
 }
 
-function cabecaHtml({ titulo, descricao, canonical, rascunho }) {
+function cabecaHtml({ titulo, descricao, canonical, rascunho, noindex = rascunho }) {
   return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
     '<title>' + escapeHtml(titulo) + ' · PIA</title>' +
     '<meta name="description" content="' + escapeHtml(descricao) + '">' +
     (canonical ? '<link rel="canonical" href="' + escapeHtml(canonical) + '">' : '') +
-    (rascunho ? '<meta name="robots" content="noindex">' : '') +
+    (noindex ? '<meta name="robots" content="noindex">' : '') +
     '<link rel="icon" href="/pia.svg"><link rel="stylesheet" href="/legal.css"></head><body>' +
     (rascunho ? '<p class="legal-rascunho" role="note"><strong>RASCUNHO, não publicar.</strong> Este texto ainda tem pendências e não foi aprovado.</p>' : '');
 }
@@ -323,7 +329,7 @@ export function renderDocumento(documento, versao, origin, fontes) {
 
   const sumario = '<nav class="legal-sumario" aria-labelledby="sumario"><h2 id="sumario">Sumário</h2><ol>' +
     [{ id: 'em-resumo', titulo: 'Em resumo' }, ...lista_secoes, { id: 'historico-de-versoes', titulo: 'Histórico de versões' }]
-      .map(({ id, titulo }) => '<li><a href="#' + id + '">' + titulo + '</a></li>').join('') +
+      .map(({ id, titulo }) => '<li><a href="#' + id + '">' + escapeHtml(titulo) + '</a></li>').join('') +
     '</ol></nav>';
   const conteudo =
     '<main class="legal"><header class="legal-cabecalho">' +
@@ -416,7 +422,8 @@ export function legalNotFound(path, fontes) {
     descricao: 'Página legal não encontrada na PIA.',
     canonical: null,
     rascunho: false,
-  }).replace('<link rel="icon"', '<meta name="robots" content="noindex"><link rel="icon"') +
+    noindex: true,
+  }) +
     '<main class="legal"><h1>Página não encontrada</h1>' +
     '<p>Esta versão ou página não existe. Consulte as versões atuais:</p><ul>' + links + '</ul>' +
     '<p><a href="/">Voltar à PIA</a></p></main></body></html>';

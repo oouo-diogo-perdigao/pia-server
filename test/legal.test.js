@@ -113,6 +113,15 @@ test('layout: lang, title, description, canonical, h1 único, sumário, resumo, 
   assert.match(termos, /Veja também: <a href="\/privacidade">Política de Privacidade<\/a>/);
 });
 
+test('sumário usa o texto puro e escapado dos títulos; trecho jurídico é texto puro', () => {
+  const extra = fontes({ conteudo: fragmento('<h2 id="a-e-b">A <em>&amp;</em> &lt;B&gt;</h2>') });
+  extra.juridico['1.0'].TRECHO.texto = 'Escreva para <a href="mailto:x@y">x@y</a>.';
+  const { html } = renderDocumento('privacidade', undefined, ORIGIN, extra);
+  assert.match(html, /<li><a href="#a-e-b">A &amp; &lt;B&gt;<\/a><\/li>/);
+  assert.match(html, /<h2 id="a-e-b">A <em>&amp;<\/em> &lt;B&gt;<\/h2>/, 'corpo mantém o HTML do fragmento');
+  assert.match(html, /Escreva para &lt;a href=&quot;mailto:x@y&quot;&gt;x@y&lt;\/a&gt;\./);
+});
+
 test('fragmento inválido falha no boot', () => {
   const casos = [
     [fragmento('<h1>Outro</h1>'), /<h1>/],
@@ -228,6 +237,8 @@ test('legalNotFound devolve 404 HTML só para /privacidade/* e /termos/* desconh
   assert.equal(res.headers['Content-Type'], 'text/html; charset=utf-8');
   assert.equal(res.headers['Cache-Control'], 'no-store');
   assert.match(res.body, /<html lang="pt-BR">/);
+  assert.equal((res.body.match(/<meta name="robots" content="noindex">/g) || []).length, 1);
+  assert.doesNotMatch(res.body, /rel="canonical"|RASCUNHO/);
   assert.equal(legalNotFound('/termos/v1.0').status, 404, 'v1.0 em rascunho não tem rota própria');
   assert.equal((res.body.match(/<h1\b/g) || []).length, 1);
   assert.match(res.body, /<a href="\/privacidade">Política de Privacidade<\/a>/);

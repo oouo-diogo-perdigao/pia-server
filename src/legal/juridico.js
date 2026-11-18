@@ -2,7 +2,9 @@
 // Cada chave vira um token {{CHAVE}} nos fragmentos de src/legal/conteudo/*.html.
 //
 // Formato de cada trecho:
-//   texto:     texto simples (sem HTML; é escapado). Pode usar tokens de dados, como {{CONTATO_EMAIL}}.
+//   texto:     TEXTO PURO, sem HTML (é escapado; tags aparecem literais). E-mails e URLs não viram
+//              link: o <a href="mailto:..."> fica no fragmento HTML, fora do trecho. Pode usar
+//              tokens de dados, como {{CONTATO_EMAIL}}.
 //   revisado:  false até o parecer favorável. Com false, a página mostra o selo
 //              "[EM REVISÃO JURÍDICA: <pendencia> <assunto>]" e entra em modo rascunho.
 //   pendencia: identificador da pendência nos requisitos (P10, P11, T04).
