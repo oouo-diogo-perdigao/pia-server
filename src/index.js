@@ -150,7 +150,8 @@ async function route(req, res) {
       content = '<p>Servidor ' + guild + ' abençoado e vinculado à sua conta PIA.</p>' +
         '<a href="/#recordings">Abrir gravações</a>';
     } else return json(res, 403, { error: 'Entre na sua conta PIA e abra o link enviado pelo Discord.' });
-    return authorizationPage(res, 'Vincular Discord à PIA', content);
+    // Formulário (GET) leva a frase de aceite do RF05; o resultado (POST) só os links.
+    return authorizationPage(res, 'Vincular Discord à PIA', content, req.method === 'GET' ? 'aceite' : 'links');
   }
   if (req.method === 'POST' && path === '/device/login/start') {
     const result = beginDeviceLogin(await body(req, 2048));
@@ -182,7 +183,8 @@ async function route(req, res) {
       approveDeviceLogin(id, account);
       content = '<p>Computador autorizado. Você pode fechar esta aba e voltar à PIA.</p>';
     } else return json(res, 405, { error: 'Método indisponível.' });
-    return authorizationPage(res, 'Entrar na PIA', content);
+    // Formulário (GET) leva a frase de aceite do RF05; o resultado (POST) só os links.
+    return authorizationPage(res, 'Entrar na PIA', content, req.method === 'GET' ? 'aceite' : 'links');
   }
   if (req.method === 'GET' && path === '/auth/google') return begin(req, res);
   const connectorCallback = path === '/auth/connectors/microsoft' ? 'microsoft' :

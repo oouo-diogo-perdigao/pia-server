@@ -117,6 +117,13 @@ a:hover { color: #f3edff; text-decoration-thickness: 2px; }
 .legal-datas { margin: 0 0 .5rem; }
 .legal-outro { margin: 0; }
 
+/* Eyebrow, "Voltar ao sumário" e etiqueta "atual" (markup da F2-04, spec UX 1.2, 1.3 e 1.7) */
+.legal-eyebrow { margin: 0 0 .35rem; color: #bcadf2; font-size: .8667rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.legal-backtop { margin: 1.25rem 0 0; font-size: .9375rem; }
+@media (min-width: 64rem) { .legal-backtop { display: none; } }
+.legal-current { display: inline-block; margin-left: .35rem; padding: 0 .4rem; border-radius: .3rem; background: #352957; color: #e4d9ff; font-size: .8rem; font-weight: 600; }
+@media (max-width: 30rem) { .legal-current { display: table; margin: .25rem 0 0; } }
+
 /* 6. Em resumo ----------------------------------------------------------- */
 .legal-resumo {
   margin: 0 0 2rem;

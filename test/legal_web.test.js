@@ -20,7 +20,7 @@ function block(html, start, end) {
 test('F2-05: card #login tem o rodapé legal com o texto do RF05 abaixo de "Continuar com Google"', () => {
   const card = block(indexHtml, '<main id="login"', '</main>');
   const google = card.indexOf('Continuar com Google');
-  const footer = card.indexOf('<footer class="legal-footer">');
+  const footer = card.indexOf('<p class="pia-legal-footer pia-legal-footer--server">');
   assert.ok(google >= 0 && footer > google, 'rodapé depois do botão do Google');
   assert.ok(footer < card.indexOf('</section>'), 'rodapé dentro do card');
   assert.ok(card.includes(CIENCIA), 'texto de ciência do RF05 com os dois links');
@@ -44,9 +44,12 @@ test('F2-05: o template renderiza os ícones dos links (decorativos) sem sobrar 
   for (const [, , svg] of links) assert.match(svg, /aria-hidden="true"/);
 });
 
-test('F2-05: login.css estiliza o rodapé legal do contrato (legalFooter) dentro do card', () => {
-  assert.match(legalFooter({ ciencia: true }), /^<footer class="legal-footer">/);
-  assert.match(login, /\.pia-login-card \.legal-footer \{/);
-  assert.match(login, /\.pia-login-card \.legal-footer a \{[^}]*text-decoration: underline/);
-  assert.match(login, /\.pia-login-card \.legal-footer a:focus-visible/);
+test('F2-05: #login usa o mesmo componente do legalFooter() e login.css tem um único conjunto de regras', () => {
+  const card = block(indexHtml, '<main id="login"', '</main>');
+  assert.ok(card.includes(legalFooter({ aceite: true })), '#login igual ao legalFooter({ aceite: true })');
+  assert.doesNotMatch(login, /[^-]legal-footer/, 'sem regras duplicadas para .legal-footer');
+  assert.match(login, /\.pia-login-card \.pia-legal-footer \{[^}]*font-size: \.8125rem/);
+  assert.match(login, /\.pia-login-card \.pia-legal-footer--server \{ font-size: \.8667rem; \}/, '13 px com root de 15 px');
+  assert.match(login, /\.pia-legal-footer a \{[^}]*text-decoration: underline/);
+  assert.match(login, /\.pia-legal-footer a:focus-visible \{ outline: 2px solid #b6a2ff;/);
 });
