@@ -51,3 +51,30 @@
 .pia-login-options summary { cursor: pointer; font-size: .85rem; text-align: center; }
 .pia-login-options label { margin-top: .75rem; }
 .pia-login-code { display: block; color: #eee8ff; font: 700 1.7rem monospace; letter-spacing: .22em; }
+/* Rodapé legal (feature 0002, RF05): card #login do painel e páginas de autorização/callback
+   (legalFooter() de src/legal.js). Cores do UX: texto #c6bed8 9,61:1, link #d4c4ff 10,74:1,
+   foco #b6a2ff 7,85:1 sobre #1c192b. O sublinhado é obrigatório (link × texto = 1,12:1). */
+.pia-login-card .legal-footer {
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid #373250;
+  color: #c6bed8;
+  font-size: .8667rem;
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: pretty;
+}
+.pia-login-card .legal-footer p { margin: 0; color: inherit; }
+.pia-login-card .legal-footer p + p { margin-top: .4rem; }
+.pia-login-card .legal-footer a {
+  color: #d4c4ff;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .2em;
+  border-radius: 2px;
+  padding-block: .125rem;
+}
+.pia-login-card .legal-footer a:visited { color: #d4c4ff; }
+.pia-login-card .legal-footer a:hover { color: #f3edff; text-decoration-thickness: 2px; }
+.pia-login-card .legal-footer a:focus-visible { outline: 2px solid #b6a2ff; outline-offset: 2px; text-decoration: none; }

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ActionIcon, createTheme, MantineProvider } from '@mantine/core';
-import { AudioLines, Code2, Coffee, Eye, Grid2X2, HardDrive, LogOut, Mail, MessageCircle, Monitor, Plug, ShieldCheck } from 'lucide-react';
+import { AudioLines, Code2, Coffee, Eye, FileText, Grid2X2, HardDrive, LogOut, Mail, MessageCircle, Monitor, Plug, ShieldCheck } from 'lucide-react';
 
 const require = createRequire(import.meta.url);
 export const mantineCss = readFileSync(require.resolve('@mantine/core/styles.css'));
@@ -20,7 +20,7 @@ const connectors = {
 
 function renderControl(group, key) {
   if (group === 'icon') {
-    const icon = { LogOut, Eye }[key];
+    const icon = { LogOut, Eye, ShieldCheck, FileText }[key];
     if (!icon) throw new Error('Ícone desconhecido: ' + key);
     return renderToStaticMarkup(h(icon, { size: 20, 'aria-hidden': true }));
   }

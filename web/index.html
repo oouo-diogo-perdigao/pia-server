@@ -16,6 +16,7 @@
     <h2 id="login-title">Entrar na PIA Server</h2>
     <p>Acesse suas contas, gravações e computadores em um só lugar.</p>
     <a href="/auth/google" class="google-signin"><img src="/google-signin.png" alt=""> Continuar com Google</a>
+    <footer class="legal-footer"><p>Ao continuar, você concorda com os <a href="/termos">Termos de Serviço</a> e declara ter lido a <a href="/privacidade">Política de Privacidade</a>.</p></footer>
   </section>
 </main>
 <main id="panel" hidden>
@@ -33,6 +34,10 @@
         <summary id="account" class="account-avatar" aria-label="Minha conta" title="Minha conta"><img id="account-picture" alt="" referrerpolicy="no-referrer" hidden><span id="account-initial"></span></summary>
         <div class="account-actions">
           <span id="account-email"></span>
+          <ul class="account-legal" aria-label="Documentos legais">
+            <li><a href="/privacidade" class="account-link">{{icon:ShieldCheck}} Política de Privacidade</a></li>
+            <li><a href="/termos" class="account-link">{{icon:FileText}} Termos de Serviço</a></li>
+          </ul>
           <button id="logout" type="button" class="account-logout">{{icon:LogOut}} Sair</button>
         </div>
       </details>
