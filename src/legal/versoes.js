@@ -15,7 +15,7 @@
 //   juridico:    chave do conjunto de trechos em src/legal/juridico.js usado por esta versão.
 //   sha256:      hash do HTML congelado (renderizado com ORIGEM_SNAPSHOT), obrigatório quando
 //                vigencia está preenchida. Preenchido no commit de release com o valor que o teste
-//                de test/legal.test.js informa; o teste falha se o HTML publicado mudar depois.
+//                de test/legal_snapshot.test.js informa; o teste falha se o HTML publicado mudar depois.
 //
 // Só versões com vigencia preenchida são "publicadas" e ganham a rota /vX.Y. Uma versão em
 // rascunho só aparece como atual (/privacidade, /termos) e /vX.Y dela responde o 404 legal.

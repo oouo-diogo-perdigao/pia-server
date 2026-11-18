@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  DOCUMENTOS, ORIGEM_SNAPSHOT, escapeHtml, formatarData, hashDocumento, legalFiles, legalFooter,
-  legalNotFound, legalRedirects, pendencias, redirecionamentosLegais, renderDocumento, renderTokens, versoesAlteradas,
+  DOCUMENTOS, escapeHtml, formatarData, legalFiles, legalFooter,
+  legalNotFound, legalRedirects, pendencias, redirecionamentosLegais, renderDocumento, renderTokens,
 } from '../src/legal.js';
 import { escapeHtml as escapeOAuth } from '../src/oauth_callback.js';
 import { DADOS } from '../src/legal/dados.js';
@@ -129,6 +129,9 @@ test('fragmento inválido falha no boot', () => {
   }
   assert.throws(() => renderDocumento('outro', undefined, ORIGIN, fontes()), /desconhecido/);
   assert.throws(() => renderDocumento('privacidade', '9.9', ORIGIN, fontes()), /não existe/);
+  const semConjunto = fontes();
+  semConjunto.versoes.privacidade[0].juridico = '9.9';
+  assert.throws(() => legalFiles(ORIGIN, semConjunto), /conjunto jurídico inexistente/);
 });
 
 test('versão atual = última publicada; v1.1 em rascunho não aparece nem tem /vX.Y (C1)', () => {
@@ -254,41 +257,6 @@ test('pendencias lista trechos sem revisão e datas nulas', () => {
   assert.equal(datas.length, esperadas);
   assert.deepEqual(pendencias(fontes()), []);
   assert.deepEqual(pendencias(fontes({ revisado: false, datas: false })).map((p) => p.tipo), ['juridico', 'data', 'data', 'data', 'data']);
-});
-
-test('versões publicadas ficam congeladas por sha256 do HTML (texto jurídico novo = versão nova)', () => {
-  const publicadas = Object.entries(VERSOES).flatMap(([documento, lista]) =>
-    lista.filter((item) => item.vigencia).map((item) => ({ documento, ...item })));
-  for (const { documento, versao, sha256 } of publicadas) {
-    const atual = hashDocumento(documento, versao);
-    assert.equal(sha256, atual,
-      `${documento} v${versao} está publicada: preencha sha256: '${atual}' em versoes.js no release, ` +
-      'ou, se o texto mudou, crie uma versão nova em vez de alterar a publicada.');
-  }
-  assert.deepEqual(versoesAlteradas(), []);
-
-  const congelada = (juridico, sha256) => ({
-    ...fontes(),
-    juridico,
-    versoes: {
-      privacidade: [{ versao: '1.0', vigencia: '2026-12-01', atualizacao: '2026-12-01', resumo: 'Primeira.', juridico: '1.0', sha256 }],
-      termos: [{ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'Primeira.', juridico: '1.0', sha256: null }],
-    },
-  });
-  const original = fontes().juridico;
-  const hash = hashDocumento('privacidade', '1.0', congelada(original, null));
-  assert.match(hash, /^[0-9a-f]{64}$/);
-  assert.deepEqual(versoesAlteradas(congelada(original, hash)), [], 'termos em rascunho não entra no congelamento');
-  const semHash = versoesAlteradas(congelada(original, null));
-  assert.deepEqual(semHash, [{ documento: 'privacidade', versao: '1.0', esperado: null, atual: hash }]);
-  const alterado = { '1.0': { TRECHO: { ...original['1.0'].TRECHO, texto: 'Outro texto.' } } };
-  assert.equal(versoesAlteradas(congelada(alterado, hash)).length, 1, 'mudar o trecho de uma versão publicada quebra o hash');
-  const novoConjunto = { ...original, '1.1': { TRECHO: { texto: 'Outro texto.', revisado: true } } };
-  assert.deepEqual(versoesAlteradas(congelada(novoConjunto, hash)), [], 'conjunto novo não altera a versão publicada');
-  assert.equal(hashDocumento('privacidade', '1.0', congelada(original, null)), hash, 'hash determinístico');
-  assert.equal(ORIGEM_SNAPSHOT, 'https://pia.travelrpg.com');
-  assert.throws(() => legalFiles(ORIGIN, { ...fontes(), versoes: { privacidade: [{ versao: '1.0', vigencia: null, atualizacao: null, resumo: 'x', juridico: '9.9' }], termos: fontes().versoes.termos } }),
-    /conjunto jurídico inexistente/);
 });
 
 function importsDe(arquivo, vistos = new Set()) {
