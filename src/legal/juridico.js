@@ -32,8 +32,6 @@ const V1_0 = Object.freeze({
     'Respondemos aos pedidos dos titulares em até 15 dias.'),
   TREINAMENTO_MICROSOFT_SUNO: trecho('P11', 'conteúdo de Microsoft e Suno no treinamento',
     'Conteúdo obtido pelas integrações com a Microsoft e com o Suno segue os termos de cada provedor e só é usado em treinamento quando esses termos permitirem.'),
-  DIREITOS_MUSICAS_SUNO: trecho('P11', 'direitos das músicas do Suno',
-    'Direitos e limites sobre músicas geradas pelo Suno, pelo Gemini e por outros provedores seguem os termos de cada provedor.'),
   LOGS_ACESSO: trecho('T04', 'logs de acesso do proxy',
     'O servidor e o proxy de hospedagem podem registrar logs técnicos de acesso (como endereço IP, data, hora e caminho acessado) para segurança e diagnóstico.'),
 });

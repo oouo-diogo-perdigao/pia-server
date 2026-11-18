@@ -44,7 +44,8 @@
  * vêm precedidos do selo [EM REVISÃO JURÍDICA: <pendência> <assunto>]:
  *   {{BASE_LEGAL_TREINAMENTO}} {{CONSENTIMENTO_TERCEIROS_DISCORD}} {{LIMITACAO_CDC}}
  *   {{OPT_OUT_TREINAMENTO}} {{REMOCAO_DADOS_TREINADOS}} {{PRAZO_RESPOSTA_TITULAR}}
- *   {{TREINAMENTO_MICROSOFT_SUNO}} {{DIREITOS_MUSICAS_SUNO}} {{LOGS_ACESSO}}
+ *   {{TREINAMENTO_MICROSOFT_SUNO}} {{LOGS_ACESSO}}
+ *   (DIREITOS_MUSICAS_SUNO e os trechos da feature 0001 ficam para a v1.1.)
  *   Use cada um como um bloco de frase, por exemplo: <p>{{LOGS_ACESSO}}</p>.
  *
  * ── Rascunho × final (T02, seção 3.2) ─────────────────────────────────────────────────────────
