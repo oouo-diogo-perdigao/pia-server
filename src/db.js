@@ -190,6 +190,9 @@ export async function migrate() {
       extra boolean NOT NULL DEFAULT false, audio_url text,
       PRIMARY KEY (generation_id, n)
     );
+    -- Nome da conta Suno no momento da criação do job: o histórico continua mostrando
+    -- a conta mesmo depois que ela é apagada (suno_account_id vira NULL pelo SET NULL).
+    ALTER TABLE pia_server.music_generations ADD COLUMN IF NOT EXISTS suno_account_name text;
   `);
   await pool.query('INSERT INTO pia_server.accounts(email,admin) VALUES($1,true) ON CONFLICT(email) DO UPDATE SET admin=true', [email]);
 }

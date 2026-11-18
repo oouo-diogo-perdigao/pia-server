@@ -130,7 +130,8 @@ tokens, e não gera música.
 
 O job tem este formato: `{job_id, generation_id, client_job_id, state, completed, total, extra_ready,
 ready_text, error, code, suno_account: {id, name}, device_id, from_this_device,
-created, tracks: [{n, title, duration, extra}]}`. Os estados possíveis são `queued`,
+created, tracks: [{n, title, duration, extra}]}`. Com a conta Suno apagada,
+`suno_account` vira `{id: null, name}` com o nome guardado na criação. Os estados possíveis são `queued`,
 `running`, `completed`, `failed`, `interrupted` e `cancelled`. O `audio_url`, o
 prompt e a letra nunca vão no job. O áudio sai pelo download abaixo.
 
@@ -211,7 +212,10 @@ nunca tem link nem arquivo no servidor.
 | `GET /device/music/generations?limit=100&cursor=` | `{items: [{id, client_id, source, provider, device_id, from_this_device, suno_account: {id, name}\|null, prompt, lyrics, count, duration, state, code, created, tracks: [{n, title, duration, extra}]}], next_cursor}`. Todos os PCs da conta; ativos (`queued`/`running`) primeiro, depois do mais novo ao mais antigo |
 | `DELETE /device/music/generations/:id` | `{ok: true}`. Exclusão definitiva do registro, do prompt, da letra e das faixas, feita por qualquer PC da conta. `404 music_generation_not_found` para id de outra conta ou já apagado; `409 music_generation_active` com job em andamento |
 
-O `name` da conta Suno é `label`, depois `suno_name`, depois `suno_email`.
+O `name` da conta Suno é `label`, depois `suno_name`, depois `suno_email` e, por
+último, `suno_account_name`: o nome guardado em `music_generations` quando o job
+foi criado. Com a conta Suno apagada (`suno_account_id` vira `NULL`), o item e o
+job continuam mostrando `suno_account: {id: null, name}`.
 O cursor é opaco e só posiciona a página dentro da conta do computador; um
 cursor malformado responde `400 invalid_cursor`. Erros saem como `{error, code}`.
 

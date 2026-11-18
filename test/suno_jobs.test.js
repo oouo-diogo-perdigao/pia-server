@@ -437,6 +437,25 @@ for (const mode of modes) {
       assert.equal(cancel.status, 404);
     });
 
+    test('deleted Suno account: job and history keep the account name saved at creation', async () => {
+      const id = await connect('a', SUNO_A);
+      const created = await create('a', { count: 2 });
+      const job = await finished('a', created.json.job_id);
+      assert.deepEqual(job.suno_account, { id, name: 'Suno A' });
+      const removed = await call('DELETE', '/device/suno/accounts/' + id, { device: pia.a.token });
+      assert.equal(removed.status, 200, removed.text);
+      if (mode.pg) assert.equal((await storedGeneration(job.generation_id)).suno_account_id, null, 'FK SET NULL');
+      else for (const row of jobStore.generations.values()) if (row.suno_account_id === id) row.suno_account_id = null; // simula o SET NULL
+      assert.equal((await storedGeneration(job.generation_id)).suno_account_name, 'Suno A');
+      const after = (await getJob('a', job.job_id)).json;
+      assert.deepEqual(after.suno_account, { id: null, name: 'Suno A' });
+      assert.equal(after.tracks.length, 2);
+      if (mode.pg) {
+        const item = (await history.listGenerations(pia.a.device, {})).items.find((entry) => entry.id === job.generation_id);
+        assert.deepEqual(item.suno_account, { id: null, name: 'Suno A' });
+      }
+    });
+
     test('history hard delete: 409 while active, then prompt, lyrics and links are really gone', async () => {
       await connect('a', SUNO_A);
       fake.setScenarios(['timeout']);
