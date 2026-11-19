@@ -26,6 +26,15 @@ import { sunoAdminRoute } from './suno_client.js';
 import { recoverSunoJobs, sunoJobsRoute } from './suno_jobs.js';
 import { sunoAudioRoute } from './suno_audio.js';
 import { cleanupOrphanTemp } from './cleanup_tmp.js';
+import {
+  ADMIN_VPN_ERROR,
+  accountStatusFlags,
+  authorizeAdminAccount,
+  isAdminRequestAuthorized,
+  listAdminAccounts,
+  setAccountPro,
+  setProcessingMode,
+} from './admin_routes.js';
 
 const runtimes = new Map();
 const recovered = new Set();
@@ -67,10 +76,10 @@ async function body(req, limit = 65536) {
   return data;
 }
 
-function status(account) {
+function status(account, req) {
   const runtime = runtimes.get(account.id)?.runtime;
   return {
-    ...accountProfile(account), admin: account.admin, discordConfigured: Boolean(account.discord_token),
+    ...accountProfile(account), ...accountStatusFlags(account, req), discordConfigured: Boolean(account.discord_token),
     discordConnected: runtime?.client.isReady() || false, discordError: runtime?.error || '',
     driveConnected: Boolean(account.drive_refresh), folderId: recordingFolder(account), folderName: account.recording_folder_name,
     recordingDriveAccount: account.recording_drive_account, rules: account.rules,
@@ -280,7 +289,11 @@ async function route(req, res) {
   const session = cookie(req, '__Host-pia_session');
   const account = await identify(session, 'web');
   if (!account) return json(res, 401, { error: 'Entre com Google.' });
-  if (req.method === 'GET' && path === '/api/status') return json(res, 200, status(account));
+  if ((path === '/api/admin' || path.startsWith('/api/admin/')) && !isAdminRequestAuthorized(req, account)) {
+    return json(res, 403, { error: ADMIN_VPN_ERROR });
+  }
+  if (req.method === 'GET' && path === '/api/status') return json(res, 200, status(account, req));
+  if (req.method === 'GET' && path === '/api/admin/accounts') return json(res, 200, await listAdminAccounts(pool));
   if (req.method === 'GET' && path === '/api/recording-folder') {
     const id = recordingFolder(account);
     const folders = id ? await recordingFolderPath(account, account.recording_drive_account, id) : [];
@@ -348,6 +361,10 @@ async function route(req, res) {
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
   }
+  if (path === '/api/recordings/processing-mode') {
+    const result = await setProcessingMode(pool, account, data);
+    return json(res, result.status, result.body);
+  }
   if (path === '/api/recordings/stop') {
     const stopped = [...runtimes.values()].some(({ runtime }) => runtime.stop(data.channelId, account.id, { label: 'Painel PIA Server' }));
     return json(res, stopped ? 200 : 404, stopped ? { ok: true } : { error: 'Gravação ativa não encontrada.' });
@@ -362,14 +379,15 @@ async function route(req, res) {
     res.setHeader('Set-Cookie', '__Host-pia_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
     return json(res, 200, { ok: true });
   }
-  if (path === '/api/admin/accounts' && account.admin) {
-    const email = data.email?.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '') || email.length > 254) throw new Error('E-mail inválido.');
-    await pool.query('INSERT INTO pia_server.accounts(email) VALUES($1) ON CONFLICT(email) DO NOTHING', [email]);
-    return json(res, 200, { ok: true });
+  if (path === '/api/admin/accounts') {
+    return json(res, 200, await authorizeAdminAccount(pool, data));
+  }
+  if (path === '/api/admin/accounts/pro') {
+    const result = await setAccountPro(pool, data);
+    return json(res, result.status, result.body);
   }
   // Spike T10: tools/list de uma conta Suno conectada (só admin; sem tokens).
-  if (path === '/api/admin/suno/spike' && account.admin) return json(res, 200, await sunoAdminRoute(account, path, data));
+  if (path === '/api/admin/suno/spike') return json(res, 200, await sunoAdminRoute(account, path, data));
   return json(res, 404, { error: 'Rota não encontrada.' });
 }
 
