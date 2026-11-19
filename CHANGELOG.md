@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### 0003 — Plano Pro e enquete no Discord (em desenvolvimento)
+- A API administrativa exige sessão de administrador e origem na VPN autorizada. A administração lista contas e permite alterar o plano Pro.
+- Contas Pro podem escolher o processamento no servidor. O estado efetivo volta ao modo local quando o plano é desabilitado.
 - A preparação local do pacote de gravação foi separada do envio ao Drive para poder ser reutilizada pelo processamento no servidor.
 
 ### Release legal v1.1 - 2026-11-18
