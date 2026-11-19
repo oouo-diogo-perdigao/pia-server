@@ -348,21 +348,61 @@ async function storageFields() {
   storageSecret.configured(data.hasSecret);
 }
 
+const TAVERNS_DESTINATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function setTavernsDestinationError(message = '') {
+  const inputEl = element('taverns-destination');
+  const errorEl = element('taverns-destination-error');
+  if (message) {
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+    inputEl.setAttribute('aria-invalid', 'true');
+  } else {
+    errorEl.textContent = '';
+    errorEl.hidden = true;
+    inputEl.removeAttribute('aria-invalid');
+  }
+}
+
+function updateTavernsDirtyState() {
+  const dirtyEl = element('taverns-destination-dirty');
+  const saved = connectorState?.taverns?.destination || '';
+  const current = element('taverns-destination').value.trim();
+  if (connectorState?.taverns && current !== saved) {
+    dirtyEl.textContent = saved
+      ? `Alteração não salva. Destino salvo: ${saved}`
+      : 'Alteração não salva. Nenhum destino salvo.';
+    dirtyEl.hidden = false;
+  } else {
+    dirtyEl.textContent = '';
+    dirtyEl.hidden = true;
+  }
+}
+
 async function refreshConnectors(selectedId = input('storage-account')) {
   const tavernsInput = element('taverns-destination');
   const tavernsSaveBtn = element('taverns-save-destination');
-  const tavernsFeedback = element('taverns-feedback');
+  const tavernsTestBtn = element('taverns-test');
+  const tavernsHelp = element('taverns-destination-help');
+  tavernsInput.disabled = true;
+  tavernsSaveBtn.disabled = true;
+  tavernsTestBtn.disabled = true;
+  tavernsHelp.textContent = 'Carregando configuração do Taverns…';
+  setTavernsDestinationError('');
   try {
     connectorState = await api('connectors');
   } catch (error) {
+    tavernsInput.value = '';
     tavernsInput.disabled = true;
     tavernsSaveBtn.disabled = true;
-    tavernsFeedback.textContent = error.message || 'Falha ao carregar conectores.';
-    tavernsFeedback.hidden = false;
+    tavernsTestBtn.disabled = true;
+    tavernsHelp.textContent = 'Não foi possível carregar os conectores. Recarregue a página para tentar de novo.';
+    say('Não foi possível carregar os conectores. Recarregue a página para tentar de novo.');
     throw error;
   }
   tavernsInput.disabled = false;
   tavernsSaveBtn.disabled = false;
+  tavernsTestBtn.disabled = false;
   for (const [provider, control] of Object.entries(botSecrets)) {
     control.hide();
     control.configured(connectorState[provider].configured);
@@ -389,20 +429,23 @@ async function refreshConnectors(selectedId = input('storage-account')) {
   element('taverns-state').textContent = connectorState.taverns.configured ? '· configurado' : '';
   const tavernsDestination = connectorState.taverns?.destination || '';
   tavernsInput.value = tavernsDestination;
-  element('taverns-default-empty').hidden = Boolean(tavernsDestination);
-  tavernsFeedback.textContent = '';
-  tavernsFeedback.hidden = true;
+  tavernsHelp.textContent = !tavernsDestination
+    ? 'Nenhum destino padrão salvo. Informe o ID da taverna e o ID do canal no formato ID da taverna/ID do canal.'
+    : connectorState.taverns.configured
+      ? 'Use o formato ID da taverna/ID do canal. Não é preciso informar o token de novo.'
+      : 'Destino salvo. Configure o token do bot para publicar e testar.';
+  updateTavernsDirtyState();
   const select = element('storage-account');
   select.replaceChildren(new Option('Nova conta', ''), ...connectorState.objectStorage.map((item) => new Option(item.name, item.id)));
   select.value = connectorState.objectStorage.some((item) => item.id === selectedId) ? selectedId : '';
   await storageFields();
 }
 
-async function removeAccount(provider, id, confirmMessage = 'Remover este conector da sua conta?') {
+async function removeAccount(provider, id, confirmMessage = 'Remover este conector da sua conta?', successMessage = 'Conector removido.') {
   if (!window.confirm(confirmMessage)) return;
   await api('connectors/remove', { provider, id });
   await refreshConnectors();
-  say('Conector removido.');
+  say(successMessage);
 }
 
 async function saveConnector(provider, data) {
@@ -431,24 +474,43 @@ on('taverns-save', async () => {
   element('taverns-token').value = '';
 });
 on('taverns-save-destination', async () => {
-  const feedback = element('taverns-feedback');
-  feedback.textContent = '';
-  feedback.hidden = true;
+  const destination = input('taverns-destination').trim();
+  if (!TAVERNS_DESTINATION_RE.test(destination)) {
+    setTavernsDestinationError('Informe o destino como ID da taverna/ID do canal.');
+    element('taverns-destination').focus();
+    return;
+  }
+  setTavernsDestinationError('');
+  const panel = document.querySelector('[data-connector-panel="taverns"]');
+  if (panel) panel.setAttribute('aria-busy', 'true');
   try {
-    await saveConnector('taverns', { destination: input('taverns-destination').trim() });
+    await api('connectors/save', { provider: 'taverns', destination });
   } catch (error) {
-    feedback.textContent = error.message;
-    feedback.hidden = false;
-    throw error;
+    const message = error?.message || 'Não foi possível salvar o destino. O destino anterior foi mantido.';
+    setTavernsDestinationError(message);
+    say(message);
+    return;
+  } finally {
+    if (panel) panel.removeAttribute('aria-busy');
+  }
+  try {
+    await refreshConnectors();
+    say('Destino do Taverns salvo.');
+  } catch {
+    say('Destino do Taverns salvo, mas não foi possível recarregar os conectores.');
   }
 });
 element('taverns-destination').addEventListener('input', () => {
-  const feedback = element('taverns-feedback');
-  feedback.textContent = '';
-  feedback.hidden = true;
+  setTavernsDestinationError('');
+  updateTavernsDirtyState();
 });
 on('taverns-remove', () =>
-  removeAccount('taverns', undefined, 'Remover apenas o token do Taverns? O destino padrão e os demais dados serão preservados.'));
+  removeAccount(
+    'taverns',
+    undefined,
+    'Remover o bot do Taverns? O token será removido. O destino padrão continuará salvo e reaparecerá quando você reconectar o bot.',
+    'Bot do Taverns removido. O destino padrão continua salvo.',
+  ));
 for (const [provider, field] of [['discord', 'discord-channel'], ['taverns', 'taverns-destination']]) {
   on(provider + '-test', async () => {
     await api('connectors/test', { provider, destination: input(field).trim() });
