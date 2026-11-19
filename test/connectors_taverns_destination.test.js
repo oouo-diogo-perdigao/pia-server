@@ -1,26 +1,4 @@
-/**
- * Card 0005-C3 — Testes de baseline Discord, fixture transacional multi-conta
- * e contrato de destino padrão Taverns.gg (`TAVERNS_DESTINATION`, `taverns.destination`, R-6).
- *
- * Sem credenciais reais, sem envios a provedores externos e sem banco real.
- *
- * Mapeamento de dependências com 0005-C1 (`src/connectors.js`):
- * - Testes de BASELINE (executam e passam na base 90693fa, sem depender de C1):
- *   1. baseline Discord multi-conta (leitura, canal válido/inválido, teste mockado, remoção, isolamento e rollback)
- *   2. baseline Taverns: splitProfile/inicialização legada preservando `TAVERNS_DESTINATION` e campanhas do desktop
- *   3. baseline Taverns: validação de dois UUIDs em `testConnector` com fetch autenticado mockado e rollback de token
- *
- * - Testes marcados com `[depende-de-C1]` (executam automaticamente assim que C1 expor
- *   `taverns.destination` em `publicConnectors`, ou quando `PIA_REQUIRE_0005_C1=1` for definido):
- *   4. `[depende-de-C1]` GET /api/connectors expõe `taverns.destination` vazio quando ausente, sem expor token
- *   5. `[depende-de-C1]` POST /api/connectors/save grava e recarrega `destination` sem token, preservando credencial
- *      (provado via fetch autenticado mockado), outras chaves da seção e isolamento entre duas contas
- *   6. `[depende-de-C1]` omissão de `destination` preserva valor salvo; vazio explícito e formatos inválidos falham
- *   7. `[depende-de-C1]` precedência do registro persistido sobre snapshot legado (CA-04)
- *   8. `[depende-de-C1]` rollback atômico em falha simulada de escrita ao salvar destino
- *   9. `[depende-de-C1]` R-6: desconectar Taverns remove só a credencial e preserva destino/demais dados;
- *      reconexão recupera `configured=true` com mesmo destino, mantendo Discord e segunda conta intactos
- */
+// Regressão Discord e contrato Taverns com banco em memória e fetch simulado.
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -58,28 +36,10 @@ const DISCORD_TOKEN_B = 'discord_fixture_token_conta_b';
 const DISCORD_CHANNEL_A = '123456789012345678';
 const DISCORD_CHANNEL_B = '987654321098765432';
 
-const REQUIRE_C1 = process.env.PIA_REQUIRE_0005_C1 === '1';
-
 function setupStore(t) {
   const store = createMemoryConnectorsStore({ seal, unseal });
   store.install(t, pool);
   return store;
-}
-
-async function detectC1Contract(t) {
-  const probe = setupStore(t);
-  const acc = probe.addAccount({ id: 999, connectors_initialized: true });
-  const info = await publicConnectors(acc);
-  return Object.hasOwn(info.taverns || {}, 'destination');
-}
-
-async function requireC1OrSkip(t) {
-  const available = await detectC1Contract(t);
-  if (!available && !REQUIRE_C1) {
-    t.skip('Depende de 0005-C1 (taverns.destination / TAVERNS_DESTINATION / R-6 em src/connectors.js)');
-    return false;
-  }
-  return true;
 }
 
 // ============================================================================
@@ -276,8 +236,7 @@ test('baseline Taverns: testConnector valida dois UUIDs, usa fetch autenticado m
 // BLOCO B — CONTRATO 0005-C1 (taverns.destination, TAVERNS_DESTINATION e R-6)
 // ============================================================================
 
-test('[depende-de-C1] GET /api/connectors retorna taverns.destination vazio quando ausente e nunca expõe o token', async (t) => {
-  if (!(await requireC1OrSkip(t))) return;
+test('GET /api/connectors retorna taverns.destination vazio quando ausente e nunca expõe o token', async (t) => {
 
   const store = setupStore(t);
   const acc1 = store.addAccount({ id: 1, connectors_initialized: true });
@@ -294,8 +253,7 @@ test('[depende-de-C1] GET /api/connectors retorna taverns.destination vazio quan
   assert.doesNotMatch(JSON.stringify(tokenOnlyInfo), new RegExp(TOKEN_B1));
 });
 
-test('[depende-de-C1] salvar destination sem token grava/recarrega TAVERNS_DESTINATION, preserva token (provado via fetch mockado), outras chaves e isola duas contas', async (t) => {
-  if (!(await requireC1OrSkip(t))) return;
+test('salvar destination sem token grava/recarrega TAVERNS_DESTINATION, preserva token (provado via fetch mockado), outras chaves e isola duas contas', async (t) => {
 
   const store = setupStore(t);
   const acc1 = store.addAccount({ id: 1, connectors_initialized: true });
@@ -360,8 +318,7 @@ test('[depende-de-C1] salvar destination sem token grava/recarrega TAVERNS_DESTI
   assert.equal(calls[1].headers.Authorization, `Bot ${TOKEN_A1}`);
 });
 
-test('[depende-de-C1] omissão de destination preserva valor existente; vazio explícito e formatos inválidos geram erro sem alterar registro', async (t) => {
-  if (!(await requireC1OrSkip(t))) return;
+test('omissão de destination preserva valor existente; vazio explícito e formatos inválidos geram erro sem alterar registro', async (t) => {
 
   const store = setupStore(t);
   const acc1 = store.addAccount({ id: 1, connectors_initialized: true });
@@ -411,8 +368,7 @@ test('[depende-de-C1] omissão de destination preserva valor existente; vazio ex
   assert.equal(calls[0].headers.Authorization, `Bot ${TOKEN_A2}`);
 });
 
-test('[depende-de-C1] precedência: registro persistido prevalece sobre snapshot legado sem reimportar após inicialização', async (t) => {
-  if (!(await requireC1OrSkip(t))) return;
+test('precedência: registro persistido prevalece sobre snapshot legado sem reimportar após inicialização', async (t) => {
 
   const store = setupStore(t);
   const secretRef = 'setting:Connectors/taverns:TAVERNS_BOT_TOKEN';
@@ -448,8 +404,7 @@ test('[depende-de-C1] precedência: registro persistido prevalece sobre snapshot
   });
 });
 
-test('[depende-de-C1] rollback em falha simulada de escrita preserva destino anterior, token e segunda conta', async (t) => {
-  if (!(await requireC1OrSkip(t))) return;
+test('rollback em falha simulada de escrita preserva destino anterior, token e segunda conta', async (t) => {
 
   const store = setupStore(t);
   const acc1 = store.addAccount({ id: 1, connectors_initialized: true });
@@ -479,8 +434,7 @@ test('[depende-de-C1] rollback em falha simulada de escrita preserva destino ant
   assert.equal(calls[0].headers.Authorization, `Bot ${TOKEN_A1}`);
 });
 
-test('[depende-de-C1] R-6: desconectar Taverns remove só a credencial e preserva destino/demais dados; reconexão recupera configured=true com mesmo destino', async (t) => {
-  if (!(await requireC1OrSkip(t))) return;
+test('R-6: desconectar Taverns remove só a credencial e preserva destino/demais dados; reconexão recupera configured=true com mesmo destino', async (t) => {
 
   const store = setupStore(t);
   const acc1 = store.addAccount({
