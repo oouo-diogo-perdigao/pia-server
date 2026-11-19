@@ -174,7 +174,9 @@ export function recordingPanel(meta, ping, now = Date.now(), publicOrigin = orig
 
   if (hasProcessing) {
     const failed = meta.processing.status === 'failed';
-    if (failed) {
+    if (meta.processing.status === 'skipped') {
+      fields.push({ name: 'Processamento', value: 'A gravação ficou abaixo da duração mínima e não foi publicada.' });
+    } else if (failed) {
       const details = ['A sessão ainda não foi publicada e a enquete não foi aberta.'];
       if (Array.isArray(meta.processing.missingConfig) && meta.processing.missingConfig.length) {
         details.push('Para processar no servidor, configure ' + meta.processing.missingConfig.join(' e ') + '.');
@@ -188,7 +190,8 @@ export function recordingPanel(meta, ping, now = Date.now(), publicOrigin = orig
     if (meta.sessionTitle) fields.push({ name: 'Nome informado', value: escapeMarkdown(meta.sessionTitle) });
     return {
       embeds: [{
-        title: failed ? 'Não foi possível processar a sessão' : '⚙️ Processando sessão no servidor',
+        title: meta.processing.status === 'skipped' ? 'Gravação abaixo da duração mínima' :
+          failed ? 'Não foi possível processar a sessão' : '⚙️ Processando sessão no servidor',
         color: failed ? 0xed4245 : 0x5865f2,
         fields,
       }],
@@ -242,7 +245,8 @@ export function recordingPanel(meta, ping, now = Date.now(), publicOrigin = orig
   const button = (action, label, style, disabled = false) =>
     ({ type: ComponentType.Button, custom_id: 'pia-rec:' + action + ':' + meta.id, label, style, disabled });
   const buttons = active ?
-    [button('stop', 'Parar gravação', ButtonStyle.Danger), button('note', 'Adicionar nota', ButtonStyle.Secondary)] :
+    [button('stop', 'Parar gravação', ButtonStyle.Danger), button('note', 'Adicionar nota', ButtonStyle.Secondary),
+      ...(meta.processingMode === 'server' ? [button('title', 'Nome da sessão', ButtonStyle.Primary)] : [])] :
     [button('title', 'Nome da sessão', ButtonStyle.Primary, !editableRecording(meta, now)),
       button('season', meta.seasonEnd ? 'Desfazer fim da temporada' : 'Encerrar temporada',
         ButtonStyle.Secondary, !editableRecording(meta, now))];
@@ -472,12 +476,13 @@ export class RecordingPanels {
         hasRecordingRole(interaction, (await guildAccount(runtime.account.id, meta.guildId))?.access_roles);
       if (!manager && !roleAllowed && !(action === 'note' && live?.channel.members.has(user)))
         throw new Error('Você não tem permissão para esta ação.');
-      if ((action === 'stop' || action === 'note') ? !live : !editableRecording(meta, this.now()))
+      const editingLiveTitle = action === 'title' && live && meta.processingMode === 'server';
+      if ((action === 'stop' || action === 'note') ? !live : !editingLiveTitle && !editableRecording(meta, this.now()))
         throw new Error('O prazo para esta ação terminou.');
       if (interaction.isButton() && (action === 'note' || action === 'title')) {
         const input = new TextInputBuilder().setCustomId('text').setLabel(action === 'note' ? 'Nota' : 'Nome da sessão')
           .setStyle(action === 'note' ? TextInputStyle.Paragraph : TextInputStyle.Short)
-          .setRequired(true).setMaxLength(action === 'note' ? 400 : 120);
+          .setRequired(true).setMaxLength(action === 'note' ? 400 : meta.processingMode === 'server' ? MAX_OPTION_LENGTH : 120);
         if (action === 'title' && meta.sessionTitle) input.setValue(meta.sessionTitle);
         return await interaction.showModal(new ModalBuilder().setCustomId(interaction.customId)
           .setTitle(action === 'note' ? 'Adicionar nota' : 'Nome da sessão')

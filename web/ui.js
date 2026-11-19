@@ -96,7 +96,7 @@ function applyStatusToProcessing(state) {
 }
 
 function computeMissingPrerequisites(state) {
-  if (Array.isArray(state?.missingPrerequisites) && state.missingPrerequisites.length) {
+  if (Array.isArray(state?.missingPrerequisites)) {
     return state.missingPrerequisites.map((item) => {
       if (typeof item === 'string') {
         const lower = item.toLowerCase();

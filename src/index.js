@@ -5,11 +5,16 @@ import { issueMcpToken } from './mcp_tokens.js';
 import { confirmGuildLink, guildLinkRequest } from './discord_guild_links.js';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { delimiter, resolve } from 'node:path';
+import { Routes } from 'discord.js';
+import { createPodcastWorker } from './podcast_worker.js';
+import { resolvePodcastConfig } from './podcast_config.js';
+import { createServerRecordingRunner, isServerRecording } from './server_recording.js';
 import { accountProfile, begin, cookie, finish, oauthReady, origin } from './auth.js';
 import { identify, migrate, pool, seal, unseal } from './db.js';
 import { DiscordRecorder } from './recorder.js';
 import { createFolder, recordingDestination, recordingFolderPath, recordingFolders } from './drive.js';
-import { needsSidecar, processRecording, processRecordingSidecar, recordings, recover, saveRecordingEdits } from './queue.js';
+import { needsSidecar, prepareRecording, processRecording, processRecordingSidecar, recordings, recover, saveRecordingEdits } from './queue.js';
 import { hash, validateRules } from './state.js';
 import { authenticateDevice, complete, devices, enqueue, jobStatus, pair, poll, revoke } from './devices.js';
 import { acknowledge, configure, monitor, pendingNotices, preferences } from './secretary.js';
@@ -292,7 +297,20 @@ async function route(req, res) {
   if ((path === '/api/admin' || path.startsWith('/api/admin/')) && !isAdminRequestAuthorized(req, account)) {
     return json(res, 403, { error: ADMIN_VPN_ERROR });
   }
-  if (req.method === 'GET' && path === '/api/status') return json(res, 200, status(account, req));
+  if (req.method === 'GET' && path === '/api/status') {
+    const snapshot = status(account, req);
+    if (snapshot.pro) {
+      try {
+        const { missing } = await podcastConfig(account);
+        snapshot.missingPrerequisites = missing;
+        snapshot.serverProcessingEligible = missing.length === 0;
+      } catch {
+        snapshot.serverProcessingEligible = false;
+        snapshot.missingPrerequisites = ['configuração de Podcast Automation'];
+      }
+    }
+    return json(res, 200, snapshot);
+  }
   if (req.method === 'GET' && path === '/api/admin/accounts') return json(res, 200, await listAdminAccounts(pool));
   if (req.method === 'GET' && path === '/api/recording-folder') {
     const id = recordingFolder(account);
@@ -392,6 +410,46 @@ async function route(req, res) {
 }
 
 const uploads = new Set();
+const serverJobs = new Set();
+const podcastRoot = process.env.PIA_PODCAST_ROOT;
+const podcastPython = process.env.PIA_PODCAST_PYTHON;
+const podcastWorkerReady = Boolean(podcastRoot && podcastPython);
+const podcastWorker = createPodcastWorker({
+  command: podcastPython,
+  args: ['-m', 'podcast_automation.server_worker'],
+  cwd: podcastRoot,
+  env: podcastRoot ? {
+    ...Object.fromEntries(['PATH', 'Path', 'HOME', 'USERPROFILE', 'SystemRoot', 'TEMP', 'TMP', 'TMPDIR']
+      .filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]])),
+    PYTHONPATH: [resolve(podcastRoot, 'Plugins/Apps/podcast_automation/src'), resolve(podcastRoot)].join(delimiter),
+    PYTHONIOENCODING: 'utf-8',
+  } : undefined,
+});
+const podcastConfig = (account) => resolvePodcastConfig(account, { workerReady: podcastWorkerReady });
+const panelRuntime = (meta) => {
+  const runtime = runtimes.get(meta.botAccountId)?.runtime;
+  return runtime?.client.isReady() ? runtime : null;
+};
+const serverRecording = createServerRecordingRunner({
+  worker: podcastWorker,
+  prepareArchive: prepareRecording,
+  resolveConfig: podcastConfig,
+  panelsFor: (meta) => panelRuntime(meta)?.panels,
+  async announce(meta, announcement) {
+    const runtime = panelRuntime(meta);
+    if (!runtime || !Array.isArray(announcement?.parts) || !announcement.parts.length) {
+      throw new Error('Anúncio indisponível');
+    }
+    const mentions = Array.isArray(announcement.mentions)
+      ? announcement.mentions.filter((item) => typeof item === 'string' && /^\d{17,20}$/.test(item))
+      : [];
+    for (const content of announcement.parts) {
+      await runtime.client.rest.post(Routes.channelMessages(meta.noticeChannelId), {
+        body: { content, allowed_mentions: { parse: [], users: mentions } },
+      });
+    }
+  },
+});
 async function reconcile() {
   await monitor();
   const { rows: links } = await pool.query('SELECT guild_id, bot_account_id, account_id FROM pia_server.discord_guild_links');
@@ -419,15 +477,32 @@ async function reconcile() {
       previous.runtime.setDestinations(routes);
     }
     const items = recordings(account).sort((a, b) => a.meta.startedAt.localeCompare(b.meta.startedAt));
-    for (const { dir, meta } of items) {
+    const now = Date.now();
+    for (const item of items) {
+      const { dir, meta } = item;
+      if (isServerRecording(account, meta)) {
+        if (meta.poll?.status === 'open' && Date.parse(meta.poll.endsAt) > now) {
+          const panels = panelRuntime(meta)?.panels;
+          if (panels && !panels.polls.has(meta.id)) {
+            await panels.restorePoll(dir, { autoClose: false, refreshPanel: true });
+          }
+          continue;
+        }
+        if (serverJobs.has(account.id) || ['failed', 'skipped'].includes(meta.processing?.status) ||
+          ['failed', 'published'].includes(meta.publication?.status)) continue;
+        serverJobs.add(account.id);
+        serverRecording.run(account, item)
+          .catch(() => console.error('Falha na fila de processamento do podcast.'))
+          .finally(() => serverJobs.delete(account.id));
+        continue;
+      }
       if (meta.state === 'recording' || !meta.editUntil) continue;
-      const runtime = runtimes.get(meta.botAccountId)?.runtime;
-      if (runtime?.client.isReady()) runtime.panels.finish(meta, () => saveRecordingEdits(dir, meta));
+      panelRuntime(meta)?.panels.finish(meta, () => saveRecordingEdits(dir, meta));
     }
     if (uploads.has(account.id) || !account.drive_refresh) continue;
-    const now = Date.now();
     const sidecar = items.find(({ meta }) => needsSidecar(meta, now));
-    const next = sidecar ? null : items.find(({ meta }) => meta.state === 'queued' && (meta.retryAt || 0) <= now);
+    const next = sidecar ? null : items.find(({ meta }) =>
+      !isServerRecording(account, meta) && meta.state === 'queued' && (meta.retryAt || 0) <= now);
     if (next || sidecar) {
       uploads.add(account.id);
       (next ? processRecording(account, next) : processRecordingSidecar(account, sidecar)).catch(() => console.error('Falha na fila de gravação.'))

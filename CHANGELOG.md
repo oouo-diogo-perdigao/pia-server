@@ -7,6 +7,7 @@
 - O painel web exibe a administração somente para sessões autorizadas pela VPN. A aba Gravações mostra o plano e permite salvar o modo de processamento.
 - Contas Pro podem escolher o processamento no servidor. O estado efetivo volta ao modo local quando o plano é desabilitado.
 - Adiciona a enquete persistida de nome da sessão no card do Discord, com prazo de uma hora, voto por opção e desempate.
+- Gravações Pro em modo servidor usam o worker de Podcast Automation. O card mostra progresso, abre a enquete após a preparação dos artefatos e só publica para o vencedor após o prazo.
 - A preparação local do pacote de gravação foi separada do envio ao Drive para poder ser reutilizada pelo processamento no servidor.
 
 ### Release legal v1.1 - 2026-11-18
