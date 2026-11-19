@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Canal padrão Taverns.gg (0005)
+- O painel Taverns passa a exibir e salvar o destino padrão por conta no formato ID da taverna/ID do canal. Salvar ou editar o destino dispensa redigitar o token.
+- Desconectar o bot remove a credencial e mantém o destino padrão. A reconexão carrega o mesmo destino. Os destinos de campanha continuam na configuração do Podcast Automation.
+- A ação de teste usa o valor exibido sem salvá-lo. Destinos inválidos ou vazios são recusados, preservando o valor anterior.
+
 ### Release legal v1.1 - 2026-11-18
 - Política de Privacidade e Termos de Serviço v1.1 publicados: `vigencia` e `atualizacao` em 2026-11-18 e `sha256` do HTML congelado em `src/legal/versoes.js` (privacidade `3cbf9340a46b…`, termos `d1c0db237cab…`). Todos os trechos de `JURIDICO['1.1']` estão `revisado:true` (parecer do Advogado sobre `3862937`, favorável com ressalvas; textos literais em `64a9fb0` e O1 na Alternativa A em `f606f48`, decisão do Diogo). `/privacidade` e `/termos` passam a servir a v1.1; `/privacidade/v1.1` e `/termos/v1.1` respondem 200 com a cópia congelada.
 - A v1.0 foi aprovada e congelada em 2026-11-17 (release legal v1.0), mas foi substituída pela v1.1 antes de ser publicada em produção. A entrada da v1.0 em `versoes.js` e o `sha256` dela não mudam (`/privacidade/v1.0` e `/termos/v1.0` seguem servindo a mesma cópia); a nota está no resumo da v1.1 no "Histórico de versões".
