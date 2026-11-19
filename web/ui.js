@@ -15,14 +15,14 @@ async function api(path, data) {
   return value;
 }
 
-function on(id, action) {
+function on(id, action, remainsDisabled = () => false) {
   element(id).onclick = async () => {
     const button = element(id);
     button.disabled = true;
     say('');
     try { await action(); }
     catch (error) { say(error.message); }
-    finally { button.disabled = false; }
+    finally { button.disabled = remainsDisabled(); }
   };
 }
 
@@ -499,7 +499,7 @@ on('taverns-save-destination', async () => {
   } catch {
     say('Destino do Taverns salvo, mas não foi possível recarregar os conectores.');
   }
-});
+}, () => element('taverns-destination').disabled);
 element('taverns-destination').addEventListener('input', () => {
   setTavernsDestinationError('');
   updateTavernsDirtyState();

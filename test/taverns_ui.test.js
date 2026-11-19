@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 
 const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 const ui = readFileSync(new URL('../web/ui.js', import.meta.url), 'utf8');
@@ -94,4 +95,73 @@ test('web/ui.js implementa estados carregando/erro/vazio/sucesso, validação in
 
   // Discord preservado
   assert.match(ui, /on\('discord-save-channel',\s*\(\)\s*=>\s*saveConnector\('discord',\s*\{\s*channel:\s*input\('discord-channel'\)\s*\}\)\)/);
+});
+
+
+test('POST bem-sucedido seguido de falha na leitura mantém Salvar destino bloqueado até novo GET', async () => {
+  const destination = '11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222';
+  const nodes = new Map();
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      disabled: false, value: '', setAttribute() {}, removeAttribute() {}, replaceChildren() {},
+    });
+    return nodes.get(id);
+  };
+  const requests = [];
+  let saved = '';
+  let canRead = false;
+  const api = async (path, data) => {
+    requests.push([path, data]);
+    if (path === 'connectors/save') {
+      assert.equal(data.provider, 'taverns');
+      assert.equal(data.destination, destination);
+      assert.equal(Object.hasOwn(data, 'token'), false);
+      saved = data.destination;
+      return { ok: true };
+    }
+    assert.equal(path, 'connectors');
+    if (!canRead) throw new Error('HTTP 503');
+    return {
+      taverns: { configured: true, destination: saved },
+      discord: { configured: true, channel: '123456789012345678' },
+      google: [], microsoft: [], objectStorage: [],
+    };
+  };
+  const slice = (start, end) => {
+    const first = ui.indexOf(start);
+    const last = ui.indexOf(end, first);
+    assert.ok(first >= 0 && last > first);
+    return ui.slice(first, last);
+  };
+  const messages = [];
+  const refresh = runInNewContext([
+    'let connectorState;',
+    slice('function on(', 'let destinationRequest'),
+    slice('const TAVERNS_DESTINATION_RE', 'async function removeAccount'),
+    slice("on('taverns-save-destination'", "element('taverns-destination').addEventListener"),
+    'refreshConnectors;',
+  ].join('\n'), {
+    api, element, input: (id) => element(id).value,
+    say: (message) => messages.push(message),
+    document: { querySelector: () => null }, botSecrets: {},
+    storageFields: async () => {}, Option: class {},
+  });
+
+  const field = element('taverns-destination');
+  const save = element('taverns-save-destination');
+  const sendTest = element('taverns-test');
+  field.value = destination;
+  await save.onclick();
+
+  assert.deepEqual(requests.map(([path]) => path), ['connectors/save', 'connectors']);
+  assert.equal(saved, destination);
+  assert.equal(messages.at(-1), 'Destino do Taverns salvo, mas não foi possível recarregar os conectores.');
+  assert.ok(field.disabled && save.disabled && sendTest.disabled);
+
+  canRead = true;
+  await refresh();
+  assert.equal(field.value, destination);
+  assert.ok(!field.disabled && !save.disabled && !sendTest.disabled);
+  assert.equal(element('discord-channel').value, '123456789012345678');
+  assert.deepEqual(requests.map(([path]) => path), ['connectors/save', 'connectors', 'connectors']);
 });
