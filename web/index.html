@@ -45,6 +45,41 @@
   </aside>
   <header class="pane-header"><h2 id="page-title"></h2></header>
   <div class="content">
+  <section id="recordings-processing" data-page="recordings">
+    <h2>Processamento das gravações</h2>
+    <p id="processing-loading" role="status" aria-live="polite">Carregando plano e configuração…</p>
+    <div id="processing-plan-notice" class="status-warning" role="status" aria-live="polite" hidden></div>
+    <div id="processing-standard" hidden>
+      <p><strong class="plan-badge plan-badge--standard">Plano Padrão (local)</strong></p>
+      <p>As gravações são processadas somente no computador com a PIA. O processamento no servidor exige o Plano Pro.</p>
+    </div>
+    <div id="processing-pro" hidden>
+      <p><strong class="plan-badge plan-badge--pro">Plano Pro ativo</strong></p>
+      <p id="processing-saved-mode"></p>
+      <fieldset id="processing-mode-group">
+        <legend>Modo de processamento</legend>
+        <label class="processing-option" for="processing-mode-local">
+          <input type="radio" name="processing-mode" id="processing-mode-local" value="local">
+          <span>
+            <strong>Processar somente local</strong>
+            <small>As gravações são enviadas ao Google Drive para processamento no computador com a PIA.</small>
+          </span>
+        </label>
+        <label class="processing-option" for="processing-mode-server">
+          <input type="radio" name="processing-mode" id="processing-mode-server" value="server">
+          <span>
+            <strong>Processar no servidor (Pro)</strong>
+            <small>O servidor processa áudio, transcrição e abre a enquete do nome no Discord após encerrar a gravação.</small>
+          </span>
+        </label>
+      </fieldset>
+      <div id="processing-prerequisites" class="status-warning" role="status" aria-live="polite" hidden></div>
+      <div class="processing-actions">
+        <button id="save-processing-mode" type="button" disabled>Salvar escolha</button>
+      </div>
+      <p id="processing-feedback" role="status" aria-live="polite"></p>
+    </div>
+  </section>
   <section data-page="recordings">
     <h2>Bot Discord e Google Drive</h2>
     <p id="recording-destination">Nenhuma pasta selecionada.</p>
@@ -109,9 +144,32 @@
     <p id="secretary-error"></p>
   </section>
   <section id="admin" data-page="admin" hidden>
-    <h2>Contas autorizadas</h2>
-    <label>E-mail Google <input id="email" type="email"></label>
-    <button id="add-account">Autorizar conta</button>
+    <div id="admin-denied" hidden>
+      <h2>Acesso negado</h2>
+      <p>Você não tem permissão para acessar esta área.</p>
+    </div>
+    <div id="admin-vpn-blocked" hidden>
+      <h2>Acesso administrativo indisponível</h2>
+      <p>Conecte-se à VPN autorizada e tente novamente.</p>
+      <button id="admin-retry" type="button">Tentar novamente</button>
+      <p id="admin-blocked-feedback" role="status" aria-live="polite"></p>
+    </div>
+    <div id="admin-content" hidden>
+      <h2>Contas autorizadas</h2>
+      <form id="admin-add-form" novalidate>
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="off" aria-describedby="admin-email-error">
+        <p id="admin-email-error" class="field-error" role="alert" hidden></p>
+        <button id="add-account" type="submit">Autorizar conta</button>
+      </form>
+      <p id="admin-feedback" role="status" aria-live="polite"></p>
+      <div class="admin-accounts-header">
+        <h3>Contas cadastradas</h3>
+        <button id="admin-refresh" type="button">Atualizar contas</button>
+      </div>
+      <p id="admin-accounts-status" role="status" aria-live="polite"></p>
+      <ul id="admin-accounts" class="admin-accounts-list"></ul>
+    </div>
   </section>
   <section data-page="connectors">
     <p>Gerencie aqui as contas usadas pelos computadores pareados.</p>
