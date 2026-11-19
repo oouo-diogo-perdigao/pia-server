@@ -128,11 +128,9 @@ export function canParticipateInPoll(interaction, meta) {
   if (!interaction.member) return false;
   if (typeof interaction.channel?.permissionsFor === 'function') {
     const perms = interaction.channel.permissionsFor(interaction.member);
-    if (!perms || !perms.has?.(PermissionFlagsBits.ViewChannel)) return false;
-  } else if (typeof interaction.memberPermissions?.has === 'function') {
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.ViewChannel)) return false;
+    return perms?.has?.(PermissionFlagsBits.ViewChannel) === true;
   }
-  return true;
+  return interaction.memberPermissions?.has?.(PermissionFlagsBits.ViewChannel) === true;
 }
 
 export function recordingPanel(meta, ping, now = Date.now(), publicOrigin = origin) {
@@ -313,7 +311,9 @@ export class RecordingPanels {
     if (meta.poll.status === 'open') {
       const remaining = Math.max(0, Date.parse(meta.poll.endsAt) - this.now());
       entry.timer = setTimeout(() => {
-        void this.closePoll(dir, { onPollClosed: entry.onPollClosed });
+        void this.closePoll(dir, { onPollClosed: entry.onPollClosed }).catch(() => {
+          console.error('Discord: falha ao encerrar enquete de gravação.');
+        });
       }, remaining);
       entry.timer.unref();
     }
@@ -424,7 +424,7 @@ export class RecordingPanels {
         else if (result.code === 'closed' && result.meta?.poll?.status === 'open') {
           await this.closePoll(entry.dir);
         }
-        return await interaction.reply({ content: result.message, flags: 64 });
+        return await interaction.reply({ content: result.message, flags: 64, allowedMentions: { parse: [] } });
       }
 
       if (action === 'vote' && interaction.isButton()) {
@@ -438,7 +438,7 @@ export class RecordingPanels {
         else if (result.code === 'closed' && result.meta?.poll?.status === 'open') {
           await this.closePoll(entry.dir);
         }
-        return await interaction.reply({ content: result.message, flags: 64 });
+        return await interaction.reply({ content: result.message, flags: 64, allowedMentions: { parse: [] } });
       }
     } catch (error) {
       if (!interaction.replied) {

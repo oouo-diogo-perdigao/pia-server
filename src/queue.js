@@ -43,7 +43,12 @@ export function patchRecording(dir, fields) {
 }
 
 export function saveRecordingEdits(dir, meta) {
-  patchRecording(dir, { sessionTitle: meta.sessionTitle, seasonEnd: meta.seasonEnd, metadataEdited: true });
+  patchRecording(dir, {
+    sessionTitle: meta.sessionTitle,
+    sessionTitleBy: meta.sessionTitleBy,
+    seasonEnd: meta.seasonEnd,
+    metadataEdited: true,
+  });
 }
 
 function sidecarContent(meta) {

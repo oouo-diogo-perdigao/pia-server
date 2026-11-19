@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { prepareRecording } from '../src/queue.js';
+import { prepareRecording, saveRecordingEdits } from '../src/queue.js';
 
 test('reuses a prepared archive without uploading or changing the recording state', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'pia-queue-'));
@@ -25,4 +25,18 @@ test('reuses a prepared archive without uploading or changing the recording stat
   assert.equal(readFileSync(rawTrack, 'utf8'), 'fixture track');
   assert.deepEqual(JSON.parse(readFileSync(statePath, 'utf8')), meta);
   assert.equal(meta.state, 'queued');
+});
+
+test('persists the session title author for the initial poll vote', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'pia-queue-'));
+  t.after(() => rmSync(dir, { recursive: true }));
+  const statePath = join(dir, 'recording.json');
+  writeFileSync(statePath, JSON.stringify({ state: 'queued' }));
+  const title = { sessionTitle: 'Título inicial', sessionTitleBy: '123456789012345678', seasonEnd: false };
+
+  saveRecordingEdits(dir, title);
+
+  assert.deepEqual(JSON.parse(readFileSync(statePath, 'utf8')), {
+    state: 'queued', ...title, metadataEdited: true,
+  });
 });
