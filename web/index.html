@@ -176,8 +176,11 @@
       </div>
       <button id="taverns-save">Salvar bot</button>
       <button id="taverns-remove">Remover bot</button>
-      <label>Destino de teste (ID da taverna/ID do canal) <input id="taverns-destination"></label>
-      <button id="taverns-test">Enviar mensagem de teste</button>
+      <label>Destino padrão (ID da taverna/ID do canal) <input id="taverns-destination" placeholder="taverna-uuid/canal-uuid" autocomplete="off" spellcheck="false"></label>
+      <p id="taverns-default-empty" hidden>Nenhum destino padrão configurado.</p>
+      <button id="taverns-save-destination" type="button">Salvar destino</button>
+      <button id="taverns-test" type="button">Enviar mensagem de teste</button>
+      <p id="taverns-feedback" role="alert" hidden></p>
     </div>
   </section>
   </div>

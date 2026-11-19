@@ -349,7 +349,20 @@ async function storageFields() {
 }
 
 async function refreshConnectors(selectedId = input('storage-account')) {
-  connectorState = await api('connectors');
+  const tavernsInput = element('taverns-destination');
+  const tavernsSaveBtn = element('taverns-save-destination');
+  const tavernsFeedback = element('taverns-feedback');
+  try {
+    connectorState = await api('connectors');
+  } catch (error) {
+    tavernsInput.disabled = true;
+    tavernsSaveBtn.disabled = true;
+    tavernsFeedback.textContent = error.message || 'Falha ao carregar conectores.';
+    tavernsFeedback.hidden = false;
+    throw error;
+  }
+  tavernsInput.disabled = false;
+  tavernsSaveBtn.disabled = false;
   for (const [provider, control] of Object.entries(botSecrets)) {
     control.hide();
     control.configured(connectorState[provider].configured);
@@ -374,14 +387,19 @@ async function refreshConnectors(selectedId = input('storage-account')) {
   element('discord-state').textContent = connectorState.discord.configured ? '· configurado' : '';
   element('discord-channel').value = connectorState.discord.channel;
   element('taverns-state').textContent = connectorState.taverns.configured ? '· configurado' : '';
+  const tavernsDestination = connectorState.taverns?.destination || '';
+  tavernsInput.value = tavernsDestination;
+  element('taverns-default-empty').hidden = Boolean(tavernsDestination);
+  tavernsFeedback.textContent = '';
+  tavernsFeedback.hidden = true;
   const select = element('storage-account');
   select.replaceChildren(new Option('Nova conta', ''), ...connectorState.objectStorage.map((item) => new Option(item.name, item.id)));
   select.value = connectorState.objectStorage.some((item) => item.id === selectedId) ? selectedId : '';
   await storageFields();
 }
 
-async function removeAccount(provider, id) {
-  if (!window.confirm('Remover este conector da sua conta?')) return;
+async function removeAccount(provider, id, confirmMessage = 'Remover este conector da sua conta?') {
+  if (!window.confirm(confirmMessage)) return;
   await api('connectors/remove', { provider, id });
   await refreshConnectors();
   say('Conector removido.');
@@ -412,7 +430,25 @@ on('taverns-save', async () => {
   await saveConnector('taverns', { token });
   element('taverns-token').value = '';
 });
-on('taverns-remove', () => removeAccount('taverns'));
+on('taverns-save-destination', async () => {
+  const feedback = element('taverns-feedback');
+  feedback.textContent = '';
+  feedback.hidden = true;
+  try {
+    await saveConnector('taverns', { destination: input('taverns-destination').trim() });
+  } catch (error) {
+    feedback.textContent = error.message;
+    feedback.hidden = false;
+    throw error;
+  }
+});
+element('taverns-destination').addEventListener('input', () => {
+  const feedback = element('taverns-feedback');
+  feedback.textContent = '';
+  feedback.hidden = true;
+});
+on('taverns-remove', () =>
+  removeAccount('taverns', undefined, 'Remover apenas o token do Taverns? O destino padrão e os demais dados serão preservados.'));
 for (const [provider, field] of [['discord', 'discord-channel'], ['taverns', 'taverns-destination']]) {
   on(provider + '-test', async () => {
     await api('connectors/test', { provider, destination: input(field).trim() });
