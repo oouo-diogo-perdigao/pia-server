@@ -175,9 +175,13 @@
           </button>
       </div>
       <button id="taverns-save">Salvar bot</button>
-      <button id="taverns-remove">Remover bot</button>
-      <label>Destino de teste (ID da taverna/ID do canal) <input id="taverns-destination"></label>
-      <button id="taverns-test">Enviar mensagem de teste</button>
+      <label>Destino padrão (ID da taverna/ID do canal) <input id="taverns-destination" type="text" placeholder="ID da taverna/ID do canal" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="taverns-destination-help taverns-destination-error" style="font-family: monospace; width: 100%; text-overflow: clip;" disabled></label>
+      <p id="taverns-destination-help">Carregando configuração do Taverns…</p>
+      <p id="taverns-destination-error" role="alert" hidden></p>
+      <p id="taverns-destination-dirty" hidden></p>
+      <button id="taverns-save-destination" type="button" disabled>Salvar destino</button>
+      <button id="taverns-test" type="button" disabled>Enviar mensagem de teste</button>
+      <button id="taverns-remove" type="button">Remover bot</button>
     </div>
   </section>
   </div>
