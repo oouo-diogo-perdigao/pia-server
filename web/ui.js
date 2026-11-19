@@ -20,11 +20,11 @@ const isProcessingDirty = () => savedPro === true && draftServerProcessing !== n
 const isValidEmail = (value) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
 
 function resolveAdminAccess(state) {
-  const effectiveAdmin = Boolean(state?.admin);
-  const vpnAllowed = state?.adminVpnAllowed === undefined ? effectiveAdmin : Boolean(state.adminVpnAllowed);
-  const isAdminAccount = state?.isAdminAccount === undefined ? effectiveAdmin : Boolean(state.isAdminAccount);
+  const effectiveAdmin = state?.admin === true;
+  const vpnAllowed = state?.adminVpnAllowed === true;
+  const isAdminAccount = state?.isAdminAccount === true;
   return {
-    effectiveAdmin: effectiveAdmin && vpnAllowed,
+    effectiveAdmin: effectiveAdmin && isAdminAccount && vpnAllowed,
     isAdminAccount,
     vpnAllowed,
   };
