@@ -146,7 +146,8 @@ export async function publicConnectors(account) {
     storageDefault: state.documents['Connectors/object_storage']?.default || '',
     discord: { configured: Boolean(account.discord_token || state.settings['Connectors/discord']?.DISCORD_BOT_TOKEN),
       channel: state.settings['Connectors/discord']?.DISCORD_CHANNEL_ID || '' },
-    taverns: { configured: Boolean(state.settings['Connectors/taverns']?.TAVERNS_BOT_TOKEN) },
+    taverns: { configured: Boolean(state.settings['Connectors/taverns']?.TAVERNS_BOT_TOKEN),
+      destination: state.settings['Connectors/taverns']?.TAVERNS_DESTINATION || '' },
   };
 }
 
@@ -196,6 +197,9 @@ export async function saveConnector(account, data) {
       if (provider === 'taverns' && token) {
         if (!/^tavbot_[a-zA-Z0-9_.-]+$/.test(token)) throw new Error('Token Taverns inválido.');
         settings.TAVERNS_BOT_TOKEN = token;
+      }
+      if (provider === 'taverns' && data.destination !== undefined) {
+        settings.TAVERNS_DESTINATION = parseTavernsDestination(data.destination).destination;
       }
       if (provider === 'discord' && data.channel !== undefined) {
         if (typeof data.channel !== 'string' || (data.channel && !/^\d{17,20}$/.test(data.channel))) throw new Error('ID de canal Discord inválido.');
@@ -250,9 +254,17 @@ export async function removeConnector(account, { provider, id }) {
     await pool.query('UPDATE pia_server.accounts SET discord_token=NULL,discord_bot_id=NULL WHERE id=$1', [account.id]);
   }
   return edit(account, (state) => {
-    if (provider === 'discord' || provider === 'taverns') {
+    if (provider === 'discord') {
       delete state.settings['Connectors/' + provider];
       delete state.documents['Connectors/' + provider];
+      return { ok: true };
+    }
+    if (provider === 'taverns') {
+      const settings = state.settings['Connectors/taverns'];
+      if (settings) {
+        delete settings.TAVERNS_BOT_TOKEN;
+        if (Object.keys(settings).length === 0) delete state.settings['Connectors/taverns'];
+      }
       return { ok: true };
     }
     if (!safeId(id) || id === primaryGoogle) throw new Error('Conta inválida.');
@@ -267,6 +279,15 @@ export async function removeConnector(account, { provider, id }) {
 const discordId = /^\d{17,20}$/;
 const tavernsId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 
+export function parseTavernsDestination(destination) {
+  if (typeof destination !== 'string') throw new Error('Informe o destino como ID da taverna/ID do canal.');
+  const trimmed = destination.trim();
+  const parts = trimmed.split('/');
+  if (parts.length !== 2 || !parts.every((part) => tavernsId.test(part)))
+    throw new Error('Informe o destino como ID da taverna/ID do canal.');
+  return { tavernId: parts[0], channelId: parts[1], destination: parts[0] + '/' + parts[1] };
+}
+
 export async function testConnector(account, { provider, destination }) {
   if (typeof destination !== 'string') throw new Error('Informe o canal de teste.');
   const { settings } = await runtime(account, provider);
@@ -275,10 +296,8 @@ export async function testConnector(account, { provider, destination }) {
     url = 'https://discord.com/api/v10/channels/' + destination + '/messages';
     token = settings.DISCORD_BOT_TOKEN;
   } else if (provider === 'taverns') {
-    const parts = destination.split('/');
-    if (parts.length !== 2 || !parts.every((part) => tavernsId.test(part)))
-      throw new Error('Informe o destino como ID da taverna/ID do canal.');
-    url = 'https://api.tav.gg/api/v1/taverns/' + parts[0] + '/channels/' + parts[1] + '/messages';
+    const { tavernId, channelId } = parseTavernsDestination(destination);
+    url = 'https://api.tav.gg/api/v1/taverns/' + tavernId + '/channels/' + channelId + '/messages';
     token = settings.TAVERNS_BOT_TOKEN;
   } else throw new Error('Informe um canal Discord válido.');
   if (!token) throw new Error('Configure o bot antes de testar.');
