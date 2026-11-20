@@ -43,7 +43,12 @@ export function patchRecording(dir, fields) {
 }
 
 export function saveRecordingEdits(dir, meta) {
-  patchRecording(dir, { sessionTitle: meta.sessionTitle, seasonEnd: meta.seasonEnd, metadataEdited: true });
+  patchRecording(dir, {
+    sessionTitle: meta.sessionTitle,
+    sessionTitleBy: meta.sessionTitleBy,
+    seasonEnd: meta.seasonEnd,
+    metadataEdited: true,
+  });
 }
 
 function sidecarContent(meta) {
@@ -69,42 +74,49 @@ export async function processRecordingSidecar(account, { dir, meta }) {
   }
 }
 
-export async function processRecording(account, { dir, meta }) {
-  const persist = () => patchRecording(dir, { driveId: meta.driveId });
+export async function prepareRecording(account, { dir, meta }) {
   const archive = join(dir, meta.name);
   const tracks = join(dir, 'pia_data');
   const project = join(dir, 'pia.aup');
   const entries = recordingTracks(meta);
-  try {
-    if (!existsSync(archive)) {
-      mkdirSync(tracks, { recursive: true, mode: 0o700 });
-      for (const { id, filename } of entries) {
-        if (!snowflake.test(id)) throw new Error('Faixa inválida.');
-        await run('ffmpeg', ['-v', 'error', '-y', '-f', 's16le', '-ar', '48000', '-ac', '1',
-          '-i', join(dir, id + '.pcm'), '-c:a', 'flac', join(tracks, filename)],
-        { timeout: 30 * 60 * 1000 });
-      }
-      const previous = recordings(account).map((item) => item.meta)
-        .filter((item) => item.guildId === meta.guildId && item.channelId === meta.channelId &&
-          item.startedAt < meta.startedAt && item.tracks.length && item.state !== 'recording')
-        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
-      writeFileSync(project, audacityProject(entries, meta.notes), { mode: 0o600 });
-      writeFileSync(join(dir, 'pia-session.json'), JSON.stringify({
-        version: 1, source: 'pia-server-discord', id: meta.id, startedAt: meta.startedAt,
-        endedAt: meta.endedAt, channelId: meta.channelId, participants: meta.tracks, tracks: entries,
-        durationMs: meta.durationMs, requester: meta.requester, stoppedBy: meta.stoppedBy,
-        notes: meta.notes || [], metadataEditableUntil: meta.editUntil,
-        previousRecordingName: previous?.name, startsSeason: Boolean(previous?.seasonEnd),
-      }) + '\n', { mode: 0o600 });
-      const temp = archive + '.partial.zip';
-      if (existsSync(temp)) unlinkSync(temp);
-      await run('zip', ['-0', '-r', temp, 'pia.aup', ...entries.map(({ filename }) => 'pia_data/' + filename), 'pia-session.json'], { cwd: dir, timeout: 30 * 60 * 1000 });
-      renameSync(temp, archive);
+  if (!existsSync(archive)) {
+    mkdirSync(tracks, { recursive: true, mode: 0o700 });
+    for (const { id, filename } of entries) {
+      if (!snowflake.test(id)) throw new Error('Faixa inválida.');
+      await run('ffmpeg', ['-v', 'error', '-y', '-f', 's16le', '-ar', '48000', '-ac', '1',
+        '-i', join(dir, id + '.pcm'), '-c:a', 'flac', join(tracks, filename)],
+      { timeout: 30 * 60 * 1000 });
     }
+    const previous = recordings(account).map((item) => item.meta)
+      .filter((item) => item.guildId === meta.guildId && item.channelId === meta.channelId &&
+        item.startedAt < meta.startedAt && item.tracks.length && item.state !== 'recording')
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+    writeFileSync(project, audacityProject(entries, meta.notes), { mode: 0o600 });
+    writeFileSync(join(dir, 'pia-session.json'), JSON.stringify({
+      version: 1, source: 'pia-server-discord', id: meta.id, startedAt: meta.startedAt,
+      endedAt: meta.endedAt, channelId: meta.channelId, participants: meta.tracks, tracks: entries,
+      durationMs: meta.durationMs, requester: meta.requester, stoppedBy: meta.stoppedBy,
+      notes: meta.notes || [], metadataEditableUntil: meta.editUntil,
+      previousRecordingName: previous?.name, startsSeason: Boolean(previous?.seasonEnd),
+    }) + '\n', { mode: 0o600 });
+    const temp = archive + '.partial.zip';
+    if (existsSync(temp)) unlinkSync(temp);
+    await run('zip', ['-0', '-r', temp, 'pia.aup', ...entries.map(({ filename }) => 'pia_data/' + filename), 'pia-session.json'], { cwd: dir, timeout: 30 * 60 * 1000 });
+    renameSync(temp, archive);
+  }
+  return {
+    archive,
+    files: [archive, project, ...entries.flatMap(({ id, filename }) => [join(dir, id + '.pcm'), join(tracks, filename)])],
+  };
+}
+
+export async function processRecording(account, { dir, meta }) {
+  const persist = () => patchRecording(dir, { driveId: meta.driveId });
+  try {
+    const { archive, files } = await prepareRecording(account, { dir, meta });
     await uploadRecording(account, archive, meta, persist);
     meta.state = 'uploaded';
     patchRecording(dir, { state: 'uploaded', retryAt: null, lastError: null });
-    const files = [archive, project, ...entries.flatMap(({ id, filename }) => [join(dir, id + '.pcm'), join(tracks, filename)])];
     for (const file of files) {
       try { unlinkSync(file); } catch { /* Keep the confirmed upload state. */ }
     }

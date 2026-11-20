@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### 0003 — Plano Pro e enquete no Discord (em desenvolvimento)
+- A imagem inclui Python 3.12 e a revisão do worker usada pelo servidor. O processamento Pro exige contexto autenticado da API de IA e registra a pendência quando ele está ausente.
+- A API administrativa exige sessão de administrador e origem na VPN autorizada. A administração lista contas e permite alterar o plano Pro.
+- O painel web exibe a administração somente para sessões autorizadas pela VPN. A aba Gravações mostra o plano e permite salvar o modo de processamento.
+- Contas Pro podem escolher o processamento no servidor. O estado efetivo volta ao modo local quando o plano é desabilitado.
+- Adiciona a enquete persistida de nome da sessão no card do Discord, com prazo de uma hora, voto por opção e desempate.
+- Gravações Pro em modo servidor usam o worker de Podcast Automation. O card mostra progresso, abre a enquete após a preparação dos artefatos e só publica para o vencedor após o prazo.
+- A preparação local do pacote de gravação foi separada do envio ao Drive para poder ser reutilizada pelo processamento no servidor.
+
 ### Canal padrão Taverns.gg (0005)
 - O painel Taverns passa a exibir e salvar o destino padrão por conta no formato ID da taverna/ID do canal. Salvar ou editar o destino dispensa redigitar o token.
 - Desconectar o bot remove a credencial e mantém o destino padrão. A reconexão carrega o mesmo destino. Os destinos de campanha continuam na configuração do Podcast Automation.

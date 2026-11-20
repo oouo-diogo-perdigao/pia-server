@@ -15,6 +15,15 @@ import { root, save, snowflake } from './state.js';
 const RATE = 48000;
 const SILENCE_MS = 5 * 60 * 1000;
 const NOTICE = '🔴 A PIA vai gravar este canal de voz em faixas separadas e guardar a sessão no Google Drive. Saia do canal se não quiser participar.';
+const SERVER_NOTICE = '🔴 A PIA vai gravar este canal de voz em faixas separadas para processamento no servidor. Saia do canal se não quiser participar.';
+
+function usesServerProcessing(account) {
+  return Boolean(account.pro && account.server_processing);
+}
+
+function hasRecordingDestination(account) {
+  return usesServerProcessing(account) || Boolean(account.drive_refresh && recordingFolder(account));
+}
 
 export function silenceAction(elapsed) {
   if (elapsed >= 2 * SILENCE_MS) return 'stop';
@@ -33,6 +42,7 @@ class Recording {
     this.connection = connection;
     this.channel = channel;
     this.panels = runtime.panels;
+    this.runtime = runtime;
     this.rule = rule;
     this.accountId = account.id;
     this.started = performance.now();
@@ -46,6 +56,7 @@ class Recording {
     this.meta = { id, name, channelId: rule.channelId, guildId: rule.guildId, startedAt: date.toISOString(),
       folderId: recordingFolder(account), driveAccount: account.recording_drive_account || null,
       state: 'recording', tracks: [], usernames: {}, members: {},
+      processingMode: usesServerProcessing(account) ? 'server' : 'local',
       botAccountId: runtime.account.id, noticeChannelId: notice.channelId, panelMessageId: notice.id,
       ...(requester ? { requester } : {}) };
     this.syncMembers(date.toISOString());
@@ -152,6 +163,10 @@ class Recording {
       closeSync(track.fd);
     }
     this.meta.state = this.meta.tracks.length ? 'queued' : 'empty';
+    const destination = this.runtime.destinations.get(this.meta.guildId);
+    if (destination?.id === this.accountId) {
+      this.meta.processingMode = usesServerProcessing(destination) ? 'server' : 'local';
+    }
     this.meta.durationMs = Math.max(0, Math.floor(performance.now() - this.started));
     const end = Date.now();
     this.meta.endedAt = new Date(end).toISOString();
@@ -217,7 +232,7 @@ export class DiscordRecorder {
 
   setDestinations(destinations) {
     const signature = (routes) => JSON.stringify([...routes].sort(([a], [b]) => a.localeCompare(b))
-      .map(([guild, account]) => [guild, account.id, recordingFolder(account), account.recording_drive_account, Boolean(account.drive_refresh), account.rules]));
+      .map(([guild, account]) => [guild, account.id, recordingFolder(account), account.recording_drive_account, Boolean(account.drive_refresh), usesServerProcessing(account), account.rules]));
     const changed = signature(this.destinations) !== signature(destinations);
     this.destinations = destinations;
     if (changed) this.evaluate();
@@ -240,7 +255,7 @@ export class DiscordRecorder {
     }
     for (const rule of rules.values()) {
       const account = this.destinations.get(rule.guildId);
-      if (!account.drive_refresh || !recordingFolder(account)) continue;
+      if (!hasRecordingDestination(account)) continue;
       const channel = this.client.channels.cache.get(rule.channelId);
       if (!channel?.isVoiceBased() || channel.guildId !== rule.guildId) continue;
       const humans = channel.members.filter((member) => !member.user.bot);
@@ -262,7 +277,7 @@ export class DiscordRecorder {
 
   async startManual(account, channel, requester, controlChannel) {
     if (this.guildBusy(channel.guildId)) throw new Error('Já há uma gravação ou teste neste servidor.');
-    if (!account.drive_refresh || !recordingFolder(account))
+    if (!hasRecordingDestination(account))
       throw new Error('Configure a pasta de gravações no Google Drive no painel da PIA Server.');
     this.pending.add(channel.guildId);
     try {
@@ -285,11 +300,11 @@ export class DiscordRecorder {
   async start(account, rule, channel, requester, controlChannel) {
     const notice = rule.noticeChannelId && await this.client.channels.fetch(rule.noticeChannelId);
     if (!notice?.isSendable() || notice.guildId !== rule.guildId) throw new Error('A PIA precisa enviar o aviso no chat do canal antes de gravar.');
-    const announcement = await notice.send({ content: NOTICE, allowedMentions: { parse: [] } });
+    const announcement = await notice.send({ content: usesServerProcessing(account) ? SERVER_NOTICE : NOTICE, allowedMentions: { parse: [] } });
     const destination = async () => {
       if (this.closed) return;
       const current = await guildAccount(this.account.id, rule.guildId);
-      if (current?.id === account.id && current.drive_refresh && recordingFolder(current) &&
+      if (current?.id === account.id && hasRecordingDestination(current) &&
           (requester || current.rules.some((item) => item.channelId === rule.channelId))) return current;
     };
     if (!await destination() || channel.members.filter((member) => !member.user.bot).size < rule.minPeople) return false;
