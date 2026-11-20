@@ -1,0 +1,72 @@
+[
+  {
+    "name": "TZ",
+    "type": "string",
+    "default": "America/Sao_Paulo",
+    "label": "Tz",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "POLL_INTERVAL_SECONDS",
+    "type": "int",
+    "default": "600",
+    "label": "Poll Interval Seconds",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "DRIVE_PROCESS",
+    "type": "bool",
+    "default": "true",
+    "label": "Drive Process",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "LOCAL_DRIVE_FOLDER",
+    "type": "path",
+    "default": "data/local-drive",
+    "label": "Local Drive Folder",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "PUBLICAR_DIRETO",
+    "type": "bool",
+    "default": "false",
+    "label": "Publicar Direto",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "OWNER_EMAIL",
+    "type": "string",
+    "default": "",
+    "label": "Owner Email",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "TRANSCRIPTS_FILE",
+    "type": "string",
+    "default": "transcripts.html",
+    "label": "Transcripts File",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "SKIP_CLOSED",
+    "type": "bool",
+    "default": "true",
+    "label": "Skip Closed",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "FEED_CACHE_DIR",
+    "type": "path",
+    "default": "data/cache/feeds",
+    "label": "Feed Cache Dir",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  },
+  {
+    "name": "FEED_FORCE_REBUILD",
+    "type": "bool",
+    "default": "false",
+    "label": "Feed Force Rebuild",
+    "link": "https://github.com/oouo-diogo-perdigao/pia#readme"
+  }
+]

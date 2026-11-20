@@ -6,7 +6,7 @@ const CONFIG_DOCUMENT = 'Apps/podcast_automation/campaigns';
 
 export async function resolvePodcastConfig(account, { workerReady = false } = {}) {
   const missing = [];
-  if (!workerReady) missing.push('worker de Podcast Automation');
+  if (!workerReady) missing.push('worker de Podcast Automation e contexto da API de IA');
 
   const { rows: [profile] } = await pool.query(
     'SELECT ciphertext FROM pia_server.profiles WHERE account_id=$1', [account.id],

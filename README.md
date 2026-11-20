@@ -20,6 +20,30 @@ contêiner quando a tag do ambiente aponta para uma imagem nova. Mantenha o
 No desenvolvimento, execute `npm ci` e `npm test`. Para construir uma imagem
 local, execute `docker build -t pia-server:local .`.
 
+## Processamento Pro
+
+A imagem local inclui Python 3.12, FFmpeg e o worker. A revisão de origem está em
+`vendor/pia-podcast/UPSTREAM`. Atualize a cópia a partir do Git do repositório
+`pia`, preservando os caminhos em `vendor/pia-podcast`. Fora do contêiner,
+`PIA_PODCAST_ROOT` aponta para um checkout do `pia` e
+`PIA_PODCAST_PYTHON` para um Python com as dependências de
+`vendor/pia-podcast/requirements.txt`.
+
+No ambiente isolado de teste, configure `PIA_PODCAST_APP_CONTEXT` no ambiente
+privado do servidor como objeto JSON com `url` (base sem `/v1`), `token`,
+`model` e `max_upload_bytes` (inteiro positivo). O worker usa esse token em
+`X-PIA-App-Token`. A URL precisa ser alcançável pelo contêiner. Use um serviço
+de IA de teste que aceite `/v1/audio/transcriptions` com `local/medium` e
+retorne `verbose_json` com timestamps, e aceite `/v1/chat/completions` com
+o modelo escolhido pela campanha ou o modelo padrão do contexto. Para ensaios
+isolados, um serviço simulado pode implementar os mesmos contratos.
+
+Prepare PostgreSQL isolado, uma conta com plano Pro e campanha sincronizada,
+um bucket de teste com credenciais de leitura e escrita e URL pública, e um bot
+com canal de teste vinculado à conta. Para administrar planos, use uma sessão
+administradora na rede autorizada em `PIA_ADMIN_VPN_CIDRS`. Se houver proxy,
+configure apenas seus endereços em `PIA_TRUSTED_PROXIES`.
+
 ## Implantar staging
 
 O staging usa a imagem publicada por `develop`, com projeto Compose, rota

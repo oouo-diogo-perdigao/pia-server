@@ -1,0 +1,148 @@
+{
+  "nomes_reais": {
+    "oouo01": "Dota",
+    "dotinha0806_01752": "Dota",
+    "luizmarcos": "Luiz",
+    "edilson": "Edilson",
+    "bruno_ao": "Bruno",
+    "omasker": "Caio",
+    "kojiromaeda": "Kojiro",
+    "renzen_": "Renzen",
+    "kayllan_arc": "Fernando",
+    "diogodih": "Diogo",
+    "roquescra": "Roque"
+  },
+  "campaign_details": {
+    "Dota": {
+      "Campanha": "Domingos Sem Fim",
+      "rss_key": "campaigns/RPG 2025 Domingos Sem Fim/rss.xml",
+
+			"title": "Domingo sem Fim",
+			"description": "Um RPG inspirado em Sandman. Jogo de RPG de Morte e Ascensão dos perpétuos de Neil Gaiman.",
+			"link": "https://www.youtube.com/channel/UC4VNp9FoAldXidF1YRE1Qkw",
+			"author": "TravelRPG",
+			"explicit": true,
+			"closed": false,
+			"players": {
+				"Caio": "Destino",
+				"Roque": "Cain",
+				"Fernando": "Pomera",
+				"Kojiro": "Xichetzin",
+				"Edilson": "Velorum"
+			}
+    },
+    "Caio": {
+      "Campanha": "Origem e Destructo",
+      "rss_key": "campaigns/RPG 2025 Origem e Destructo/rss.xml",
+
+			"title": "Origem & Destructo",
+			"description": "É um erro achar que a natureza pode ser controlada, e é um erro ainda maior achar que a magia pode ser controlada, sem ofender a própria natureza…",
+			"link": "https://www.youtube.com/channel/UC4VNp9FoAldXidF1YRE1Qkw",
+			"author": "TravelRPG",
+			"explicit": true,
+			"closed": false,
+
+			"players": {
+				"Dota": "Asta",
+				"Roque": "Nox",
+				"Luiz": "Nash",
+				"Fernando": "Lorien",
+				"Diogo": "Keilan",
+				"Bruno": "Nalak",
+				"Kojiro": "Zzareth",
+				"Edilson": "Naemath",
+				"Renzen": "Kaelira"
+			}
+    },
+    "Roque": {
+      "Campanha": "Mutantes Coronado City",
+      "rss_key": "campaigns/RPG 2026 Mutantes Coronado City/rss.xml",
+
+			"title": "Mutantes Coronado City",
+			"description": "Um RPG inspirado em mutações, como Cyberpunk, X-Men, Invencível e outros mais. Com muita politica, religião, facções e combates.",
+			"link": "https://www.youtube.com/channel/UC4VNp9FoAldXidF1YRE1Qkw",
+			"author": "TravelRPG",
+			"explicit": true,
+			"closed": false,
+
+			"players": {
+				"Dota": "Avo",
+				"Luiz": "Phoenix",
+				"Renzen": "Sofia",
+				"Kojiro": "Marianne",
+				"Fernando": "Nala",
+				"Diogo": "Mael",
+				"Bruno": "Alec",
+				"Caio": "Greeze",
+				"Edilson": "Dante"
+			}
+    },
+    "Kojiro": {
+      "Campanha": "A Lenda dos Cinco Guardiões",
+      "rss_key": "campaigns/RPG 2026 A Lenda dos Cinco Guardiões/rss.xml",
+
+			"title": "A Lenda dos Cinco Guardiões",
+			"description": "É um RPG inspirado em Demon Slayer e na mitologia chinesa, ambientado na China de 1912 durante a turbulenta transição da última dinastia imperial para a República. Os jogadores assumem o papel de caçadores da Ordem que utilizam técnicas ancestrais as Respirações para combater Onis e a corrupção sobrenatural espalhada pelo Imperador Imortal.",
+			"link": "https://www.youtube.com/channel/UC4VNp9FoAldXidF1YRE1Qkw",
+			"author": "TravelRPG",
+			"explicit": true,
+			"closed": false,
+
+			"players": {
+				"Diogo": "Yu Jin",
+				"Dota": "Lin Cāngqióng",
+				"Edilson": "Liang Chen",
+				"Fernando": "Jin Hu",
+				"Caio": "Xiao Xian",
+				"Renzen": "Lin Shuang"
+			}
+    },
+    "Fernando": {
+      "Campanha": "Legends Kageya",
+      "rss_key": "campaigns/RPG 2026 Legends Kageya/rss.xml",
+
+			"title": "Legends Kageya",
+			"description": "Kageya é um RPG de mundo aberto ambientado em uma região inspirada no Japão feudal, onde tradição, lendas e espíritos ancestrais se entrelaçam. Explore livremente, conquiste a confiança dos Daimiôs, os líderes de cada vila, e decida o destino do reino enquanto a misteriosa facção Lótus Negra espalha uma energia de corrupção que enlouquece as criaturas mágicas e torna a doença Eclipstropia em humanos cada vez mais comum. Em um mundo repleto de escolhas, alianças e segredos ancestrais, sua jornada poderá definir o futuro de Kageya.",
+			"link": "https://www.youtube.com/channel/UC4VNp9FoAldXidF1YRE1Qkw",
+			"author": "TravelRPG",
+			"explicit": true,
+			"closed": false,
+
+			"players": {
+				"Caio": "Yuna Oda",
+				"Kojiro": "Goro",
+				"Edilson": "Ren Murasaki",
+				"Bruno": "Kai",
+				"Renzen": "Kuroe Nagi"
+			}
+    }
+  },
+  "publication": {
+    "brand": "TravelRPG",
+    "website": "https://travelrpg.com",
+    "copyright": "© travelrpg.com",
+    "genre": "RPG",
+    "comment": "Sessão de RPG produzida pela TravelRPG.com",
+    "unpublished_prefix": "unpublish",
+    "language": "pt-BR"
+  },
+  "processing": {
+    "minimum_session_seconds": 1800,
+    "duplicate_max_bytes": 10485760,
+    "duplicate_max_seconds": 3600
+  },
+  "audio": {
+    "remove_silence": true,
+    "silence_threshold_db": -40,
+    "minimum_silence_seconds": 1.5,
+    "keep_silence_seconds": 0.6,
+    "fade_seconds": 0.005,
+    "compressor_threshold_db": -18,
+    "compressor_ratio": 4,
+    "compressor_attack_ms": 20,
+    "compressor_release_ms": 200,
+    "loudness_lufs": -16,
+    "loudness_range": 11,
+    "true_peak_db": -1.5
+  }
+}

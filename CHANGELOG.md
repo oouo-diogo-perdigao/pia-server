@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### 0003 — Plano Pro e enquete no Discord (em desenvolvimento)
+- A imagem inclui Python 3.12 e a revisão do worker usada pelo servidor. O processamento Pro exige contexto autenticado da API de IA e registra a pendência quando ele está ausente.
 - A API administrativa exige sessão de administrador e origem na VPN autorizada. A administração lista contas e permite alterar o plano Pro.
 - O painel web exibe a administração somente para sessões autorizadas pela VPN. A aba Gravações mostra o plano e permite salvar o modo de processamento.
 - Contas Pro podem escolher o processamento no servidor. O estado efetivo volta ao modo local quando o plano é desabilitado.

@@ -413,7 +413,21 @@ const uploads = new Set();
 const serverJobs = new Set();
 const podcastRoot = process.env.PIA_PODCAST_ROOT;
 const podcastPython = process.env.PIA_PODCAST_PYTHON;
-const podcastWorkerReady = Boolean(podcastRoot && podcastPython);
+const podcastAppContext = process.env.PIA_PODCAST_APP_CONTEXT;
+function podcastContextConfigured(raw) {
+  try {
+    const { url, token, model, max_upload_bytes: maxUploadBytes } = JSON.parse(raw);
+    const endpoint = new URL(url);
+    return ['https:', 'http:'].includes(endpoint.protocol) &&
+      !endpoint.username && !endpoint.password && !endpoint.search && !endpoint.hash &&
+      typeof token === 'string' && Boolean(token.trim()) &&
+      typeof model === 'string' && Boolean(model.trim()) &&
+      Number.isSafeInteger(maxUploadBytes) && maxUploadBytes > 0;
+  } catch {
+    return false;
+  }
+}
+const podcastWorkerReady = Boolean(podcastRoot && podcastPython && podcastContextConfigured(podcastAppContext));
 const podcastWorker = createPodcastWorker({
   command: podcastPython,
   args: ['-m', 'podcast_automation.server_worker'],
@@ -423,6 +437,8 @@ const podcastWorker = createPodcastWorker({
       .filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]])),
     PYTHONPATH: [resolve(podcastRoot, 'Plugins/Apps/podcast_automation/src'), resolve(podcastRoot)].join(delimiter),
     PYTHONIOENCODING: 'utf-8',
+    PYTHONDONTWRITEBYTECODE: '1',
+    ...(podcastWorkerReady ? { PIA_APP_CONTEXT: podcastAppContext } : {}),
   } : undefined,
 });
 const podcastConfig = (account) => resolvePodcastConfig(account, { workerReady: podcastWorkerReady });
