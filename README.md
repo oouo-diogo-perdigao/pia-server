@@ -7,15 +7,18 @@ Serviço da PIA para gravar sessões de voz do Discord continuamente e entregar 
 1. Prepare um usuário PostgreSQL dedicado com acesso de conexão e permissão de criar tabelas no schema `pia_server`. O aplicativo cria as tabelas no primeiro início.
 2. Copie `.env.example` para `.env`, restrinja o acesso ao arquivo e configure o PostgreSQL, o domínio, o e-mail administrador e uma chave aleatória gerada com `openssl rand -hex 32`. Guarde a chave com o backup do PostgreSQL.
 3. Crie um cliente OAuth Google do tipo **Aplicativo da Web**, habilite as APIs Drive, Gmail e Google Calendar e cadastre `https://SEU-DOMINIO/auth/google/callback` como redirecionamento. Configure `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` no servidor. Gmail e Agenda usam escopos de leitura.
-4. Execute `docker compose up -d`. A porta do exemplo fica em loopback. Configure seu proxy HTTPS para apontar ao serviço. No Traefik com as redes `proxy-publico` e `postgres`, use `docker compose -f compose.yaml -f compose.traefik.yaml up -d` e ajuste o host no arquivo de override.
+4. Autentique o Docker com `docker login ghcr.io -u SEU_USUARIO_GITHUB`, usando um token clássico com `read:packages` e acesso ao pacote. Execute `docker compose up -d`. A porta do exemplo fica em loopback. Configure seu proxy HTTPS para apontar ao serviço. No Traefik com as redes `proxy-publico` e `postgres`, use `docker compose -f compose.yaml -f compose.traefik.yaml up -d` e ajuste o host no arquivo de override.
 5. Confira `/health`. Entre no painel com o e-mail administrador autorizado. O administrador pode autorizar outras contas Google e cada conta tem seu próprio bot, regras, fila e pasta no Drive.
 
 A automação no GitHub executa os testes e publica imagens Linux amd64 e arm64
 em `ghcr.io/oouo-diogo-perdigao/pia-server`. Cada push em `main` atualiza a tag
 `main` de produção. Cada push em `develop` atualiza a tag `develop` de staging.
-O Watchtower no servidor consulta o registro a cada cinco minutos e recria o
-contêiner quando a tag do ambiente aponta para uma imagem nova. Mantenha o
-`PIA_IMAGE` de cada ambiente apontando para sua tag no registry privado.
+O GitHub Actions publica com `GITHUB_TOKEN`. No OCI, configure `PIA_IMAGE` com
+`ghcr.io/oouo-diogo-perdigao/pia-server:main` em produção e
+`ghcr.io/oouo-diogo-perdigao/pia-server:develop` em homologação. Para aplicar
+manualmente uma atualização, execute `docker compose pull pia-server` e
+`docker compose up -d --no-deps pia-server` na pasta do ambiente. Confira
+`/health` depois da troca.
 
 No desenvolvimento, execute `npm ci` e `npm test`. Para construir uma imagem
 local, execute `docker build -t pia-server:local .`.
