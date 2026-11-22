@@ -1,6 +1,6 @@
 services:
   pia-server:
-    image: ${PIA_IMAGE:-registry.vpn.travelrpg.com/pia/pia-server:main}
+    image: ${PIA_IMAGE:-ghcr.io/oouo-diogo-perdigao/pia-server:main}
     restart: unless-stopped
     env_file: .env
     ports:
