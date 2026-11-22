@@ -11,7 +11,7 @@ Serviço da PIA para gravar sessões de voz do Discord continuamente e entregar 
 5. Confira `/health`. Entre no painel com o e-mail administrador autorizado. O administrador pode autorizar outras contas Google e cada conta tem seu próprio bot, regras, fila e pasta no Drive.
 
 A automação no GitHub executa os testes e publica imagens Linux amd64 e arm64
-em `registry.vpn.travelrpg.com/pia/pia-server`. Cada push em `main` atualiza a tag
+em `ghcr.io/oouo-diogo-perdigao/pia-server`. Cada push em `main` atualiza a tag
 `main` de produção. Cada push em `develop` atualiza a tag `develop` de staging.
 O Watchtower no servidor consulta o registro a cada cinco minutos e recria o
 contêiner quando a tag do ambiente aponta para uma imagem nova. Mantenha o
@@ -381,5 +381,5 @@ A gravação avisa após cinco minutos sem áudio e termina após dez minutos de
 silêncio. A captação de som reinicia a contagem. O campo legado `emptySeconds`
 continua aceito nas regras, e o encerramento segue o tempo de silêncio.
 
-A publica��o conecta ao WireGuard e usa os secrets WG_CONFIG_DEV, WG_CONFIG_PROD,
-REGISTRY_USER e REGISTRY_PASSWORD. O registry � acess�vel pela VPN.
+A publica��o conecta ao WireGuard e usa os secrets WG_CONFIG_DEV, WG_CONFIG_PROD,
+REGISTRY_USER e REGISTRY_PASSWORD. O registry � acess�vel pela VPN.
