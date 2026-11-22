@@ -20,7 +20,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm test
+      - run: npm test -- --test-concurrency=1
         env:
           # Gate de release das páginas legais (test/legal_release.test.js, docs/legal.md).
           # Ligado só em push para main e em tags v*: bloqueia publicar a imagem com texto em rascunho.
@@ -48,5 +48,3 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          sudo wg-quick down wg-ci 2>/dev/null || true
-          sudo rm -f /etc/wireguard/wg-ci.conf
