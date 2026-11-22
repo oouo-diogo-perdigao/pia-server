@@ -20,7 +20,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm test
+      - run: npm test -- --test-concurrency=1
         env:
           # Gate de release das páginas legais (test/legal_release.test.js, docs/legal.md).
           # Ligado só em push para main e em tags v*: bloqueia publicar a imagem com texto em rascunho.
