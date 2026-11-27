@@ -12,6 +12,7 @@ import { EndBehaviorType, entersState, joinVoiceChannel, VoiceConnectionStatus }
 import OpusScript from 'opusscript';
 import { root, save, snowflake } from './state.js';
 
+const recordingChannels = new Set();
 const RATE = 48000;
 const SILENCE_MS = 5 * 60 * 1000;
 const NOTICE = '🔴 A PIA vai gravar este canal de voz em faixas separadas e guardar a sessão no Google Drive. Saia do canal se não quiser participar.';
@@ -46,7 +47,7 @@ class Recording {
     this.meta = { id, name, channelId: rule.channelId, guildId: rule.guildId, startedAt: date.toISOString(),
       folderId: recordingFolder(account), driveAccount: account.recording_drive_account || null,
       state: 'recording', tracks: [], usernames: {}, members: {},
-      botAccountId: runtime.account.id, noticeChannelId: notice.channelId, panelMessageId: notice.id,
+      botAccountId: runtime.account.id, botSlot: runtime.slot, noticeChannelId: notice.channelId, panelMessageId: notice.id,
       ...(requester ? { requester } : {}) };
     this.syncMembers(date.toISOString());
     this.persist();
@@ -175,8 +176,9 @@ export class DiscordRecorder {
   error = '';
   closed = false;
 
-  constructor(account, token, destinations = new Map()) {
+  constructor(account, token, destinations = new Map(), slot = 'primary') {
     this.account = account;
+    this.slot = slot;
     this.destinations = destinations;
     this.client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
     this.panels = new RecordingPanels(this.client);
@@ -245,7 +247,7 @@ export class DiscordRecorder {
       if (!channel?.isVoiceBased() || channel.guildId !== rule.guildId) continue;
       const humans = channel.members.filter((member) => !member.user.bot);
       if (!humans.size) this.blocked.delete(rule.channelId);
-      if (this.guildBusy(rule.guildId) || this.blocked.has(rule.channelId)) continue;
+      if (this.guildBusy(rule.guildId) || this.blocked.has(rule.channelId) || recordingChannels.has(channel.id)) continue;
       if (humans.size < rule.minPeople) continue;
       if (rule.triggerUsers.length && (joinedChannel !== rule.channelId || !rule.triggerUsers.includes(joinedUser))) continue;
       this.pending.add(rule.guildId);
@@ -278,17 +280,37 @@ export class DiscordRecorder {
 
   connect(channel) {
     return joinVoiceChannel({ channelId: channel.id, guildId: channel.guildId,
-      adapterCreator: channel.guild.voiceAdapterCreator, group: String(this.account.id),
+      adapterCreator: channel.guild.voiceAdapterCreator, group: this.slot === 'primary' ? String(this.account.id) : this.account.id + ':' + this.slot,
       selfMute: true, selfDeaf: false });
   }
 
   async start(account, rule, channel, requester, controlChannel) {
+    if (recordingChannels.has(channel.id)) {
+      if (requester) throw new Error('Já há uma gravação em andamento nesta sala.');
+      return;
+    }
+    recordingChannels.add(channel.id);
+    let session;
+    try {
+      session = await this.startRecording(account, rule, channel, requester, controlChannel);
+      if (session) {
+        session.connection.once(VoiceConnectionStatus.Destroyed, () => recordingChannels.delete(channel.id));
+      }
+      return session;
+    } finally {
+      if (!session || session.connection.state.status === VoiceConnectionStatus.Destroyed) {
+        recordingChannels.delete(channel.id);
+      }
+    }
+  }
+
+  async startRecording(account, rule, channel, requester, controlChannel) {
     const notice = rule.noticeChannelId && await this.client.channels.fetch(rule.noticeChannelId);
     if (!notice?.isSendable() || notice.guildId !== rule.guildId) throw new Error('A PIA precisa enviar o aviso no chat do canal antes de gravar.');
     const announcement = await notice.send({ content: NOTICE, allowedMentions: { parse: [] } });
     const destination = async () => {
       if (this.closed) return;
-      const current = await guildAccount(this.account.id, rule.guildId);
+      const current = await guildAccount(this.account.id, rule.guildId, this.slot);
       if (current?.id === account.id && current.drive_refresh && recordingFolder(current) &&
           (requester || current.rules.some((item) => item.channelId === rule.channelId))) return current;
     };

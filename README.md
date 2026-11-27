@@ -306,6 +306,12 @@ Em canais de palco sem chat, configure previamente o canal de aviso nas regras.
 As operações de configuração são restritas a administradores do Discord.
 
 
+Uma mesma comunidade Discord pode vincular mais de um bot. Cadastre cada
+bot em **Conectores → Discord** no PIA Server e execute `/bless` pelo
+bot correspondente. A PIA e a PIA Dark podem ser conectadas na mesma conta e
+ter vínculos e permissões independentes. Cada bot grava uma sala por vez por
+servidor. Dois bots podem gravar salas diferentes ao mesmo tempo.
+
 O administrador executa `/bless` e abre **Confirmar na PIA Server**. A página
 mostra o nome do servidor Discord e a conta Google que receberá as gravações.
 O link privado é de uso único e expira em dez minutos. Para trocar de conta,
