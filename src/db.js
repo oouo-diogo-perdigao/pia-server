@@ -38,11 +38,24 @@ export async function migrate() {
     ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS recording_folder_id text;
     ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS recording_folder_name text;
     ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS recording_drive_account text;
+    ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS discord_dark_token text;
+    ALTER TABLE pia_server.accounts ADD COLUMN IF NOT EXISTS discord_dark_bot_id text UNIQUE;
     CREATE TABLE IF NOT EXISTS pia_server.discord_guild_links (
-      guild_id text PRIMARY KEY, bot_account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
+      guild_id text NOT NULL, bot_account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
-      linked_by text NOT NULL
+      linked_by text NOT NULL, bot_slot text NOT NULL DEFAULT 'primary', PRIMARY KEY (guild_id, bot_account_id, bot_slot)
     );
+    ALTER TABLE pia_server.discord_guild_links ADD COLUMN IF NOT EXISTS bot_slot text NOT NULL DEFAULT 'primary';
+    DO $guild_links$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM pg_constraint
+        WHERE conrelid='pia_server.discord_guild_links'::regclass AND contype='p'
+          AND cardinality(conkey)<3) THEN
+        ALTER TABLE pia_server.discord_guild_links
+          DROP CONSTRAINT discord_guild_links_pkey,
+          ADD PRIMARY KEY (guild_id, bot_account_id, bot_slot);
+      END IF;
+    END $guild_links$;
     ALTER TABLE pia_server.discord_guild_links ADD COLUMN IF NOT EXISTS access_roles text[] NOT NULL DEFAULT ARRAY[]::text[];
     CREATE TABLE IF NOT EXISTS pia_server.discord_link_requests (
       digest text PRIMARY KEY, guild_id text NOT NULL, discord_user text NOT NULL,
@@ -51,6 +64,7 @@ export async function migrate() {
       confirmation text UNIQUE, expires timestamptz NOT NULL
     );
     ALTER TABLE pia_server.discord_link_requests ADD COLUMN IF NOT EXISTS guild_name text;
+    ALTER TABLE pia_server.discord_link_requests ADD COLUMN IF NOT EXISTS bot_slot text NOT NULL DEFAULT 'primary';
     CREATE TABLE IF NOT EXISTS pia_server.sessions (
       digest text PRIMARY KEY, account_id bigint NOT NULL REFERENCES pia_server.accounts(id) ON DELETE CASCADE,
       purpose text NOT NULL CHECK (purpose IN ('web', 'mcp')),

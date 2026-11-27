@@ -201,7 +201,7 @@ async function run(runtime, interaction) {
     throw new Error('Este comando exige permissão de administrador.');
   if (command === 'bless') {
     const token = await requestGuildLink(runtime.account.id, guildId, userId, interaction.guild.name, () =>
-      interaction.editReply({ content: 'Servidor abençoado e vinculado à sua conta PIA.', components: [] }));
+      interaction.editReply({ content: 'Servidor abençoado e vinculado à sua conta PIA.', components: [] }), runtime.slot);
     return {
       content: 'Abra a PIA Server para confirmar o vínculo deste servidor. O botão é privado e expira em 10 minutos.',
       components: [{ type: ComponentType.ActionRow, components: [{
@@ -211,19 +211,19 @@ async function run(runtime, interaction) {
     };
   }
   if (command === 'unbless') {
-    if (!await unlinkGuild(runtime.account.id, guildId)) return 'Este servidor não tinha vínculo ativo.';
+    if (!await unlinkGuild(runtime.account.id, guildId, runtime.slot)) return 'Este servidor não tinha vínculo ativo.';
     return 'Vínculo removido. As gravações existentes continuam na conta original.';
   }
   if (command === 'server-settings') {
     const role = interaction.options.getRole('role', true);
     if (role.id === guildId) throw new Error('Escolha um cargo específico do servidor.');
     const add = interaction.options.getSubcommand() === 'add';
-    await setRecordingRole(runtime.account.id, guildId, role.id, add);
+    await setRecordingRole(runtime.account.id, guildId, role.id, add, runtime.slot);
     return add ? 'Cargo <@&' + role.id + '> autorizado a iniciar e parar gravações.' :
       'Acesso removido do cargo <@&' + role.id + '>.';
   }
   if (command === 'join') {
-    const account = await guildAccount(runtime.account.id, guildId);
+    const account = await guildAccount(runtime.account.id, guildId, runtime.slot);
     if (!account) throw new Error('Um administrador precisa vincular este servidor com /bless primeiro.');
     if (!admin && !hasRecordingRole(interaction, account.access_roles))
       throw new Error('Você precisa de um cargo de gravação autorizado.');
@@ -238,7 +238,7 @@ async function run(runtime, interaction) {
     const session = [...runtime.sessions.values()].find((item) => !item.closed && item.meta.guildId === guildId);
     if (!session) throw new Error('Nenhuma gravação em andamento neste servidor.');
     if (!admin && session.meta.requester !== userId) {
-      const account = await guildAccount(runtime.account.id, guildId);
+      const account = await guildAccount(runtime.account.id, guildId, runtime.slot);
       if (!hasRecordingRole(interaction, account?.access_roles))
         throw new Error('Peça a quem iniciou, a um administrador ou a alguém com cargo autorizado.');
     }
@@ -247,7 +247,7 @@ async function run(runtime, interaction) {
   }
   if (command === 'voice-test') return voiceTest(runtime, interaction);
   if (command === 'bot-profile') return profile(interaction);
-  const account = await guildAccount(runtime.account.id, guildId);
+  const account = await guildAccount(runtime.account.id, guildId, runtime.slot);
   if (!account) throw new Error('Este servidor precisa de um vínculo ativo. Use /bless.');
   if (command === 'autorecord') return changeRules(runtime, account, interaction);
   const items = visibleRecordings(recordings(account), guildId, userId, admin);
