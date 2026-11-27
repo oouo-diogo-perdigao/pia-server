@@ -42,6 +42,11 @@ import {
 } from './admin_routes.js';
 
 const runtimes = new Map();
+const discordSlots = {
+  primary: { token: 'discord_token', id: 'discord_bot_id' },
+  dark: { token: 'discord_dark_token', id: 'discord_dark_bot_id' },
+};
+const runtimeKey = (id, slot) => slot === 'dark' ? id + ':dark' : id;
 const recovered = new Set();
 let tick, closing = false;
 const publicFiles = new Map([
@@ -86,6 +91,9 @@ function status(account, req) {
   return {
     ...accountProfile(account), ...accountStatusFlags(account, req), discordConfigured: Boolean(account.discord_token),
     discordConnected: runtime?.client.isReady() || false, discordError: runtime?.error || '',
+    discordDarkConfigured: Boolean(account.discord_dark_token),
+    discordDarkConnected: runtimes.get(runtimeKey(account.id, 'dark'))?.runtime.client.isReady() || false,
+    discordDarkError: runtimes.get(runtimeKey(account.id, 'dark'))?.runtime.error || '',
     driveConnected: Boolean(account.drive_refresh), folderId: recordingFolder(account), folderName: account.recording_folder_name,
     recordingDriveAccount: account.recording_drive_account, rules: account.rules,
     recordings: recordings(account).map(({ meta }) => ({
@@ -342,6 +350,13 @@ async function route(req, res) {
     return json(res, 200, { ok: true, rules });
   }
   if (path === '/api/discord') {
+    const slot = data.slot ?? 'primary';
+    if (typeof slot !== 'string' || !Object.hasOwn(discordSlots, slot)) throw new Error('Bot Discord inválido.');
+    const fields = discordSlots[slot];
+    if (slot === 'dark' && data.remove === true) {
+      await pool.query('UPDATE pia_server.accounts SET discord_dark_token=NULL, discord_dark_bot_id=NULL WHERE id=$1', [account.id]);
+      return json(res, 200, { ok: true });
+    }
     const token = typeof data.token === 'string' ? data.token.trim() : '';
     if (typeof token !== 'string' || !/^[\w.-]{30,180}$/.test(token)) throw new Error('Token do bot inválido.');
     const check = await fetch('https://discord.com/api/v10/users/@me', {
@@ -349,12 +364,23 @@ async function route(req, res) {
     });
     const bot = check.ok && await check.json();
     if (!bot?.bot || typeof bot.id !== 'string') throw new Error('O Discord não aceitou o token do bot.');
+    const db = await pool.connect();
     try {
-      await pool.query('UPDATE pia_server.accounts SET discord_token=$2, discord_bot_id=$3 WHERE id=$1',
+      await db.query('BEGIN');
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended('pia-discord-bot:' || $1, 0))", [bot.id]);
+      const duplicate = await db.query(`SELECT 1 FROM pia_server.accounts
+        WHERE (discord_bot_id=$1 AND (id<>$2 OR $3<>'primary'))
+           OR (discord_dark_bot_id=$1 AND (id<>$2 OR $3<>'dark'))`, [bot.id, account.id, slot]);
+      if (duplicate.rowCount) throw new Error('Este bot já está cadastrado em outra conexão.');
+      await db.query(`UPDATE pia_server.accounts SET ${fields.token}=$2, ${fields.id}=$3 WHERE id=$1`,
         [account.id, seal(token), bot.id]);
+      await db.query('COMMIT');
     } catch (error) {
-      if (error.code === '23505') throw new Error('Este bot já está vinculado a outra conta.');
+      await db.query('ROLLBACK');
+      if (error.code === '23505') throw new Error('Este bot já está cadastrado em outra conexão.');
       throw error;
+    } finally {
+      db.release();
     }
     return json(res, 200, { ok: true });
   }
@@ -443,7 +469,7 @@ const podcastWorker = createPodcastWorker({
 });
 const podcastConfig = (account) => resolvePodcastConfig(account, { workerReady: podcastWorkerReady });
 const panelRuntime = (meta) => {
-  const runtime = runtimes.get(meta.botAccountId)?.runtime;
+  const runtime = runtimes.get(runtimeKey(meta.botAccountId, meta.botSlot))?.runtime;
   return runtime?.client.isReady() ? runtime : null;
 };
 const serverRecording = createServerRecordingRunner({
@@ -468,29 +494,34 @@ const serverRecording = createServerRecordingRunner({
 });
 async function reconcile() {
   await monitor();
-  const { rows: links } = await pool.query('SELECT guild_id, bot_account_id, account_id FROM pia_server.discord_guild_links');
+  const { rows: links } = await pool.query('SELECT guild_id, bot_account_id, bot_slot, account_id FROM pia_server.discord_guild_links');
   const { rows } = await pool.query('SELECT * FROM pia_server.accounts');
   const accounts = new Map(rows.map((account) => [account.id, account]));
   const destinations = new Map();
   for (const link of links) {
     if (!accounts.has(link.account_id)) continue;
-    if (!destinations.has(link.bot_account_id)) destinations.set(link.bot_account_id, new Map());
-    destinations.get(link.bot_account_id).set(link.guild_id, accounts.get(link.account_id));
+    const key = runtimeKey(link.bot_account_id, link.bot_slot);
+    if (!destinations.has(key)) destinations.set(key, new Map());
+    destinations.get(key).set(link.guild_id, accounts.get(link.account_id));
   }
   for (const account of rows) {
     if (closing) return;
-    const routes = destinations.get(account.id) || new Map();
     if (!recovered.has(account.id)) { recover(account); recovered.add(account.id); }
-    const previous = runtimes.get(account.id);
-    if (previous?.encrypted !== account.discord_token) {
-      previous?.runtime.close();
-      runtimes.delete(account.id);
-      if (account.discord_token) runtimes.set(account.id, {
-        encrypted: account.discord_token, runtime: new DiscordRecorder(account, unseal(account.discord_token), routes),
-      });
-    } else if (previous) {
-      previous.runtime.account = account;
-      previous.runtime.setDestinations(routes);
+    for (const [slot, fields] of Object.entries(discordSlots)) {
+      const key = runtimeKey(account.id, slot);
+      const routes = destinations.get(key) || new Map();
+      const previous = runtimes.get(key);
+      const encrypted = account[fields.token];
+      if (previous?.encrypted !== encrypted) {
+        previous?.runtime.close();
+        runtimes.delete(key);
+        if (encrypted) runtimes.set(key, {
+          encrypted, runtime: new DiscordRecorder(account, unseal(encrypted), routes, slot),
+        });
+      } else if (previous) {
+        previous.runtime.account = account;
+        previous.runtime.setDestinations(routes);
+      }
     }
     const items = recordings(account).sort((a, b) => a.meta.startedAt.localeCompare(b.meta.startedAt));
     const now = Date.now();

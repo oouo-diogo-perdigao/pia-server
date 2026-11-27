@@ -398,6 +398,9 @@ async function refresh() {
   element('connections').textContent = 'Discord: ' + (state.discordConnected ? 'conectado' :
     state.discordError || (state.discordConfigured ? 'conectando' : 'aguardando token')) +
     ' · Google Drive: ' + (state.driveConnected ? 'autorizado' : 'aguardando autorização');
+  element('discord-dark-state').textContent = state.discordDarkConnected ? '· conectada' :
+    state.discordDarkError || (state.discordDarkConfigured ? '· conectando' : '· aguardando token');
+  element('remove-discord-dark').hidden = !state.discordDarkConfigured;
   element('folder').hidden = !state.folderId;
   if (state.folderId) element('folder').href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(state.folderId);
   selectedDriveAccount = state.recordingDriveAccount || 'server-google-primary';
@@ -459,6 +462,20 @@ on('save-discord', async () => {
   await refreshConnectors();
   say('Bot salvo.');
   await refresh();
+});
+on('save-discord-dark', async () => {
+  const token = input('discord-dark');
+  if (!token) throw new Error('Informe o token da PIA Dark.');
+  await api('discord', { slot: 'dark', token });
+  element('discord-dark').value = '';
+  await refresh();
+  say('PIA Dark salva.');
+});
+on('remove-discord-dark', async () => {
+  if (!window.confirm('Desconectar a PIA Dark da sua conta?')) return;
+  await api('discord', { slot: 'dark', remove: true });
+  await refresh();
+  say('PIA Dark desconectada.');
 });
 let drivePath = [];
 let drivePage = null;

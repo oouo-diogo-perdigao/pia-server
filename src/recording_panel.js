@@ -473,7 +473,7 @@ export class RecordingPanels {
       const user = interaction.user.id;
       const manager = meta.requester === user || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
       const roleAllowed = action === 'stop' && !manager &&
-        hasRecordingRole(interaction, (await guildAccount(runtime.account.id, meta.guildId))?.access_roles);
+        hasRecordingRole(interaction, (await guildAccount(runtime.account.id, meta.guildId, runtime.slot))?.access_roles);
       if (!manager && !roleAllowed && !(action === 'note' && live?.channel.members.has(user)))
         throw new Error('Você não tem permissão para esta ação.');
       const editingLiveTitle = action === 'title' && live && meta.processingMode === 'server';
